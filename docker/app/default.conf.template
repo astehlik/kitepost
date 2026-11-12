@@ -1,0 +1,31 @@
+server {
+    listen 8080;
+    server_tokens off;
+    absolute_redirect off;
+    root /usr/share/nginx/html;
+    charset utf-8;
+
+    # 'wasm-unsafe-eval' only permits compiling WebAssembly, not JavaScript eval.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ${CONNECT_SRC}; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header Cross-Origin-Opener-Policy same-origin always;
+    add_header Cross-Origin-Resource-Policy same-origin always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
+    location = /config.json {
+        default_type application/json;
+        expires -1;
+        return 200 '{"bridgeUrl":"${BRIDGE_URL}","defaultRelay":"${DEFAULT_RELAY}"}';
+    }
+
+    location /assets/ {
+        expires 1y;
+        try_files $uri =404;
+    }
+
+    location / {
+        expires -1;
+        try_files $uri $uri/ /index.html;
+    }
+}

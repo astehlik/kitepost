@@ -1,0 +1,21 @@
+{$DOMAIN} {
+	handle /bridge* {
+		reverse_proxy bridge:8080
+	}
+
+	redir /join /join/ 308
+	handle_path /join/* {
+		reverse_proxy invite:8080
+	}
+
+	redir /app /app/ 308
+	handle_path /app/* {
+		encode zstd gzip
+		reverse_proxy app:8080
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy site:8080
+	}
+}

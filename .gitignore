@@ -1,0 +1,7 @@
+target/
+/tools/
+node_modules/
+dist/
+web/src/wasm/
+/work/
+__pycache__/

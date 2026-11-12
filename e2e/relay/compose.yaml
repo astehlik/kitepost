@@ -1,0 +1,57 @@
+# Local chatmail relay for tests, set up like production (nginx hook, deploy on every start).
+# Underscore domains get self-signed certificates and skip DNS checks.
+name: kitepost-test-relay
+services:
+  chatmail:
+    image: ghcr.io/chatmail/docker:main
+    container_name: kitepost-test-chatmail
+    cgroup: host
+    tty: true
+    tmpfs: [/tmp, /run, /run/lock]
+    entrypoint: ["/usr/local/sbin/nginx-hook", "/entrypoint.sh"]
+    # Setting an entrypoint clears the image's command.
+    command: ["--default-standard-output=journal+console", "--default-standard-error=journal+console"]
+    environment:
+      MAIL_DOMAIN: _chatmail.test
+      # The deploy fingerprint lives in /etc/chatmail, the rendered configs don't: deploy on every start.
+      CMDEPLOY_STAGES: configure,activate
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - mail:/home/vmail
+      - chatmail_config:/etc/chatmail
+      - ../../docker/chatmail/nginx-hook.sh:/usr/local/sbin/nginx-hook:ro
+      - ./custom.d:/etc/nginx/custom.d:ro
+    networks:
+      relay:
+        ipv4_address: 172.30.99.10
+    healthcheck:
+      test: ["CMD", "bash", "/opt/chatmail/docker/scripts/healthcheck.sh"]
+      interval: 10s
+      retries: 90
+
+  invite:
+    build:
+      context: ../../invite
+    container_name: kitepost-test-invite
+    environment:
+      MAIL_DOMAIN: _chatmail.test
+      MAILBOXES_DIR: /vmail/mail/_chatmail.test
+      ADMIN_TOKEN: test-admin-token-0123456789abcdef
+      APP_URL: http://127.0.0.1:8099/
+    volumes:
+      - mail:/vmail
+    ports: ["127.0.0.1:8084:8080"]
+    networks:
+      relay:
+        ipv4_address: 172.30.99.20
+    depends_on:
+      chatmail: { condition: service_healthy }
+
+volumes:
+  mail:
+  chatmail_config:
+
+networks:
+  relay:
+    ipam:
+      config: [{ subnet: 172.30.99.0/24 }]

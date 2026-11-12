@@ -1,0 +1,73 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigestsToSemver",
+    "docker:pinDigests",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "The wasm-bindgen CLI is derived from this exact pin, keep the JS bindings crates in step",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "wasm-bindgen",
+        "js-sys"
+      ],
+      "groupName": "wasm-bindgen"
+    },
+    {
+      "description": "Rust image and rust-toolchain.toml should move together",
+      "matchPackageNames": [
+        "rust"
+      ],
+      "groupName": "rust"
+    },
+    {
+      "description": "Test against matching Delta Chat core client and server",
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchPackageNames": [
+        "deltachat-rpc-client",
+        "deltachat-rpc-server"
+      ],
+      "groupName": "Delta Chat core"
+    },
+    {
+      "description": "pnpm is pinned in three package.json files",
+      "matchPackageNames": [
+        "pnpm"
+      ],
+      "groupName": "pnpm"
+    },
+    {
+      "description": "Crypto and TLS crates are security relevant: never automerge, review release notes",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "pgp",
+        "rustls",
+        "rustls-rustcrypto",
+        "rustls-pki-types",
+        "webpki-roots"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "security-review"
+      ]
+    }
+  ]
+}

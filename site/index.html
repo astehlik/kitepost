@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Kitepost: end-to-end encrypted chat in your browser, for the Delta Chat network. No install, no plaintext on any server.">
+  <title>Kitepost</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+</head>
+<body>
+  <header class="hero">
+    <nav class="wrap nav">
+      <span class="brand"><img src="icon.svg" alt="" width="28" height="28"> Kitepost</span>
+      <a class="btn small" href="app/">Open the app</a>
+    </nav>
+    <div class="wrap hero-body">
+      <h1>Encrypted chat that runs entirely in your&nbsp;browser.</h1>
+      <p class="lead">Kitepost is a client for the Delta Chat network, compiled to WebAssembly. Your keys, your messages and the TLS connection to your relay all stay on your device. Nothing to install, and no server ever sees plaintext.</p>
+      <p class="cta">
+        <a class="btn" href="app/">Start chatting</a>
+        <a class="btn ghost" href="#how">How it works</a>
+      </p>
+      <p class="compat">Talks to the Delta Chat apps on Android, iOS and desktop.</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="wrap" id="start">
+      <h2>Get started in three steps</h2>
+      <ol class="steps">
+        <li>
+          <h3>Create a profile</h3>
+          <p>Open the app and choose a passphrase. It encrypts your profile in this browser and never leaves it. Pick a display name. A new address is created on the chatmail relay for you, or you can sign in with one you already have.</p>
+        </li>
+        <li>
+          <h3>Connect with someone</h3>
+          <p>Press <strong>My invite</strong> and share the link or QR code, or paste an invite link from someone else under <strong>Add contact</strong>. The handshake checks both keys, so the contact is <em>verified</em>, not just added.</p>
+        </li>
+        <li>
+          <h3>Chat</h3>
+          <p>Send messages, pictures and files, create groups and share group invite links. Everything is end-to-end encrypted with OpenPGP, the same way the Delta Chat apps do it.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="band" id="how">
+      <div class="wrap">
+        <h2>How it works</h2>
+        <div class="diagram" role="img" aria-label="Browser connects through the bridge to the chatmail relay; the bridge only sees TLS ciphertext">
+          <div class="node you"><strong>Your browser</strong><span>keys · decryption · TLS</span></div>
+          <div class="link"><span>TLS inside WebSocket</span></div>
+          <div class="node"><strong>Bridge</strong><span>relays encrypted bytes</span></div>
+          <div class="link"><span>TLS (IMAP / SMTP)</span></div>
+          <div class="node"><strong>Chatmail relay</strong><span>stores encrypted mail</span></div>
+        </div>
+        <div class="grid">
+          <article>
+            <h3>Delta Chat core in WebAssembly</h3>
+            <p>Encryption, key handling and message formats reuse the Delta Chat core code (rPGP, mail parsing, SecureJoin) compiled for the browser, so messages are fully compatible with the official apps.</p>
+          </article>
+          <article>
+            <h3>TLS ends in your browser</h3>
+            <p>Browsers cannot open mail connections themselves, so a small bridge forwards bytes. The TLS session to your relay runs inside the page and checks the relay's certificate, so the bridge can't read or change anything it forwards.</p>
+          </article>
+          <article>
+            <h3>Encrypted at rest</h3>
+            <p>Your profile is stored in the browser's IndexedDB, encrypted with AES-256-GCM under a key derived from your passphrase. A strict Content Security Policy means only this app's own code runs on the page.</p>
+          </article>
+          <article>
+            <h3>Verified contacts</h3>
+            <p>Invite links carry the inviter's key fingerprint and a one-time secret. Both sides check the keys during the SecureJoin handshake, so a server in the middle can't swap them.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap" id="faq">
+      <h2>Good to know</h2>
+      <details>
+        <summary>Can I use it together with the Delta Chat app on my phone?</summary>
+        <p>Yes, as a separate profile: chat between the web profile and your phone, or with anyone else using Delta Chat. Sharing one profile between the app and the browser is not supported yet.</p>
+      </details>
+      <details>
+        <summary>What happens if I forget my passphrase?</summary>
+        <p>The profile can't be recovered, because nobody else holds the key. You can delete it on the unlock screen and create a new one.</p>
+      </details>
+      <details>
+        <summary>Which browsers are supported?</summary>
+        <p>Current versions of Firefox, Chrome, Edge and Safari. Data is kept per browser and device. Private windows forget everything when closed.</p>
+      </details>
+      <details>
+        <summary>Is the browser as safe as a native app?</summary>
+        <p>The cryptography is the same. The trade-off is how the code reaches you: a web app is loaded from this server on every visit, so you trust whoever runs it each time. For the highest assurance, use the native Delta Chat apps or host this client yourself.</p>
+      </details>
+      <details>
+        <summary>Can I host it myself?</summary>
+        <p>Yes. The landing page, the web client and the bridge are three small containers that work behind any reverse proxy and in subdirectories. See the project README for the Docker Compose setup.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <p>Kitepost is an independent project, not affiliated with Delta Chat, and works with the <a href="https://delta.chat" rel="noopener noreferrer">Delta Chat</a> network.</p>
+  </footer>
+</body>
+</html>

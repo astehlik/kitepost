@@ -1,0 +1,24 @@
+--- a/cmdeploy/src/cmdeploy/nginx/nginx.conf.j2
++++ b/cmdeploy/src/cmdeploy/nginx/nginx.conf.j2
+@@ -77,6 +77,9 @@
+ 
+ 		index index.html index.htm;
+ 
++		# Additional locations from the operator, e.g. for other web services on this host.
++		include /etc/nginx/custom.d/*.conf;
++
+ 		server_name {{ config.mail_domain }} mta-sts.{{ config.mail_domain }};
+ 
+ 		location /mxdeliv {
+--- a/cmdeploy/src/cmdeploy/nginx/deployer.py
++++ b/cmdeploy/src/cmdeploy/nginx/deployer.py
+@@ -50,6 +50,9 @@
+ def _configure_nginx(deployer, config: Config, debug: bool = False):
+     """Configures nginx HTTP server."""
+ 
++    # Operator-provided locations, included by nginx.conf; empty by default.
++    deployer.ensure_directory("/etc/nginx/custom.d")
++
+     deployer.put_template(
+         "nginx/nginx.conf.j2",
+         "/etc/nginx/nginx.conf",

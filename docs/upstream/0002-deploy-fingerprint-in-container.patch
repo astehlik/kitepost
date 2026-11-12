@@ -1,0 +1,13 @@
+--- a/docker/scripts/chatmail-init.sh
++++ b/docker/scripts/chatmail-init.sh
+@@ -64,7 +64,9 @@
+ # On restart with identical image+config, systemd already brings up all
+ # enabled services only configure+activate are needed here.
+ IMAGE_VERSION_FILE="/etc/chatmail-image-version"
+-FINGERPRINT_FILE="/etc/chatmail/.deploy-fingerprint"
++# Kept in the container filesystem like the configs it describes: a recreated container
++# must deploy again even when /etc/chatmail is a persistent volume.
++FINGERPRINT_FILE="/etc/chatmail-deploy-fingerprint"
+ image_ver="none"
+ [ -f "$IMAGE_VERSION_FILE" ] && image_ver=$(cat "$IMAGE_VERSION_FILE")
+ config_hash=$(sha256sum "$CHATMAIL_INI" | cut -c1-16)

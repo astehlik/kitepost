@@ -1,0 +1,43 @@
+[package]
+name = "kitepost-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+chrono = { version = "0.4.44", default-features = false, features = ["alloc", "std", "clock", "wasmbind"] }
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+getrandom04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+hex = "0.4"
+js-sys = "0.3"
+mail-builder = { version = "2.0.0", default-features = false }
+mailparse = "0.18.0"
+pgp = { version = "0.21.1", default-features = false }
+qrcodegen = "1.8.0"
+rand-old = { package = "rand", version = "0.8" }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12"] }
+rustls-pki-types = { version = "1", features = ["web"] }
+rustls-rustcrypto = "0.1.0-pre.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+smallvec = "1"
+wasm-bindgen = "=0.2.128"
+webpki-roots = "1.0.11"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+pgp = { version = "0.21.1", default-features = false, features = ["wasm"] }
