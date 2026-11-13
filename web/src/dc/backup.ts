@@ -1,6 +1,6 @@
 import type { Database, SqlValue } from 'sql.js';
 import type { AttachmentData } from '../wasm';
-import type { AuthToken, Chat, Contact, Message, MessageState } from './types';
+import { SELF_CHAT, type AuthToken, type Chat, type Contact, type Message, type MessageState } from './types';
 
 // Reads an unencrypted Delta Chat backup (`delta-chat-backup-*.tar`, see core src/imex.rs).
 
@@ -205,12 +205,15 @@ export async function readBackup(
     for (const r of rows(db, 'SELECT chat_id, contact_id FROM chats_contacts WHERE add_timestamp >= remove_timestamp')) {
       members.set(num(r.chat_id), [...(members.get(num(r.chat_id)) ?? []), num(r.contact_id)]);
     }
-    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
+    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked, param FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
     for (const r of chatRows) {
       const ids = members.get(num(r.id)) ?? [];
       const fps = ids.map(id => fpById.get(id)).filter((fp): fp is string => !!fp && fp !== 'self');
       const base = { name: str(r.name), isRequest: num(r.blocked) === BLOCKED_REQUEST, lastActivity: 0, unread: 0 };
-      if (num(r.type) === CHAT_SINGLE) {
+      if (num(r.type) === CHAT_SINGLE && params(r.param).get('K') === '1') {
+        chats.push({ ...base, id: SELF_CHAT, type: 'self', name: '', members: [], left: false });
+        chatIdMap.set(num(r.id), SELF_CHAT);
+      } else if (num(r.type) === CHAT_SINGLE) {
         if (ids.includes(CONTACT_DEVICE) || fps.length !== 1) continue;
         chats.push({ ...base, id: `c-${fps[0]}`, type: 'single', name: '', contact: fps[0], members: fps, left: false });
         chatIdMap.set(num(r.id), `c-${fps[0]}`);

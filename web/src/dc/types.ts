@@ -27,7 +27,10 @@ export interface Contact {
   blocked: boolean;
 }
 
-export type ChatType = 'single' | 'group';
+export type ChatType = 'single' | 'group' | 'self';
+
+/** Id of "Saved messages", core's self-talk chat. */
+export const SELF_CHAT = 'self';
 
 export interface Chat {
   id: string;

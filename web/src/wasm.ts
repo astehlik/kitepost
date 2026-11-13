@@ -51,6 +51,7 @@ export interface ParsedMessage {
   attachments: AttachmentData[];
   mdn_for: string[];
   is_sync: boolean;
+  sync_json: string | null;
 }
 
 export interface ParseContext {

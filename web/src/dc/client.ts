@@ -7,7 +7,7 @@ import {
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
 } from '../wasm';
 import { buildContactInvite, buildGroupInvite, parseInvite, type Invite } from './invite';
-import type { AuthToken, BobState, Chat, Config, Contact, Message } from './types';
+import { SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
 
 export function createId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -209,6 +209,17 @@ export class DcClient extends EventTarget {
     return contact;
   }
 
+  /** "Saved messages", core's self-talk chat. */
+  private async selfChat(): Promise<Chat> {
+    const existing = this.chats.get(SELF_CHAT);
+    if (existing) return existing;
+    const chat: Chat = {
+      id: SELF_CHAT, type: 'self', name: '', members: [], isRequest: false, left: false, lastActivity: Date.now(), unread: 0,
+    };
+    await this.saveChat(chat);
+    return chat;
+  }
+
   private async singleChat(fp: string, isRequest: boolean): Promise<Chat> {
     const id = `c-${fp}`;
     const existing = this.chats.get(id);
@@ -226,6 +237,7 @@ export class DcClient extends EventTarget {
   }
 
   chatTitle(chat: Chat): string {
+    if (chat.type === 'self') return 'Saved messages';
     return chat.type === 'single' && chat.contact ? this.contactName(chat.contact) : chat.name;
   }
 
@@ -456,8 +468,9 @@ export class DcClient extends EventTarget {
     const chat = this.chats.get(chatId);
     if (!chat) throw new Error('unknown chat');
     if (chat.left) throw new Error('You are no longer a member of this group');
-    const members = this.memberContacts(chat);
-    if (!members.length) throw new Error('No encryption key for this chat yet');
+    const self = chat.type === 'self';
+    const members = self ? [] : this.memberContacts(chat);
+    if (!self && !members.length) throw new Error('No encryption key for this chat yet');
 
     const msgs = this.messages.get(chatId) ?? [];
     const last = [...msgs].reverse().find(m => !m.info && m.state !== 'failed');
@@ -472,8 +485,9 @@ export class DcClient extends EventTarget {
     await this.saveMessage(local);
     if (chat.isRequest) await this.acceptChat(chatId);
     try {
-      const mid = await this.send({
-        to: members.map(m => ({ name: m.name, addr: m.addr })),
+      // Like core, notes to self only go to the server when another device needs them.
+      const mid = self && !this.config.bccSelf ? createMid() : await this.send({
+        to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
         subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,
         text, headers, attachment,
         gossip: members.length > 1 ? members.map(m => ({ addr: m.addr, key: m.publicKey })) : [],
@@ -577,7 +591,8 @@ export class DcClient extends EventTarget {
       await this.saveConfig();
     }
     if (p.mdn_for.length) return this.readElsewhere(p.mdn_for);
-    if (p.is_sync || p.headers['secure-join'] || p.headers['secure-join-invitenumber']) return;
+    if (p.is_sync) return this.applySync(p.sync_json);
+    if (p.headers['secure-join'] || p.headers['secure-join-invitenumber']) return;
     for (const g of p.gossip) {
       if (g.fingerprint !== this.config.fingerprint && g.can_encrypt && !this.contacts.get(g.fingerprint)?.publicKey) {
         await this.upsertContact(g.fingerprint, g.addr, g.key).catch(() => undefined);
@@ -602,13 +617,46 @@ export class DcClient extends EventTarget {
       if (p.headers['chat-group-member-removed'] && addrEq(p.headers['chat-group-member-removed'], this.config.addr)) chat.left = true;
       await this.saveChat(chat);
     } else {
+      const toSelf = p.recipients.length > 0 && p.recipients.every(r => addrEq(r.addr, this.config.addr));
       const fp = p.intended_recipients.find(f => f !== this.config.fingerprint && this.contacts.get(f)?.publicKey)
         ?? this.recipientFingerprints(p).find(f => f !== this.config.fingerprint);
-      if (!fp) return;
-      chat = await this.singleChat(fp, false);
+      if (toSelf) chat = await this.selfChat();
+      else if (fp) chat = await this.singleChat(fp, false);
+      else return;
       if (chat.isRequest) await this.acceptChat(chat.id);
     }
     await this.applyMessage(p, mid, chat, 'self');
+  }
+
+  /** The sync items Kitepost can apply, see core src/sync.rs. */
+  private async applySync(json: string | null) {
+    let items: { data?: Record<string, unknown> }[] = [];
+    try {
+      items = JSON.parse(json ?? '{}').items ?? [];
+    } catch {
+      return;
+    }
+    for (const { data } of items) {
+      const save = data?.SaveMessage as { src?: string; dest?: string } | undefined;
+      const del = data?.DeleteMessages as { msgs?: string[] } | undefined;
+      if (save?.src && save.dest && !this.messageById(save.dest)) {
+        const orig = this.messageById(save.src);
+        if (!orig || orig.info) continue;
+        const chat = await this.selfChat();
+        await this.saveMessage({ ...orig, id: save.dest, chatId: chat.id, reactions: {}, unseenUid: undefined, edited: undefined });
+        chat.lastActivity = Date.now();
+        await this.saveChat(chat);
+      }
+      for (const id of del?.msgs ?? []) await this.deleteLocally(id);
+    }
+  }
+
+  private async deleteLocally(id: string) {
+    const m = this.messageById(id);
+    if (!m) return;
+    this.messages.set(m.chatId, (this.messages.get(m.chatId) ?? []).filter(x => x.id !== id));
+    await this.store.delete(`msg/${m.chatId}/${id}`);
+    this.changed(`messages:${m.chatId}`);
   }
 
   private async senderContact(p: ParsedMessage): Promise<Contact | undefined> {

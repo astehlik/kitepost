@@ -339,7 +339,9 @@ function startMain(client: DcClient) {
       return;
     }
     const contact = chat.contact ? client.contacts.get(chat.contact) : undefined;
-    const subtitle = chat.type === 'group'
+    const subtitle = chat.type === 'self'
+      ? 'Notes, synced with your other devices'
+      : chat.type === 'group'
       ? `${chat.members.length + 1} members`
       : contact ? `${contact.addr}${contact.verified ? ' · ✔ verified' : ''}` : '';
     const header = h('header', { class: 'chathead' },

@@ -77,6 +77,8 @@ pub struct ParsedMessage {
     pub mdn_for: Vec<String>,
     /// Multi-device sync message from another device of the same profile.
     pub is_sync: bool,
+    /// Its `multi-device-sync.json`, see core src/sync.rs.
+    pub sync_json: Option<String>,
 }
 
 fn key_info(addr: &str, key: &SignedPublicKey) -> KeyInfo {
@@ -197,6 +199,7 @@ struct Content {
     attachments: Vec<AttachmentOut>,
     mdn_for: Vec<String>,
     is_sync: bool,
+    sync_json: Option<String>,
 }
 
 fn collect_content(part: &ParsedMail, out: &mut Content, budget: &mut usize) -> Result<()> {
@@ -204,6 +207,12 @@ fn collect_content(part: &ParsedMail, out: &mut Content, budget: &mut usize) -> 
     if mimetype == "multipart/report" {
         if part.ctype.params.get("report-type").map(String::as_str) == Some("multi-device-sync") {
             out.is_sync = true;
+            out.sync_json = part
+                .subparts
+                .iter()
+                .find(|p| p.ctype.mimetype.eq_ignore_ascii_case("application/json"))
+                .map(|p| p.get_body())
+                .transpose()?;
             return Ok(());
         }
         if part.ctype.params.get("report-type").map(String::as_str)
@@ -420,6 +429,7 @@ pub fn parse(raw: &[u8], ctx: ParseContext) -> Result<ParsedMessage> {
         attachments: vec![],
         mdn_for: vec![],
         is_sync: false,
+        sync_json: None,
     };
     let mut budget = MAX_ATTACHMENT_BYTES;
     if let Some(inner) = &inner_mail {
@@ -445,5 +455,6 @@ pub fn parse(raw: &[u8], ctx: ParseContext) -> Result<ParsedMessage> {
         attachments: content.attachments,
         mdn_for: content.mdn_for,
         is_sync: content.is_sync,
+        sync_json: content.sync_json,
     })
 }

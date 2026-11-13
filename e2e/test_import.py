@@ -54,10 +54,12 @@ def main():
             phone_bob.send_text("hello from alice")
             bob_chat = bob.get_chat_by_id(wait_text(bob, "hello from alice").chat_id)
             bob_chat.send_text("reply from bob")
-            wait_text(phone, "reply from bob")
+            reply_on_phone = wait_text(phone, "reply from bob")
             png = Path(tmp) / "pic.png"
             png.write_bytes(PNG)
             phone_bob.send_file(str(png))
+            phone_saved = phone.get_contact_by_id(1).create_chat()
+            phone_saved.send_text("note before export")
             group = phone.create_group("Backup group")
             group.add_contact(phone.get_contact_by_addr(bob_addr))
             group.send_text("group hello")
@@ -120,6 +122,16 @@ def main():
             expect(badge).to_have_text("1", timeout=TIMEOUT)
             phone.mark_seen_messages([phone.get_message_by_id(wait_text(phone, "read me on the phone").id)])
             expect(badge).to_have_count(0, timeout=TIMEOUT)
+
+            log("10. Saved messages: imported, notes in both directions, saving a message on the phone")
+            open_chat(page, "Saved messages")
+            expect(page.locator(".msg.out", has_text="note before export")).to_be_visible()
+            phone_saved.send_text("note after import")
+            expect(page.locator(".msg.out", has_text="note after import")).to_be_visible(timeout=TIMEOUT)
+            rpc.save_msgs(phone.id, [reply_on_phone.id])
+            expect(page.locator(".messages .msg", has_text="reply from bob")).to_be_visible(timeout=TIMEOUT)
+            web_send(page, "note from the browser")
+            assert wait_own_msg(phone, "note from the browser").chat_id == phone_saved.id
 
             log("ALL TESTS PASSED")
             browser.close()
