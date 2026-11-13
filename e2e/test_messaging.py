@@ -1,5 +1,6 @@
 """Messaging between the web client and Delta Chat core."""
 
+import pytest
 from deltachat_rpc_client import EventType
 from playwright.sync_api import expect
 
@@ -54,13 +55,43 @@ def test_emoji_completion_and_picker(web, dora):
     wait_text(dora.acc, "Emoji test 👍🚀")
 
 
-def test_attachments_by_picker_and_paste(web, dora, tmp_path):
+# Independent of the client's detection: a colored glyph no wider than one emoji.
+RENDERS_AS_EMOJI = """emoji => {
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    ctx.canvas.width = ctx.canvas.height = 40;
+    ctx.font = `32px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.textBaseline = 'top';
+    if (ctx.measureText(emoji).width > ctx.measureText('😀').width * 1.5) return false;
+    ctx.fillText(emoji, 0, 0);
+    const d = ctx.getImageData(0, 0, 40, 40).data;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128 && Math.abs(d[i] - d[i + 2]) > 40) return true;
+    return false;
+}"""
+
+
+def test_picker_only_offers_emojis_the_browser_can_show(web, browser_name):
+    page = web.page
+    open_chat(page, "Phone")
+    page.get_by_role("button", name="Insert emoji").click()
+    page.get_by_placeholder("Search emojis").fill("cracking face")
+    expect(page.locator(".emoji-picker .hint", has_text="Loading")).to_have_count(0)
+    offered = page.locator(".emoji-picker button.emoji", has_text="🫫").count() == 1
+    assert offered == page.evaluate(RENDERS_AS_EMOJI, "🫫")
+    if browser_name == "firefox":
+        assert not offered, "Firefox's bundled emoji font has no Emoji 18"
+
+
+def test_attachment_by_file_picker(web, dora, tmp_path):
     png = tmp_path / "dot.png"
     png.write_bytes(PNG)
     web.page.locator('.composer input[type="file"]').set_input_files(str(png))
     web_send(web.page, "a picture")
     assert wait_text(dora.acc, "a picture").file_name == "dot.png"
 
+
+def test_attachment_by_paste(web, dora, browser_name):
+    if browser_name == "firefox":
+        pytest.skip("Firefox drops the files of synthetic paste events; real pastes are trusted events")
     web.page.locator(".composer textarea").evaluate("""(el, hex) => {
         const bytes = new Uint8Array(hex.match(/../g).map(b => parseInt(b, 16)));
         const data = new DataTransfer();

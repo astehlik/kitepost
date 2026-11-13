@@ -18,15 +18,53 @@ export interface EmojiData {
 }
 
 const COMPONENT_GROUP = 2;
+
+// One emoji per Emoji version that older fonts may lack, ZWJ sequences where a version only has those.
+const VERSION_SAMPLES: Record<string, string> = {
+  '12.1': '🧑‍🦰', '13': '🥲', '13.1': '😶‍🌫️', '14': '🫠', '15': '🫨', '15.1': '🙂‍↔️', '16': '🫩', '17': '🫪', '18': '🫫',
+};
+
+/** Whether `emoji` renders as one colored glyph; fonts without it show a box or split a sequence. */
+function rendersAsEmoji(ctx: CanvasRenderingContext2D, emoji: string, width: number): boolean {
+  if (ctx.measureText(emoji).width > width * 1.5) return false;
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.fillText(emoji, 0, 0);
+  const { data } = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] > 128 && Math.max(Math.abs(data[i] - data[i + 1]), Math.abs(data[i + 1] - data[i + 2])) > 40) return true;
+  }
+  return false;
+}
+
+/** Emoji versions this browser cannot display, e.g. Firefox's bundled font lags behind the system's. */
+function unsupportedVersions(): Set<string> {
+  const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  if (!ctx) return new Set();
+  ctx.canvas.width = ctx.canvas.height = 40;
+  ctx.font = `32px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.textBaseline = 'top';
+  const width = ctx.measureText('😀').width;
+  // Without a reliable reference, e.g. with canvas fingerprinting protection, hide nothing.
+  if (!rendersAsEmoji(ctx, '😀', width)) return new Set();
+  return new Set(Object.entries(VERSION_SAMPLES).filter(([, e]) => !rendersAsEmoji(ctx, e, width)).map(([v]) => v));
+}
+
+const baseHexcode = (hex: string) => hex.replace(/-FE0F/g, '');
 const cache = new Map<Lang, Promise<EmojiData>>();
 
 async function fetchData(lang: Lang) {
-  const [compact, messages, shortcodes] = await Promise.all([
+  const [compact, messages, shortcodes, versions] = await Promise.all([
     lang === 'de' ? import('emojibase-data/de/compact.json') : import('emojibase-data/en/compact.json'),
     lang === 'de' ? import('emojibase-data/de/messages.json') : import('emojibase-data/en/messages.json'),
     import('emojibase-data/en/shortcodes/github.json'),
+    import('emojibase-data/versions/emoji.json'),
   ]);
-  return { compact: compact.default, messages: messages.default, shortcodes: shortcodes.default as Record<string, string | string[]> };
+  const hidden = new Set([...unsupportedVersions()].flatMap(v => (versions.default as Record<string, string[]>)[v] ?? []).map(baseHexcode));
+  return {
+    compact: compact.default.filter(e => !hidden.has(baseHexcode(e.hexcode))),
+    messages: messages.default,
+    shortcodes: shortcodes.default as Record<string, string | string[]>,
+  };
 }
 
 export function loadEmojis(): Promise<EmojiData> {

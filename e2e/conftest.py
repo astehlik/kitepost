@@ -32,8 +32,8 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope="session")
-def browser_type_launch_args(browser_type_launch_args):
-    path = os.environ.get("CHROMIUM_PATH")
+def browser_type_launch_args(browser_type_launch_args, browser_name):
+    path = os.environ.get("CHROMIUM_PATH") if browser_name == "chromium" else None
     return {**browser_type_launch_args, "executable_path": path} if path else browser_type_launch_args
 
 
