@@ -45,13 +45,8 @@ export const de: Record<keyof typeof en, string> = {
 
   'import.title': 'Du nutzt schon Delta Chat?',
   'import.text': 'Verwende hier dasselbe Profil wie auf deinem Handy. Chats, Kontakte und Schlüssel werden übernommen, und neue Nachrichten kommen auf beiden Geräten an.',
-  'import.scan': 'QR-Code vom Handy scannen',
   'import.file': 'Backup-Datei importieren…',
-  'import.note': 'Zum Scannen brauchst du Delta Chat auf einem Chatmail-Relay. Eine Backup-Datei erstellst du unter Einstellungen → Chats und Medien → Backup exportieren.',
-  'import.scanTitle': 'Als Zweitgerät hinzufügen',
-  'import.scanHint': 'Öffne auf deinem Handy Delta Chat → Einstellungen → Zweitgerät hinzufügen und scanne den angezeigten QR-Code.',
-  'import.connecting': 'Verbinde mit deinem Handy…',
-  'import.receiving': 'Empfange… {percent} %',
+  'import.note': 'Das Backup exportierst du in Delta Chat unter Einstellungen → Chats und Medien → Backup exportieren.',
   'import.signingIn': 'Anmelden als {addr}…',
 
   'connect.title': 'Handy verbinden',

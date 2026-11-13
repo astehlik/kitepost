@@ -1,13 +1,11 @@
 import { fileReader, readBackup } from '../dc/backup';
 import { DcClient } from '../dc/client';
-import { looksLikeBackupQr, receiveBackup } from '../dc/transfer';
 import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, dialog, formatTime, h, trustedSvg } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
-import { scanQr } from './scanner';
 
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
 let DEFAULT_RELAY = 'nine.testrun.org';
@@ -267,23 +265,12 @@ function renderAccountSetup(store: Store) {
       importBox.classList.remove('busy');
     }
   };
-  const scan = () => busy(async () => {
-    const qr = await scanQr(t('import.scanTitle'), t('import.scanHint'), looksLikeBackupQr);
-    if (!qr) return undefined;
-    let client: DcClient | undefined;
-    say(t('import.connecting'));
-    await receiveBackup(qr, (got, total) => say(t('import.receiving', { percent: total ? Math.min(100, Math.round((got / total) * 100)) : 0 })), async blob => {
-      client = await importFrom(blob);
-    });
-    return client;
-  });
   const importBox = h('div', { class: 'import' },
     h('h2', {}, t('import.title')),
     h('p', {}, t('import.text')),
     importStatus, importErr,
     h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'primary', onclick: scan }, t('import.scan')),
-      h('button', { type: 'button', onclick: () => backup.click() }, t('import.file'))),
+      h('button', { type: 'button', class: 'primary', onclick: () => backup.click() }, t('import.file'))),
     h('small', {}, t('import.note')),
     backup);
   backup.addEventListener('change', () => {

@@ -20,13 +20,13 @@ sees ciphertext.
 
 - **New profile:** right after creating it, Kitepost shows a QR code. Scanning it with Delta Chat on
   a phone makes the two verified contacts.
-- **Same profile as the phone:** "Scan QR from phone" receives the profile from Delta Chat's
-  *Add second device* over the chatmail server's iroh relay. This needs a Delta Chat build with
-  `docs/upstream/0003-backup-transfer-relay.patch`, because current releases only offer the
-  transfer on the local network. Until then, "Import backup file…" reads a backup exported in
-  Delta Chat (unencrypted, as the apps export it). Afterwards both devices receive all messages,
-  and copies of sent messages, read state and edits are kept in sync like between two Delta
-  Chat devices.
+- **Same profile as the phone:** "Import backup file…" reads a backup exported in Delta Chat
+  (unencrypted, as the apps export it). Afterwards both devices receive all messages, and copies
+  of sent messages, read state and edits are kept in sync like between two Delta Chat devices.
+  Receiving the profile through Delta Chat's *Add second device* QR code is implemented
+  (`web/src/dc/transfer.ts`, `core/transfer`), but has no button yet: current Delta Chat releases
+  only offer the transfer on the local network, which browsers cannot reach, see
+  `docs/upstream/0003-backup-transfer-relay.patch`.
 - **Moving the profile to a phone:** Profile → "Export backup" writes a backup that Delta Chat
   imports with "Restore from backup". Its database starts from `web/src/dc/backup-schema.sql`, a
   fresh profile of the pinned Delta Chat core; core migrates it on import. After updating
@@ -184,9 +184,9 @@ work/venv/bin/pytest e2e --browser firefox  # in Firefox (playwright install fir
 Each test aborts after five minutes. Failed tests leave a Playwright trace (`playwright show-trace`)
 and a screenshot in `work/test-results`; CI uploads them as the `e2e-results` artifact.
 
-`e2e/test_transfer.py` is skipped unless `DC_RPC_SERVER` points to a `deltachat-rpc-server` built
-with the core patch from `docs/upstream`. The test relay
-advertises a plain-HTTP iroh relay on `127.0.0.1:3340` for it.
+`e2e/test_transfer.py` is skipped while the transfer has no button. It needs a
+`deltachat-rpc-server` built with the core patch from `docs/upstream` in `DC_RPC_SERVER`; the test
+relay advertises a plain-HTTP iroh relay on `127.0.0.1:3340` for it.
 
 Against a public relay, tests that need the local one are skipped:
 `RELAY=nine.testrun.org RELAY_IP= work/venv/bin/pytest e2e`.

@@ -16,6 +16,7 @@ from helpers import addr_of, configure, open_chat, set_passphrase, wait_event, w
 pytestmark = [
     pytest.mark.local_relay,
     pytest.mark.skipif(not os.environ.get("DC_RPC_SERVER"), reason="needs a patched core in DC_RPC_SERVER"),
+    pytest.mark.skip(reason="the Scan QR button is hidden until Delta Chat releases offer the transfer over a relay"),
 ]
 
 

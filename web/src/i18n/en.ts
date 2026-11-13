@@ -43,13 +43,8 @@ export const en = {
 
   'import.title': 'Already using Delta Chat?',
   'import.text': 'Use the same profile here as on your phone. Your chats, contacts and keys are copied over, and new messages arrive on both devices.',
-  'import.scan': 'Scan QR from phone',
   'import.file': 'Import backup file…',
-  'import.note': 'Scanning needs Delta Chat on a chatmail relay. A backup file comes from Settings → Chats and media → Export backup.',
-  'import.scanTitle': 'Add as second device',
-  'import.scanHint': 'On your phone, open Delta Chat → Settings → Add second device and scan the QR code shown there.',
-  'import.connecting': 'Connecting to your phone…',
-  'import.receiving': 'Receiving… {percent} %',
+  'import.note': 'In Delta Chat, export the backup under Settings → Chats and media → Export backup.',
   'import.signingIn': 'Signing in as {addr}…',
 
   'connect.title': 'Connect your phone',

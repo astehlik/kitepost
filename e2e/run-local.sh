@@ -9,5 +9,5 @@ docker compose -f e2e/relay/compose.yaml up -d --build --wait
 (cd invite && node --test)
 ./build-wasm.sh
 (cd web && pnpm run build)
-# Arguments go to pytest, e.g. -k reactions. The transfer test needs DC_RPC_SERVER, see docs/upstream.
+# Arguments go to pytest, e.g. -k reactions.
 work/venv/bin/pytest e2e "$@"
