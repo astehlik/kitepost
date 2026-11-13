@@ -27,6 +27,7 @@ RUN pnpm run build
 FROM nginxinc/nginx-unprivileged:1.29-alpine
 ENV BRIDGE_URL=../bridge \
     DEFAULT_RELAY=nine.testrun.org \
+    HANDOFF_URL=../join/ \
     CONNECT_SRC=""
 COPY docker/app/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=web /src/web/dist /usr/share/nginx/html

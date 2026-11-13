@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import QRCode from 'qrcode';
 import { LANGUAGES, requestLanguage, translator } from './i18n.mjs';
 import { hashPassword } from './sha512crypt.mjs';
+import { handoffs } from './handoff.mjs';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -27,6 +28,8 @@ const DOWNLOAD_URL = 'https://get.delta.chat';
 
 if (!MAIL_DOMAIN) throw new Error('MAIL_DOMAIN is required');
 if (ADMIN_TOKEN && ADMIN_TOKEN.length < 24) throw new Error('ADMIN_TOKEN must be at least 24 characters');
+
+const handoff = handoffs({ mailDomain: MAIL_DOMAIN, mailboxesDir: MAILBOXES_DIR });
 
 const sha256 = s => createHash('sha256').update(s).digest('hex');
 
@@ -94,7 +97,8 @@ function dclogin(addr, password) {
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /** `switchLanguage` adds links to the other languages, for pages that can safely be reloaded. */
-function page(lang, title, body, { script = false, switchLanguage = false } = {}) {
+/** `root` leads from the page's path back to the service root. */
+function page(lang, title, body, { script, switchLanguage = false, root = '' } = {}) {
   const others = switchLanguage
     ? `<p class="lang-switch">${Object.entries(LANGUAGES).filter(([code]) => code !== lang)
       .map(([code, m]) => `<a href="?lang=${code}" hreflang="${code}" lang="${code}">${m.langName}</a>`).join(' · ')}</p>`
@@ -102,8 +106,8 @@ function page(lang, title, body, { script = false, switchLanguage = false } = {}
   return `<!doctype html>
 <html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
-<title>${esc(title)}</title><link rel="stylesheet" href="style.css"></head>
-<body><main class="card">${body}${others}</main>${script ? '<script src="admin.js" type="module"></script>' : ''}</body></html>`;
+<title>${esc(title)}</title><link rel="stylesheet" href="${root}style.css"></head>
+<body><main class="card">${body}${others}</main>${script ? `<script src="${root}${script}" type="module"></script>` : ''}</body></html>`;
 }
 
 const SECURITY_HEADERS = {
@@ -180,6 +184,39 @@ function installPage(lang) {
 <p class="note">${T('installNext')}</p>`, { switchLanguage: true });
 }
 
+const plain = html => html.replace(/<[^>]+>/g, '');
+
+function handoffPage(lang, id) {
+  const T = translator(lang);
+  const { addr } = handoff.peek(id);
+  const filename = `delta-chat-backup-${new Date().toISOString().slice(0, 10)}-${addr.split('@')[0]}.tar`;
+  // Relative to h/<id>, so the page also works behind a path prefix.
+  return page(lang, T('handoffTitle'), `<h1>${T('handoffTitle')}</h1>
+<p>${T('handoffText', { addr: esc(addr) })}</p>
+<ol class="steps">
+  <li><h2>${T('handoffInstallHeading')}</h2>
+    <p class="buttons"><a class="button" href="${PLAY_URL}" rel="noopener noreferrer">Google Play</a>
+      <a class="button" href="${FDROID_URL}" rel="noopener noreferrer">F-Droid</a></p>
+    <p class="small">${T('handoffInstallOther', { url: DOWNLOAD_URL })}</p></li>
+  <li><h2>${T('handoffSaveHeading')}</h2>
+    <div id="handoff" data-src="${esc(id)}/data" data-filename="${esc(filename)}"
+      data-gone="${esc(plain(T('handoffGone')))}" data-failed="${esc(T('handoffFailed'))}">
+      <p class="status">${T('handoffLoading')}</p>
+      <p><a class="button primary" hidden>${T('handoffSave')}</a></p>
+    </div>
+    <p class="small">${T('handoffSaveHint')}</p></li>
+  <li><h2>${T('handoffRestoreHeading')}</h2>
+    <p>${T('handoffRestoreText')}</p></li>
+</ol>
+<p class="warn">${T('handoffWarn')}</p>`, { script: 'handoff.js', root: '../' });
+}
+
+function handoffGonePage(lang) {
+  const T = translator(lang);
+  return page(lang, T('handoffTitle'), `<h1>${T('handoffGoneHeading')}</h1>
+<p>${T('handoffGone')}</p>`, { root: '../' });
+}
+
 // ------------------------------------------------------------------ admin API
 
 function isAdmin(req) {
@@ -243,6 +280,7 @@ async function admin(req, res, path) {
 const STATIC = {
   'style.css': ['text/css; charset=utf-8', new URL('./public/style.css', import.meta.url)],
   'admin.js': ['text/javascript; charset=utf-8', new URL('./public/admin.js', import.meta.url)],
+  'handoff.js': ['text/javascript; charset=utf-8', new URL('./public/handoff.js', import.meta.url)],
 };
 
 // Redeeming is serialised so two clicks on one link cannot both create an account.
@@ -265,10 +303,17 @@ const server = createServer(async (req, res) => {
     if (path === 'admin') {
       const T = translator(lang);
       if (!ADMIN_TOKEN) return html(404, page(lang, T('notFound'), `<h1>${T('notFound')}</h1>`));
-      return html(200, page(lang, T('adminTitle'), '<div id="admin"></div>', { script: true, switchLanguage: true }));
+      return html(200, page(lang, T('adminTitle'), '<div id="admin"></div>', { script: 'admin.js', switchLanguage: true }));
     }
     if (path.startsWith('api/')) return admin(req, res, path);
     if (path === 'install') return html(200, installPage(lang));
+    if (await handoff.api(req, res, path)) return;
+    const h = /^h\/([A-Za-z0-9_-]{22})(\/data)?$/.exec(path);
+    if (h && req.method === 'GET') {
+      if (!h[2]) return handoff.peek(h[1]) ? html(200, handoffPage(lang, h[1])) : html(410, handoffGonePage(lang));
+      const data = handoff.take(h[1]);
+      return data ? send(res, 200, data, 'application/octet-stream') : send(res, 410, '', 'text/plain');
+    }
 
     if (!/^[A-Za-z0-9_-]{24}$/.test(path)) return html(404, invalidPage(lang));
     const hash = sha256(path);

@@ -1,5 +1,6 @@
 import { fileReader, readBackup } from '../dc/backup';
 import { DcClient } from '../dc/client';
+import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
 import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
@@ -10,6 +11,7 @@ import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './e
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
 let DEFAULT_RELAY = 'nine.testrun.org';
 let DEFAULT_BRIDGE = '../bridge';
+let HANDOFF_URL = '../join/';
 const MAX_UPLOAD = 10 * 1024 * 1024;
 const INLINE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
@@ -83,6 +85,7 @@ async function loadRuntimeConfig() {
     const cfg = await res.json();
     if (typeof cfg.bridgeUrl === 'string' && cfg.bridgeUrl) DEFAULT_BRIDGE = cfg.bridgeUrl;
     if (typeof cfg.defaultRelay === 'string' && cfg.defaultRelay) DEFAULT_RELAY = cfg.defaultRelay;
+    if (typeof cfg.handoffUrl === 'string') HANDOFF_URL = cfg.handoffUrl;
   } catch {
     // Optional file.
   }
@@ -224,7 +227,8 @@ function renderAccountSetup(store: Store) {
           ? { addr: addr.value, password: password.value }
           : { addr: `${randomAlnum(9)}@${relay.value.trim().toLowerCase()}`, password: randomAlnum(22) };
         const client = await DcClient.setup(store, { ...params, displayName: name.value, bridgeUrl: bridge.value.trim() || DEFAULT_BRIDGE });
-        await renderConnectPhone(client);
+        if (await handoffAvailable(handoffBase(), client.config.addr)) renderPhoneSetup(client);
+        else await renderConnectPhone(client);
       } catch (e) {
         showError(err, e);
       } finally {
@@ -301,7 +305,57 @@ async function renderConnectPhone(client: DcClient) {
   render();
 }
 
+const handoffBase = () => (HANDOFF_URL ? new URL(HANDOFF_URL, location.href).href : '');
+
+/** A QR code that moves this profile to Delta Chat on a phone; polling stops when `signal` aborts. */
+function phoneSetup(client: DcClient, signal: AbortSignal): HTMLElement {
+  const box = h('div', { class: 'phone-setup' });
+  const newCode = () => h('button', { type: 'button', onclick: () => void show() }, t('phone.newCode'));
+  const show = async () => {
+    box.replaceChildren(h('p', { class: 'hint' }, t('phone.preparing')));
+    try {
+      const handoff = await createHandoff(handoffBase(), client);
+      box.replaceChildren(h('div', { class: 'qr' }, trustedSvg(qrSvg(handoff.url))),
+        h('p', { class: 'hint' }, t('phone.waiting')),
+        h('p', { class: 'hint' }, h('a', { href: handoff.url, target: '_blank', rel: 'noopener noreferrer' }, t('phone.thisDevice'))));
+      while (!signal.aborted) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (signal.aborted) return;
+        const state = await handoffState(handoff).catch(() => 'waiting');
+        if (state === 'fetched') return box.replaceChildren(h('p', { class: 'ok' }, t('phone.fetched')));
+        if (state === 'expired') return box.replaceChildren(h('p', {}, t('phone.expired')), newCode());
+      }
+    } catch (e) {
+      console.warn('handoff failed', e);
+      box.replaceChildren(h('p', { class: 'error' }, t('phone.failed')), newCode());
+    }
+  };
+  void show();
+  return box;
+}
+
+function renderPhoneSetup(client: DcClient) {
+  const polling = new AbortController();
+  const setup = phoneSetup(client, polling.signal);
+  const leave = (next: () => unknown) => () => { polling.abort(); void next(); };
+  const render = () => screen(t('phone.title'), render,
+    h('p', {}, t('phone.text')),
+    setup,
+    h('button', { class: 'primary', onclick: leave(() => startMain(client)) }, t('continue')),
+    h('p', {}, h('button', { type: 'button', class: 'link', onclick: leave(() => renderConnectPhone(client)) }, t('phone.otherProfile'))));
+  render();
+}
+
+function phoneDialog(client: DcClient) {
+  const polling = new AbortController();
+  const dlg = dialog(t('phone.title'), h('div', { class: 'invite' }, h('p', {}, t('phone.text')), phoneSetup(client, polling.signal)),
+    [{ label: t('close'), primary: true }]);
+  dlg.addEventListener('close', () => polling.abort());
+}
+
 // ------------------------------------------------------------------ main view
+
+let canHandoff = false;
 
 // Listeners of the previous main view, removed when it is rebuilt, e.g. after a language change.
 let mainListeners: AbortController | undefined;
@@ -531,6 +585,7 @@ function startMain(client: DcClient, initialChat?: string) {
   }, { signal });
   renderAll();
   client.start();
+  void handoffAvailable(handoffBase(), client.config.addr).then(ok => { canHandoff = ok; });
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -678,6 +733,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
     h('div', { class: 'profile-info' },
       h('small', {}, t('profile.address', { addr: client.config.addr })),
       h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))), [
+    ...(canHandoff ? [{ label: t('profile.phone'), onClick: () => { phoneDialog(client); } }] : []),
     { label: t('profile.export'), onClick: () => { exportDialog(client); } },
     { label: t('profile.lock'), onClick: async () => { await client.setRemembered(false); location.reload(); } },
     {

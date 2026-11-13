@@ -17,7 +17,7 @@ import pytest
 from deltachat_rpc_client import DeltaChat, EventType, Rpc
 from playwright.sync_api import expect
 
-from helpers import PORT, RELAY, RELAY_IP, ROOT, TIMEOUT, configure, create_profile, wait_event
+from helpers import INVITE, PORT, RELAY, RELAY_IP, ROOT, TIMEOUT, configure, create_profile, wait_event
 
 expect.set_options(timeout=TIMEOUT)
 
@@ -50,7 +50,7 @@ def bridge():
     """Serves web/dist and bridges to the relay; the iroh relay of e2e/relay is allowed for the transfer test."""
     env = {
         **os.environ, "PORT": str(PORT), "HOST_MAP": f"{RELAY}={RELAY_IP}" if RELAY_IP else "",
-        "CONNECT_SRC": "ws://127.0.0.1:3340 http://127.0.0.1:3340",
+        "CONNECT_SRC": f"ws://127.0.0.1:3340 http://127.0.0.1:3340 {INVITE.rstrip('/')}",
     }
     proc = subprocess.Popen(["node", str(ROOT / "bridge/server.mjs")], env=env)
     deadline = time.time() + 20

@@ -16,7 +16,7 @@ server {
     location = /config.json {
         default_type application/json;
         expires -1;
-        return 200 '{"bridgeUrl":"${BRIDGE_URL}","defaultRelay":"${DEFAULT_RELAY}"}';
+        return 200 '{"bridgeUrl":"${BRIDGE_URL}","defaultRelay":"${DEFAULT_RELAY}","handoffUrl":"${HANDOFF_URL}"}';
     }
 
     location /assets/ {
