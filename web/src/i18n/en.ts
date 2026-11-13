@@ -18,6 +18,8 @@ export const en = {
   'unlock.deleteTitle': 'Delete profile?',
   'unlock.deleteText': 'All messages and keys stored in this browser will be erased. This cannot be undone.',
   'unlock.wrong': 'Wrong passphrase',
+  'remember.label': 'Stay unlocked in this browser',
+  'remember.hint': 'Kitepost then opens without the passphrase. Anyone who can use this browser profile can read your chats, so only use this on your own device.',
 
   'welcome.title': 'Welcome to Kitepost',
   'welcome.text': 'Your keys and messages are stored encrypted in this browser. Choose a passphrase to protect them; it never leaves this device.',

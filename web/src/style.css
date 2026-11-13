@@ -150,3 +150,4 @@ select { font: inherit; padding: .4rem .5rem; border-radius: 8px; border: 1px so
 .scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .scanner input { width: 100%; }
 .warning { color: var(--danger); font-weight: 600; }
+.remember .hint { display: block; margin: .2rem 0 0 1.6rem; color: var(--muted); font-size: .8rem; }

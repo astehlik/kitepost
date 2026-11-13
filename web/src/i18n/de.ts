@@ -20,6 +20,8 @@ export const de: Record<keyof typeof en, string> = {
   'unlock.deleteTitle': 'Profil löschen?',
   'unlock.deleteText': 'Alle Nachrichten und Schlüssel in diesem Browser werden gelöscht. Das lässt sich nicht rückgängig machen.',
   'unlock.wrong': 'Falsche Passphrase',
+  'remember.label': 'In diesem Browser entsperrt bleiben',
+  'remember.hint': 'Kitepost öffnet sich dann ohne Passphrase. Wer dieses Browserprofil benutzen kann, kann deine Chats lesen. Nutze das nur auf deinem eigenen Gerät.',
 
   'welcome.title': 'Willkommen bei Kitepost',
   'welcome.text': 'Deine Schlüssel und Nachrichten werden verschlüsselt in diesem Browser gespeichert. Wähle eine Passphrase, die sie schützt; sie verlässt dieses Gerät nie.',

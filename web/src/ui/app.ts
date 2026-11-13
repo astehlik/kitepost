@@ -40,6 +40,20 @@ function showError(box: HTMLElement, e: unknown) {
   box.hidden = false;
 }
 
+function rememberField() {
+  const box = h('input', { type: 'checkbox' });
+  const el = h('div', { class: 'remember' },
+    h('label', { class: 'check' }, box, t('remember.label')),
+    h('small', { class: 'hint' }, t('remember.hint')));
+  return { el, box };
+}
+
+async function openStore(store: Store) {
+  const client = await DcClient.load(store);
+  if (client) startMain(client);
+  else renderAccountSetup(store);
+}
+
 function languageSelect(onChange: () => void) {
   const select = h('select', { 'aria-label': t('language') },
     ...Object.entries(LANGUAGES).map(([code, name]) => h('option', { value: code, selected: code === getLanguage() }, name)));
@@ -89,8 +103,10 @@ let pendingLogin: Login | undefined;
 export async function boot() {
   pendingLogin = takeLoginFromUrl();
   await loadRuntimeConfig();
-  if (await Store.exists()) renderUnlock();
-  else renderPassphraseSetup();
+  if (!(await Store.exists())) return renderPassphraseSetup();
+  const remembered = await Store.unlockRemembered();
+  if (remembered) await openStore(remembered);
+  else renderUnlock();
 }
 
 /** An onboarding card; `rerender` redraws it after the language changed. */
@@ -103,6 +119,7 @@ function screen(title: string, rerender: () => void, ...content: Node[]) {
 
 function renderUnlock() {
   const pass = h('input', { type: 'password', autocomplete: 'current-password', required: true });
+  const remember = rememberField();
   const err = errorBox();
   const form = h('form', {
     onsubmit: async (ev: Event) => {
@@ -110,9 +127,8 @@ function renderUnlock() {
       form.classList.add('busy');
       try {
         const store = await Store.unlock(pass.value);
-        const client = await DcClient.load(store);
-        if (client) startMain(client);
-        else renderAccountSetup(store);
+        if (remember.box.checked) await store.remember();
+        await openStore(store);
       } catch (e) {
         showError(err, e);
       } finally {
@@ -121,6 +137,7 @@ function renderUnlock() {
     },
   },
   field(t('passphrase.label'), pass),
+  remember.el,
   err,
   h('button', { class: 'primary', type: 'submit' }, t('unlock.button')),
   h('button', {
@@ -137,6 +154,7 @@ function renderUnlock() {
 function renderPassphraseSetup() {
   const pass = h('input', { type: 'password', autocomplete: 'new-password', minlength: '10', required: true });
   const pass2 = h('input', { type: 'password', autocomplete: 'new-password', required: true });
+  const remember = rememberField();
   const err = errorBox();
   const form = h('form', {
     onsubmit: async (ev: Event) => {
@@ -144,7 +162,9 @@ function renderPassphraseSetup() {
       if (pass.value !== pass2.value) return showError(err, t('passphrase.mismatch'));
       form.classList.add('busy');
       try {
-        renderAccountSetup(await Store.create(pass.value));
+        const store = await Store.create(pass.value);
+        if (remember.box.checked) await store.remember();
+        renderAccountSetup(store);
       } catch (e) {
         showError(err, e);
         form.classList.remove('busy');
@@ -154,6 +174,7 @@ function renderPassphraseSetup() {
   h('p', {}, t('welcome.text')),
   field(t('passphrase.label'), pass, t('passphrase.hint')),
   field(t('passphrase.repeat'), pass2),
+  remember.el,
   err,
   h('button', { class: 'primary', type: 'submit' }, t('continue')));
   screen(t('welcome.title'), renderPassphraseSetup, form);
@@ -598,6 +619,8 @@ function exportDialog(client: DcClient) {
 /** `rebuild` redraws the main view after the language changed. */
 function profileDialog(client: DcClient, rebuild: () => void) {
   const name = h('input', { type: 'text', maxlength: '100', value: client.config.displayName });
+  const remember = rememberField();
+  void client.isRemembered().then(on => { remember.box.checked = on; });
   const lang = languageSelect(() => {
     document.querySelector('dialog')?.close();
     rebuild();
@@ -606,10 +629,16 @@ function profileDialog(client: DcClient, rebuild: () => void) {
   dialog(t('profile.title'), h('div', {},
     field(t('setup.displayName'), name),
     field(t('language'), lang),
+    remember.el,
     h('p', {}, h('small', {}, t('profile.address', { addr: client.config.addr }))),
     h('p', {}, h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))), [
     { label: t('profile.export'), onClick: () => { exportDialog(client); } },
-    { label: t('profile.lock'), onClick: () => location.reload() },
-    { label: t('save'), primary: true, onClick: () => client.setDisplayName(name.value) },
+    { label: t('profile.lock'), onClick: async () => { await client.setRemembered(false); location.reload(); } },
+    {
+      label: t('save'), primary: true, onClick: async () => {
+        await client.setDisplayName(name.value);
+        await client.setRemembered(remember.box.checked);
+      },
+    },
   ]);
 }

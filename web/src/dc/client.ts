@@ -323,6 +323,16 @@ export class DcClient extends EventTarget {
     }, [], true);
   }
 
+  isRemembered(): Promise<boolean> {
+    return this.store.isRemembered();
+  }
+
+  /** Keeps the storage key in this browser so the next start skips the passphrase. */
+  async setRemembered(on: boolean) {
+    if (on) await this.store.remember();
+    else await this.store.forget();
+  }
+
   /** Exports the profile for Delta Chat's "Restore from backup"; from then on both devices use it. */
   async exportBackup(): Promise<{ blob: Blob; filename: string }> {
     const blob = await buildBackup({

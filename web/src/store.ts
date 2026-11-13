@@ -6,6 +6,7 @@ import { t } from './i18n';
 const DB_NAME = 'kitepost';
 const PBKDF2_ITERATIONS = 600_000;
 const VERIFIER = 'kitepost-verifier-v1';
+const REMEMBERED = 'remembered-key';
 
 interface Sealed {
   iv: Uint8Array;
@@ -75,6 +76,7 @@ export class Store {
     const verifier = await seal(key, VERIFIER, 'verifier');
     const tx = db.transaction(['meta', 'records'], 'readwrite');
     tx.objectStore('records').clear();
+    tx.objectStore('meta').delete(REMEMBERED);
     tx.objectStore('meta').put(salt, 'salt');
     tx.objectStore('meta').put(verifier, 'verifier');
     await new Promise((resolve, reject) => {
@@ -82,6 +84,35 @@ export class Store {
       tx.onerror = () => reject(tx.error);
     });
     return new Store(db, key);
+  }
+
+  /**
+   * Opens the store with a key kept by remember(). The key stays non-extractable, but anyone
+   * with access to this browser profile can use it, so this is opt-in.
+   */
+  static async unlockRemembered(): Promise<Store | undefined> {
+    const db = await openDb();
+    const meta = db.transaction('meta').objectStore('meta');
+    const [key, verifier] = await Promise.all([req(meta.get(REMEMBERED)), req(meta.get('verifier'))]);
+    try {
+      if (key instanceof CryptoKey && (await unseal(key, verifier, 'verifier')) === VERIFIER) return new Store(db, key);
+    } catch {
+      // A key from an older profile no longer fits.
+    }
+    db.close();
+    return undefined;
+  }
+
+  async remember() {
+    await req(this.db.transaction('meta', 'readwrite').objectStore('meta').put(this.key, REMEMBERED));
+  }
+
+  async forget() {
+    await req(this.db.transaction('meta', 'readwrite').objectStore('meta').delete(REMEMBERED));
+  }
+
+  async isRemembered(): Promise<boolean> {
+    return (await req(this.db.transaction('meta').objectStore('meta').get(REMEMBERED))) !== undefined;
   }
 
   static async unlock(passphrase: string): Promise<Store> {
