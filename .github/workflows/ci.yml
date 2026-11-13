@@ -199,32 +199,16 @@ jobs:
       - name: Start local chatmail relay
         run: docker compose -f e2e/relay/compose.yaml up -d --build --wait
 
-      - name: Interop tests
-        env:
-          RELAY: _chatmail.test
-          RELAY_IP: 172.30.99.10
-        run: work/venv/bin/python -I e2e/test_interop.py
+      - name: End-to-end tests
+        run: work/venv/bin/pytest e2e --junitxml=work/test-results/junit.xml
 
-      - name: Backup import tests
-        env:
-          RELAY: _chatmail.test
-          RELAY_IP: 172.30.99.10
-        run: work/venv/bin/python -I e2e/test_import.py
-
-      - name: Backup export tests
-        env:
-          RELAY: _chatmail.test
-          RELAY_IP: 172.30.99.10
-        run: work/venv/bin/python -I e2e/test_export.py
-
-      - name: Invite tests
-        run: work/venv/bin/python -I e2e/test_invite.py
-
-      - name: Translation tests
-        env:
-          RELAY: _chatmail.test
-          RELAY_IP: 172.30.99.10
-        run: work/venv/bin/python -I e2e/test_i18n.py
+      - name: Traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results
+          path: work/test-results
+          retention-days: 7
 
       - name: Relay logs
         if: failure()

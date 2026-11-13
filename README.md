@@ -53,7 +53,7 @@ language needs `web/src/i18n/<code>.ts` (the compiler reports missing keys), an 
 | `site/`     | Static landing page                                                    |
 | `invite/`   | One-time invite links that create accounts on a chatmail relay         |
 | `docker/`   | Images, nginx templates, Caddyfile, chatmail nginx hook                |
-| `e2e/`      | Interop and invite tests, local chatmail relay                         |
+| `e2e/`      | End-to-end tests (pytest, Playwright, Delta Chat core), test relay    |
 | `docs/upstream/` | Patches proposed to chatmail/relay and chatmail/core             |
 
 ## Deploy with Docker Compose
@@ -167,21 +167,26 @@ messages), broadcast channels, webxdc, calls, read receipts to contacts, ephemer
 cd web && pnpm install && pnpm dev       # Vite proxies /bridge to the bridge on :8080
 ```
 
-Tests run against a local chatmail relay in Docker (`e2e/relay`, domain `_chatmail.test`, isolated
-network, only the invite service and the iroh relay bound on 127.0.0.1) and Delta Chat core
-(`deltachat-rpc-server`):
+The end-to-end tests use pytest and Playwright: the web client runs in Chromium against Delta Chat
+core (`deltachat-rpc-server`) and a local chatmail relay in Docker (`e2e/relay`, domain
+`_chatmail.test`, isolated network, only the invite service and the iroh relay bound on 127.0.0.1):
 
 ```sh
 python -m venv work/venv && work/venv/bin/pip install -r e2e/requirements.txt
-e2e/run-local.sh
+work/venv/bin/playwright install chromium   # or set CHROMIUM_PATH
+e2e/run-local.sh                            # builds everything, then runs pytest
+work/venv/bin/pytest e2e -k reactions       # a single test, once the app is built
 ```
 
-`e2e/test_transfer.py` needs a `deltachat-rpc-server` built with the core patch from
-`docs/upstream`: `DC_RPC_SERVER=/path/to/deltachat-rpc-server e2e/run-local.sh`. The test relay
+Each test aborts after five minutes. Failed tests leave a Playwright trace (`playwright show-trace`)
+and a screenshot in `work/test-results`; CI uploads them as the `e2e-results` artifact.
+
+`e2e/test_transfer.py` is skipped unless `DC_RPC_SERVER` points to a `deltachat-rpc-server` built
+with the core patch from `docs/upstream`. The test relay
 advertises a plain-HTTP iroh relay on `127.0.0.1:3340` for it.
 
-The interop test also runs against a public relay: `work/venv/bin/python e2e/test_interop.py`
-(nine.testrun.org, `RELAY=...` to change).
+Against a public relay, tests that need the local one are skipped:
+`RELAY=nine.testrun.org RELAY_IP= work/venv/bin/pytest e2e`.
 
 Like core, the client skips certificate chain validation (not hostname validation) for hostnames
 starting with `_`. Such names cannot get publicly trusted certificates and are used for test relays.
