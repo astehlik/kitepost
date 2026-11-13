@@ -94,6 +94,8 @@ select { font: inherit; padding: .4rem .5rem; border-radius: 8px; border: 1px so
 .icon-button svg, .nav-actions svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .icon-button svg { width: 18px; height: 18px; }
 .avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 1.05rem; user-select: none; }
+.avatar > span { line-height: 1; text-box: trim-both cap alphabetic; }
+.avatar svg { width: 20px; height: 20px; fill: currentColor; }
 .chatlist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
 .chatlist li { display: flex; align-items: center; gap: .7rem; padding: .6rem .9rem; border-bottom: 1px solid var(--border); cursor: pointer; }
 .chatlist .item { flex: 1; min-width: 0; }
@@ -156,7 +158,6 @@ select { font: inherit; padding: .4rem .5rem; border-radius: 8px; border: 1px so
 .remember .hint { display: block; margin: .2rem 0 0 1.6rem; color: var(--muted); font-size: .8rem; }
 .grow { position: relative; }
 .msg { position: relative; }
-.msg .reactions { font-size: .9rem; }
 .msg .react { position: absolute; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: 50%; color: var(--muted); opacity: 0; transition: opacity .1s; }
 .msg .react svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .msg.out .react { left: -38px; }

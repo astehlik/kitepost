@@ -550,6 +550,7 @@ const ICONS = {
   addContact: 'M15 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 8v6M22 11h-6',
   edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
   react: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01',
+  star: 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
 
@@ -571,16 +572,16 @@ function action(d: string, label: string, onclick: () => void) {
 }
 
 /** Letter avatar with a stable color per address, like Delta Chat's. */
-function avatar(name: string, key: string, letter?: string) {
+function avatar(name: string, key: string, content?: Node) {
   let hash = 0;
   for (const c of key) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
-  const el = h('span', { class: 'avatar', 'aria-hidden': 'true' }, letter ?? ([...name.trim()][0] ?? '?').toUpperCase());
+  const el = h('span', { class: 'avatar', 'aria-hidden': 'true' }, content ?? h('span', {}, ([...name.trim()][0] ?? '?').toUpperCase()));
   el.style.background = `hsl(${hash % 360} 42% 42%)`;
   return el;
 }
 
 function chatAvatar(client: DcClient, chat: Chat) {
-  if (chat.type === 'self') return avatar('', 'self', '★');
+  if (chat.type === 'self') return avatar('', 'self', icon(ICONS.star));
   const key = chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.addr ?? chat.id : chat.grpid ?? chat.id;
   return avatar(client.chatTitle(chat), key);
 }
