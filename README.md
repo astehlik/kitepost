@@ -178,6 +178,7 @@ python -m venv work/venv && work/venv/bin/pip install -r e2e/requirements.txt
 work/venv/bin/playwright install chromium   # or set CHROMIUM_PATH
 e2e/run-local.sh                            # builds everything, then runs pytest
 work/venv/bin/pytest e2e -k reactions       # a single test, once the app is built
+work/venv/bin/pytest e2e --browser firefox  # in Firefox (playwright install firefox)
 ```
 
 Each test aborts after five minutes. Failed tests leave a Playwright trace (`playwright show-trace`)

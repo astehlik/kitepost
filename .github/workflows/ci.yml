@@ -195,13 +195,14 @@ jobs:
           (cd bridge && pnpm install --frozen-lockfile)
           python -m venv work/venv
           work/venv/bin/pip install -r e2e/requirements.txt
-          work/venv/bin/playwright install --with-deps chromium
+          work/venv/bin/playwright install --with-deps chromium firefox
 
       - name: Start local chatmail relay
         run: docker compose -f e2e/relay/compose.yaml up -d --build --wait
 
       - name: End-to-end tests
-        run: work/venv/bin/pytest e2e --junitxml=work/test-results/junit.xml
+        # Firefox too: it renders some things differently, e.g. ships an older emoji font.
+        run: work/venv/bin/pytest e2e --browser chromium --browser firefox --junitxml=work/test-results/junit.xml
 
       - name: Traces and screenshots
         if: failure()
