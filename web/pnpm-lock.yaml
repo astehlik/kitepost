@@ -175,6 +175,9 @@ importers:
 
   .:
     dependencies:
+      emojibase-data:
+        specifier: 18.0.0
+        version: 18.0.0(emojibase@18.0.0)
       jsqr:
         specifier: ^1.4.0
         version: 1.4.0
@@ -452,6 +455,15 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  emojibase-data@18.0.0:
+    resolution: {integrity: sha512-TPPRRYv2zPd0jKI+pTpMquwWNZXYAsC3IVsCMeg2X8y8fEzKwOks4/5bz0YavF5r6d71aGPpb6oDnUEwSLLMoA==}
+    peerDependencies:
+      emojibase: '*'
+
+  emojibase@18.0.0:
+    resolution: {integrity: sha512-5PG+EEt5zQ9qvqdHZw61+T9iz96g+r621QS/w8jEzPg+3mjzAdjl8LPLc+e9ABv/yboNfMwEair7aK9qKnwAbQ==}
+    engines: {node: '>=20.0.0'}
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -788,6 +800,12 @@ snapshots:
     optional: true
 
   detect-libc@2.1.2: {}
+
+  emojibase-data@18.0.0(emojibase@18.0.0):
+    dependencies:
+      emojibase: 18.0.0
+
+  emojibase@18.0.0: {}
 
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:

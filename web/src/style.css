@@ -151,3 +151,15 @@ select { font: inherit; padding: .4rem .5rem; border-radius: 8px; border: 1px so
 .scanner input { width: 100%; }
 .warning { color: var(--danger); font-weight: 600; }
 .remember .hint { display: block; margin: .2rem 0 0 1.6rem; color: var(--muted); font-size: .8rem; }
+.grow { position: relative; }
+.popover { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: .4rem; }
+button.emoji { width: 38px; height: 38px; padding: 0; border: 0; border-radius: 8px; background: none; font-size: 1.45rem; line-height: 1; }
+button.emoji:hover { background: var(--bg); filter: none; }
+.emoji-picker { width: min(320px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: .4rem; }
+.emoji-grid { max-height: 300px; overflow-y: auto; }
+.emoji-grid h3 { position: sticky; top: 0; margin: 0; padding: .3rem .2rem; font-size: .75rem; color: var(--muted); background: var(--panel); }
+.emoji-row { display: flex; flex-wrap: wrap; }
+.emoji-suggest { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; margin: 0; padding: .25rem; list-style: none; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.emoji-suggest li { display: flex; align-items: center; gap: .5rem; padding: .3rem .5rem; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: .9rem; }
+.emoji-suggest li .emoji { font-size: 1.3rem; }
+.emoji-suggest li.active { background: var(--bg); color: var(--text); }

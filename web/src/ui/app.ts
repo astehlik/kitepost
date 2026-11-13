@@ -6,6 +6,7 @@ import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, dialog, formatTime, h, trustedSvg } from './dom';
+import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { scanQr } from './scanner';
 
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
@@ -460,6 +461,13 @@ function startMain(client: DcClient, initialChat?: string) {
       void attach(f);
     });
     chip.addEventListener('click', () => { attachment = undefined; chip.hidden = true; });
+    const grow = h('div', { class: 'grow' }, chip, input);
+    // Before the Enter handler below, so that Enter picks a suggestion instead of sending.
+    attachEmojiCompletion(input, grow);
+    const emojiButton = h('button', { class: 'icon', type: 'button', title: t('chat.emoji'), 'aria-label': t('chat.emoji'), disabled: chat.left }, '😊');
+    emojiButton.addEventListener('click', () => {
+      const close = popover(emojiButton, emojiPicker(emoji => { close(); insertAtCursor(input, emoji); }));
+    });
     input.addEventListener('keydown', ev => {
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
@@ -468,7 +476,7 @@ function startMain(client: DcClient, initialChat?: string) {
     });
     return h('footer', { class: 'composer' },
       h('button', { class: 'icon', title: t('chat.attach'), 'aria-label': t('chat.attach'), disabled: chat.left, onclick: () => file.click() }, '📎'),
-      h('div', { class: 'grow' }, chip, input), file,
+      emojiButton, grow, file,
       h('button', { class: 'primary', disabled: chat.left, onclick: send }, t('chat.send')));
   }
 

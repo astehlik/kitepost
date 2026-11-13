@@ -150,6 +150,19 @@ def main():
             msg.send_reaction("👍")
             expect(page.locator(".msg .reactions", has_text="👍")).to_be_visible(timeout=TIMEOUT)
 
+            log("4c. typing :shortcode suggests emojis, Enter inserts; the picker inserts too")
+            box = page.locator(".composer textarea")
+            box.press_sequentially("Emoji test :thumbsu")
+            expect(page.locator(".emoji-suggest li.active")).to_contain_text("👍")
+            box.press("Enter")
+            expect(box).to_have_value("Emoji test 👍")
+            page.get_by_role("button", name="Insert emoji").click()
+            page.get_by_placeholder("Search emojis").fill("rocket")
+            page.locator(".emoji-picker .emoji-row button").first.click()
+            expect(box).to_have_value("Emoji test 👍🚀")
+            box.press("Enter")
+            assert dora.wait_for_incoming_msg().get_snapshot().text == "Emoji test 👍🚀"
+
             log("5. web attachment -> core")
             png = Path(tmp) / "dot.png"
             png.write_bytes(bytes.fromhex(
