@@ -11,8 +11,11 @@ button, .button { display: inline-block; font: inherit; padding: .6rem 1.2rem; b
 .small, .muted { color: var(--muted); font-size: .9rem; }
 .note { border-left: 3px solid var(--accent); padding-left: .8rem; color: var(--muted); }
 .warn { color: var(--warn); font-weight: 600; }
-.choices { padding-left: 1.2rem; }
-.choices li { margin-bottom: 1.5rem; }
+.steps { padding-left: 1.2rem; }
+.steps li { margin-bottom: 1.8rem; }
+.buttons { display: flex; flex-wrap: wrap; gap: .6rem; }
+details.web-only { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+details.web-only summary { cursor: pointer; font-weight: 600; }
 .qr { display: block; width: min(260px, 100%); height: auto; background: #fff; border-radius: 8px; }
 input, select { font: inherit; padding: .45rem .6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 100%; }
 form.signin { display: flex; gap: .6rem; align-items: center; }

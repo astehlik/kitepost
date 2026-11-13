@@ -78,10 +78,27 @@ def test_invite_works_once(admin, context):
     expect(admin.locator("tbody tr").first).to_contain_text(addr)
 
 
+def test_result_page_leads_to_the_phone_first(admin, context):
+    friend = context.new_page()
+    redeem(friend, create_invite(admin))
+    expect(friend.locator("ol.steps > li h2")).to_have_text(
+        ["Install Delta Chat on your phone", "Log in on your phone", "Also use it in the browser"])
+    expect(friend.locator("img.qr")).to_have_count(2)
+    assert friend.get_by_role("link", name="Open the web client").get_attribute("href") == URL
+
+    friend.get_by_role("link", name="Download page").click()
+    assert friend.url == INVITE + "install"
+    expect(friend.get_by_role("link", name="Google Play")).to_have_attribute(
+        "href", "https://play.google.com/store/apps/details?id=chat.delta")
+    expect(friend.get_by_role("link", name="F-Droid")).to_have_attribute(
+        "href", "https://f-droid.org/packages/com.b44t.messenger/")
+
+
 def test_web_client_logs_in_from_invite(admin, context):
     friend = context.new_page()
     addr, _ = redeem(friend, create_invite(admin))
-    web_link = friend.get_by_role("link", name="Open the web client").get_attribute("href")
+    friend.get_by_text("No smartphone?").click()
+    web_link = friend.get_by_role("link", name="Use only the web client").get_attribute("href")
     assert web_link.startswith(URL + "#login=dclogin"), web_link
 
     web = context.new_page()

@@ -53,6 +53,7 @@ services:
       MAIL_DOMAIN: ${MAIL_DOMAIN:-}
       ADMIN_TOKEN: ${INVITE_ADMIN_TOKEN:-}
       APP_URL: ${INVITE_APP_URL:-../app/}
+      PUBLIC_URL: ${INVITE_PUBLIC_URL:-}
       SITE_NAME: ${INVITE_SITE_NAME:-}
     volumes:
       - ${CHATMAIL_MAILBOXES_DIR:-/srv/chatmail/data/mail/mail/${MAIL_DOMAIN:-unset}}:/mailboxes

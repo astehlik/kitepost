@@ -19,6 +19,11 @@ const APP_URL = process.env.APP_URL ?? '../app/';
 const USERNAME_LENGTH = Number(process.env.USERNAME_LENGTH ?? 9);
 const SELF_SIGNED = MAIL_DOMAIN.startsWith('_');
 const SITE_NAME = process.env.SITE_NAME ?? MAIL_DOMAIN;
+// Absolute base for QR codes; the default matches the documented /join/ location.
+const PUBLIC_URL = process.env.PUBLIC_URL;
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=chat.delta';
+const FDROID_URL = 'https://f-droid.org/packages/com.b44t.messenger/';
+const DOWNLOAD_URL = 'https://get.delta.chat';
 
 if (!MAIL_DOMAIN) throw new Error('MAIL_DOMAIN is required');
 if (ADMIN_TOKEN && ADMIN_TOKEN.length < 24) throw new Error('ADMIN_TOKEN must be at least 24 characters');
@@ -129,23 +134,50 @@ ${inv.note ? `<p class="note">${esc(inv.note)}</p>` : ''}
 <p class="small">${T('inviteOnce')}</p>`, { switchLanguage: true });
 }
 
-async function successPage(lang, account) {
+function publicUrl(req, path) {
+  return new URL(path, PUBLIC_URL ?? `https://${req.headers.host}/join/`).href;
+}
+
+const qrCode = text => QRCode.toDataURL(text, { errorCorrectionLevel: 'M', margin: 2, width: 320 });
+
+async function successPage(lang, account, req) {
   const T = translator(lang);
   const login = dclogin(account.addr, account.password);
-  const qr = await QRCode.toDataURL(login, { errorCorrectionLevel: 'M', margin: 2, width: 320 });
-  const web = `${APP_URL}#login=${encodeURIComponent(login)}`;
+  const installQr = await qrCode(publicUrl(req, 'install'));
+  const loginQr = await qrCode(login);
+  const webOnly = `${APP_URL}#login=${encodeURIComponent(login)}`;
   return page(lang, T('readyTitle'), `<h1>${T('readyTitle')}</h1>
 <p>${T('readyAddress', { addr: esc(account.addr) })}</p>
-<ol class="choices">
+<ol class="steps">
+  <li><h2>${T('readyInstallHeading')}</h2>
+    <p>${T('readyInstallText')}</p>
+    <img class="qr" src="${installQr}" alt="${T('readyInstallQrAlt')}" width="320" height="320">
+    <p><a class="button" href="install">${T('readyInstallButton')}</a></p></li>
   <li><h2>${T('readyAppHeading')}</h2>
     <p>${T('readyAppText')}</p>
-    <img class="qr" src="${qr}" alt="${T('readyQrAlt')}" width="320" height="320">
+    <img class="qr" src="${loginQr}" alt="${T('readyQrAlt')}" width="320" height="320">
     <p><a class="button primary" href="${esc(login)}">${T('readyAppButton')}</a></p></li>
   <li><h2>${T('readyWebHeading')}</h2>
     <p>${T('readyWebText')}</p>
-    <p><a class="button" href="${esc(web)}">${T('readyWebButton')}</a></p></li>
+    <p><a class="button" href="${esc(APP_URL)}">${T('readyWebButton')}</a></p></li>
 </ol>
-<p class="warn">${T('readyWarn')}</p>`);
+<p class="warn">${T('readyWarn')}</p>
+<details class="web-only"><summary>${T('readyWebOnlyHeading')}</summary>
+  <p>${T('readyWebOnlyText')}</p>
+  <p><a class="button" href="${esc(webOnly)}">${T('readyWebOnlyButton')}</a></p></details>`);
+}
+
+function installPage(lang) {
+  const T = translator(lang);
+  return page(lang, T('installTitle'), `<h1>${T('installTitle')}</h1>
+<p>${T('installText')}</p>
+<h2>Android</h2>
+<p class="buttons"><a class="button primary" href="${PLAY_URL}" rel="noopener noreferrer">Google Play</a>
+  <a class="button" href="${FDROID_URL}" rel="noopener noreferrer">F-Droid</a></p>
+<p class="small">${T('installApk', { url: DOWNLOAD_URL })}</p>
+<h2>${T('installOtherHeading')}</h2>
+<p>${T('installOther', { url: DOWNLOAD_URL })}</p>
+<p class="note">${T('installNext')}</p>`, { switchLanguage: true });
 }
 
 // ------------------------------------------------------------------ admin API
@@ -236,6 +268,7 @@ const server = createServer(async (req, res) => {
       return html(200, page(lang, T('adminTitle'), '<div id="admin"></div>', { script: true, switchLanguage: true }));
     }
     if (path.startsWith('api/')) return admin(req, res, path);
+    if (path === 'install') return html(200, installPage(lang));
 
     if (!/^[A-Za-z0-9_-]{24}$/.test(path)) return html(404, invalidPage(lang));
     const hash = sha256(path);
@@ -255,7 +288,7 @@ const server = createServer(async (req, res) => {
     await job;
     if (!account) return html(410, invalidPage(lang));
     console.log(`invite ${inv.id} redeemed: ${account.addr}`);
-    return html(200, await successPage(lang, account));
+    return html(200, await successPage(lang, account, req));
   } catch (e) {
     console.error(e);
     const T = translator(lang);
