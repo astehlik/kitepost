@@ -7,10 +7,10 @@ ENV CC_wasm32_unknown_unknown=clang AR_wasm32_unknown_unknown=llvm-ar
 WORKDIR /src
 COPY core/rust-toolchain.toml core/Cargo.toml core/
 COPY scripts/wasm-bindgen-version.sh scripts/
-RUN cd core && rustup show active-toolchain \
+RUN cd core && rustup toolchain install \
  && cargo install wasm-bindgen-cli --version "$(../scripts/wasm-bindgen-version.sh)" --locked
 COPY core/ core/
-RUN cargo build --manifest-path core/Cargo.toml --target wasm32-unknown-unknown --release -p kitepost-core -p kitepost-transfer \
+RUN cd core && cargo build --target wasm32-unknown-unknown --release -p kitepost-core -p kitepost-transfer && cd .. \
  && for crate in kitepost_core kitepost_transfer; do \
       wasm-bindgen --target web --out-dir /out "core/target/wasm32-unknown-unknown/release/$crate.wasm"; \
     done
