@@ -115,7 +115,11 @@ export class ImapClient {
     }
   }
 
-  async deleteUids(uids: number[]) {
+  async markSeen(uids: number[]) {
+    if (uids.length) await this.command(`UID STORE ${uids.join(',')} +FLAGS.SILENT (\\Seen)`);
+  }
+
+    async deleteUids(uids: number[]) {
     if (!uids.length) return;
     await this.command(`UID STORE ${uids.join(',')} +FLAGS.SILENT (\\Deleted)`);
     await this.command(this.capabilities.has('UIDPLUS') ? `UID EXPUNGE ${uids.join(',')}` : 'EXPUNGE');

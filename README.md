@@ -22,7 +22,7 @@ sees ciphertext.
   a phone makes the two verified contacts.
 - **Same profile as the phone:** "Import backup file…" reads a backup exported in Delta Chat
   (unencrypted, as the apps export it). Afterwards both devices receive all messages, and copies of
-  sent messages and edits are kept in sync like between two Delta Chat devices.
+  sent messages, read state and edits are kept in sync like between two Delta Chat devices.
 
 ## Layout
 
@@ -129,8 +129,8 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
 - **Limit of any web app**: the code is delivered by the server on each visit. Users trust the
   operator every time they load it.
 
-Not supported yet: encrypted backups, multi-device sync items (other than sent messages),
-broadcast channels, webxdc, calls, read-receipt sending, ephemeral messages.
+Not supported yet: encrypted backups, multi-device sync items (other than read state and sent
+messages), broadcast channels, webxdc, calls, read receipts to contacts, ephemeral messages.
 
 ## Development
 

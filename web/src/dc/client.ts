@@ -52,6 +52,8 @@ export class DcClient extends EventTarget {
   private tokens = new Map<string, AuthToken>();
   private bob = new Map<string, BobState>();
   private seen = new Set<string>();
+  private seenQueue = new Set<number>();
+  private currentUid: number | undefined;
   private abort: AbortController | undefined;
   private wakeImap: (() => void) | undefined;
   status = 'offline';
@@ -117,6 +119,7 @@ export class DcClient extends EventTarget {
     }
     for (const list of c.messages.values()) list.sort((a, b) => a.timestamp - b.timestamp);
     for (const id of (await store.get<string[]>('seen')) ?? []) c.seen.add(id);
+    for (const uid of (await store.get<number[]>('seenQueue')) ?? []) c.seenQueue.add(uid);
     return c;
   }
 
@@ -260,6 +263,44 @@ export class DcClient extends EventTarget {
       chat.unread = 0;
       await this.saveChat(chat);
     }
+    const read: string[] = [];
+    for (const m of this.messages.get(chatId) ?? []) {
+      if (!m.unseenUid) continue;
+      if (m.unseenUid.validity === this.config.uidValidity) this.seenQueue.add(m.unseenUid.uid);
+      await this.saveMessage({ ...m, unseenUid: undefined });
+      read.push(m.id);
+    }
+    if (!read.length) return;
+    await this.store.put('seenQueue', [...this.seenQueue]);
+    this.poke();
+    // Other devices learn about read messages from a receipt to self, not from IMAP flags.
+    if (this.config.bccSelf) await this.sendSelfMdn(read).catch(e => console.warn('self MDN failed', e));
+  }
+
+  /** Another device read these messages and already set `\Seen` on the server. */
+  private async readElsewhere(mids: string[]) {
+    const ids = new Set(mids);
+    for (const [chatId, list] of this.messages) {
+      const lastRead = list.findLastIndex(m => ids.has(m.id));
+      if (lastRead < 0) continue;
+      for (const m of list.slice(0, lastRead + 1)) {
+        if (m.unseenUid) await this.saveMessage({ ...m, unseenUid: undefined });
+      }
+      const chat = this.chats.get(chatId);
+      const unread = list.slice(lastRead + 1).filter(m => m.from !== 'self' && !m.info).length;
+      if (chat && chat.unread !== unread) await this.saveChat({ ...chat, unread });
+    }
+  }
+
+  private async sendSelfMdn(mids: string[]) {
+    await this.send({
+      to: [{ name: '', addr: this.config.addr }], subject: 'Receipt Notification', text: '', mdn_for: mids,
+      headers: [
+        { name: 'Auto-Submitted', value: 'auto-replied', kind: 'raw' },
+        { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+      ],
+      encryption: { kind: 'asymmetric', keys: [] }, attach_pubkey: false, sign: true, compress: true, from_name: '',
+    }, [], true);
   }
 
   async setDisplayName(name: string) {
@@ -535,7 +576,8 @@ export class DcClient extends EventTarget {
       this.config.bccSelf = true;
       await this.saveConfig();
     }
-    if (p.is_sync || p.mdn_for.length || p.headers['secure-join'] || p.headers['secure-join-invitenumber']) return;
+    if (p.mdn_for.length) return this.readElsewhere(p.mdn_for);
+    if (p.is_sync || p.headers['secure-join'] || p.headers['secure-join-invitenumber']) return;
     for (const g of p.gossip) {
       if (g.fingerprint !== this.config.fingerprint && g.can_encrypt && !this.contacts.get(g.fingerprint)?.publicKey) {
         await this.upsertContact(g.fingerprint, g.addr, g.key).catch(() => undefined);
@@ -635,6 +677,7 @@ export class DcClient extends EventTarget {
     await this.saveMessage({
       id: mid, chatId: chat.id, from, text: p.text, timestamp: this.timestamp(p),
       state: own ? 'sent' : 'received', attachments: p.attachments, reactions: {},
+      unseenUid: !own && this.currentUid ? { uid: this.currentUid, validity: this.config.uidValidity } : undefined,
     });
     chat.lastActivity = Date.now();
     if (!own) chat.unread += 1;
@@ -834,6 +877,14 @@ export class DcClient extends EventTarget {
     this.wakeImap?.();
   }
 
+  private async flushSeen(imap: ImapClient) {
+    if (!this.seenQueue.size) return;
+    const uids = [...this.seenQueue].sort((a, b) => a - b);
+    await imap.markSeen(uids);
+    for (const uid of uids) this.seenQueue.delete(uid);
+    await this.store.put('seenQueue', [...this.seenQueue]);
+  }
+
   private async run(signal: AbortSignal) {
     let backoff = 2000;
     while (!signal.aborted) {
@@ -846,14 +897,21 @@ export class DcClient extends EventTarget {
         if (sel.uidValidity !== this.config.uidValidity) {
           this.config.uidValidity = sel.uidValidity;
           this.config.lastUid = 0;
+          this.seenQueue.clear();
           await this.saveConfig();
         }
         this.setStatus('connected');
         backoff = 2000;
         while (!signal.aborted) {
           const toDelete: number[] = [];
+          await this.flushSeen(imap);
           await imap.fetchNewer(this.config.lastUid, async m => {
-            if (await this.receive(m.body)) toDelete.push(m.uid);
+            this.currentUid = m.uid;
+            try {
+              if (await this.receive(m.body)) toDelete.push(m.uid);
+            } finally {
+              this.currentUid = undefined;
+            }
             this.config.lastUid = Math.max(this.config.lastUid, m.uid);
             await this.saveConfig();
           });

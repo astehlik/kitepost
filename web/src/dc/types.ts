@@ -59,6 +59,8 @@ export interface Message {
   edited?: boolean;
   attachments: AttachmentData[];
   reactions: Record<string, string>;
+  /** INBOX UID while `\Seen` still has to be set on the server. */
+  unseenUid?: { uid: number; validity: number };
 }
 
 export interface AuthToken {

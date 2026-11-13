@@ -351,7 +351,7 @@ function startMain(client: DcClient) {
 
     pane.append(header, list, request ?? composer(chat));
     list.scrollTop = list.scrollHeight;
-    void client.markRead(chat.id);
+    if (!document.hidden) void client.markRead(chat.id);
   }
 
   function composer(chat: Chat): Node {
@@ -425,7 +425,11 @@ function startMain(client: DcClient) {
     }
   });
   if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) client.poke(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    if (current) void client.markRead(current);
+    client.poke();
+  });
   renderAll();
   client.start();
 }

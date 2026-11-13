@@ -85,6 +85,9 @@ pub struct OutgoingMessage {
     pub wrap_multipart_mixed: bool,
     #[serde(default)]
     pub attachment: Option<Attachment>,
+    /// Renders a read receipt for these Message-IDs instead of `text`, like core's `mdn_body`.
+    #[serde(default)]
+    pub mdn_for: Vec<String>,
     pub timestamp: i64,
 }
 
@@ -156,6 +159,23 @@ fn is_header_safe(name: &str) -> bool {
         )
 }
 
+fn mdn_body(mid: &str, additional: &[String]) -> MimePart<'static> {
+    let mut fields = format!(
+        "Original-Message-ID: <{mid}>\r\nDisposition: manual-action/MDN-sent-automatically; displayed\r\n"
+    );
+    if !additional.is_empty() {
+        let ids: Vec<String> = additional.iter().map(|m| format!("<{m}>")).collect();
+        fields += &format!("Additional-Message-IDs: {}\r\n", ids.join(" "));
+    }
+    MimePart::new(
+        "multipart/report; report-type=disposition-notification",
+        vec![
+            MimePart::new("text/plain", "This is a receipt notification."),
+            MimePart::new("message/disposition-notification", fields),
+        ],
+    )
+}
+
 pub fn render(req: OutgoingMessage) -> Result<RenderedEmail> {
     let public_key: SignedPublicKey = public_from_base64(&req.self_public_key)?;
     let secret_key: SignedSecretKey = secret_from_base64(&req.self_secret_key)?;
@@ -188,7 +208,10 @@ pub fn render(req: OutgoingMessage) -> Result<RenderedEmail> {
         headers.push(("Autocrypt-Gossip".into(), Raw::new(header.to_string()).into()));
     }
 
-    let mut main_part = MimePart::new("text/plain", req.text.clone());
+    let mut main_part = match req.mdn_for.split_first() {
+        Some((first, rest)) => mdn_body(first, rest),
+        None => MimePart::new("text/plain", req.text.clone()),
+    };
     if let Some(disposition) = &req.content_disposition {
         main_part = main_part.header("Content-Disposition", Raw::new(disposition.clone()));
     }

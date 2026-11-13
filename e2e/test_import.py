@@ -9,9 +9,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from deltachat_rpc_client import DeltaChat, EventType, Rpc
+from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect, sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -98,13 +100,26 @@ def main():
             log("6. bob -> both devices")
             bob_chat.send_text("bob to both")
             expect(page.locator(".msg.in", has_text="bob to both")).to_be_visible(timeout=TIMEOUT)
-            wait_text(phone, "bob to both")
+            on_phone = wait_text(phone, "bob to both")
 
-            log("7. imported group works")
+            log("7. reading it in the web client marks it read on the phone")
+            deadline = time.time() + 60
+            while phone.get_message_by_id(on_phone.id).get_snapshot().state != MessageState.IN_SEEN:
+                assert time.time() < deadline, "phone did not pick up the \\Seen flag"
+                time.sleep(0.5)
+
+            log("8. imported group works")
             open_chat(page, "Backup group")
             expect(page.locator(".msg.out", has_text="group hello")).to_be_visible()
             web_send(page, "group from web")
             assert wait_text(bob, "group from web").chat_id == bob_group.id
+
+            log("9. reading on the phone clears the unread badge in the web client")
+            bob_chat.send_text("read me on the phone")
+            badge = page.locator(".chatlist li", has_text="Bob").locator(".badge")
+            expect(badge).to_have_text("1", timeout=TIMEOUT)
+            phone.mark_seen_messages([phone.get_message_by_id(wait_text(phone, "read me on the phone").id)])
+            expect(badge).to_have_count(0, timeout=TIMEOUT)
 
             log("ALL TESTS PASSED")
             browser.close()

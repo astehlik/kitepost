@@ -45,6 +45,7 @@ fn message(from: &Account, encryption: Encryption, sign: bool) -> OutgoingMessag
         compress: true,
         wrap_multipart_mixed: false,
         attachment: None,
+        mdn_for: vec![],
         timestamp: 1_800_000_000,
     }
 }
@@ -169,4 +170,22 @@ fn backup_secret_key_yields_same_fingerprint() {
         crate::keys::addresses_from_public_key(&public).unwrap(),
         ["alice@example.org", "alice@other.example"]
     );
+}
+
+#[test]
+fn self_mdn_roundtrip() {
+    let a = account("alice@example.org");
+    let mut msg = message(&a, Encryption::Asymmetric { keys: vec![] }, true);
+    msg.mdn_for = vec!["one@localhost".into(), "two@localhost".into()];
+    let raw = render(msg).unwrap().raw;
+    let ctx = ParseContext {
+        self_addrs: vec![a.addr.clone()],
+        self_secret_key: a.secret.clone(),
+        self_public_key: a.public.clone(),
+        symmetric_secrets: vec![],
+        known_keys: HashMap::new(),
+    };
+    let parsed = parse(raw.as_bytes(), ctx).unwrap();
+    assert_eq!(parsed.signature.as_deref(), Some(a.fp.as_str()));
+    assert_eq!(parsed.mdn_for, ["one@localhost", "two@localhost"]);
 }
