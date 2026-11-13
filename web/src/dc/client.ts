@@ -1,6 +1,6 @@
 import { t } from '../i18n';
 import { ImapClient } from '../net/imap';
-import { SmtpClient } from '../net/smtp';
+import { SmtpClient, SmtpError } from '../net/smtp';
 import type { Store } from '../store';
 import type { BackupProfile } from './backup';
 import { backupFileName, buildBackup } from './backup-export';
@@ -37,6 +37,8 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     const t = setTimeout(resolve, ms);
     signal?.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
   });
+
+const SMTP_RETRY_DELAYS = [5_000, 15_000, 30_000, 60_000];
 
 type HandshakeResult = 'done' | 'ignore' | 'propagate';
 
@@ -473,12 +475,22 @@ export class DcClient extends EventTarget {
       timestamp: Math.floor(Date.now() / 1000),
       ...msg,
     });
-    const smtp = await SmtpClient.connect(config.bridgeUrl, config.smtpHost);
-    try {
-      await smtp.login(config.addr, config.password);
-      await smtp.send(config.addr, [...new Set(recipients)], rendered.raw);
-    } finally {
-      await smtp.quit();
+    // 4xx is temporary, e.g. chatmail's rate limit; like core, try again later with the same message.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const smtp = await SmtpClient.connect(config.bridgeUrl, config.smtpHost);
+        try {
+          await smtp.login(config.addr, config.password);
+          await smtp.send(config.addr, [...new Set(recipients)], rendered.raw);
+        } finally {
+          await smtp.quit();
+        }
+        break;
+      } catch (e) {
+        const temporary = e instanceof SmtpError && e.code >= 400 && e.code < 500;
+        if (!temporary || attempt >= SMTP_RETRY_DELAYS.length) throw e;
+        await sleep(SMTP_RETRY_DELAYS[attempt]);
+      }
     }
     this.seen.add(rendered.rfc724_mid);
     return rendered.rfc724_mid;
@@ -539,7 +551,7 @@ export class DcClient extends EventTarget {
     await this.saveChat(chat);
   }
 
-  async createGroup(name: string, memberFps: string[]): Promise<string> {
+    async createGroup(name: string, memberFps: string[]): Promise<string> {
     const chat: Chat = {
       id: `g-${createId()}`, type: 'group', name: cleanName(name) || t('group.default'), grpid: createId(),
       members: memberFps.filter(fp => this.contacts.get(fp)?.publicKey), isRequest: false, left: false,
