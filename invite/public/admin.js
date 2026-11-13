@@ -26,18 +26,23 @@ async function api(method, path, body) {
   return res.json();
 }
 
-const fmt = ts => (ts ? new Date(ts).toLocaleString() : 'never');
+// Long addresses may only wrap before the @.
+const addrParts = addr => { const i = addr.lastIndexOf('@'); return i > 0 ? [addr.slice(0, i), h('wbr'), addr.slice(i)] : [addr]; };
+const fmt = ts => (ts ? new Date(ts).toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'never');
 
 function login(error) {
   const input = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Admin token' });
-  root.replaceChildren(h('h1', {}, 'Invites'), h('form', {
+  const children = [h('h1', {}, 'Invites'), h('form', {
+    class: 'signin',
     onsubmit: e => {
       e.preventDefault();
       token = input.value;
       sessionStorage.setItem('invite-admin-token', token);
       render();
     },
-  }, input, ' ', h('button', { class: 'primary', type: 'submit' }, 'Sign in')), error ? h('p', { class: 'error' }, error) : null);
+  }, input, h('button', { class: 'primary', type: 'submit' }, 'Sign in'))];
+  if (error) children.push(h('p', { class: 'error' }, error));
+  root.replaceChildren(...children);
   input.focus();
 }
 
@@ -65,18 +70,19 @@ async function render(created) {
   h('div', { class: 'wide' }, h('button', { class: 'primary', type: 'submit' }, 'Create invite link')));
 
   const box = created ? h('div', { class: 'created' },
-    h('strong', {}, 'New invite link (shown only once):'), h('br'), h('code', { id: 'link' }, created), h('br'),
-    h('button', { onclick: () => navigator.clipboard.writeText(created) }, 'Copy')) : null;
+    h('strong', {}, 'New invite link (shown only once):'),
+    h('div', { class: 'linkrow' }, h('code', { id: 'link' }, created),
+      h('button', { onclick: () => navigator.clipboard.writeText(created) }, 'Copy'))) : null;
 
   const rows = list.map(inv => h('tr', {},
     h('td', {}, inv.note || h('span', { class: 'muted' }, '—')),
-    h('td', {}, inv.revoked ? 'revoked' : inv.active ? `open (${inv.usesLeft} left)` : inv.usesLeft ? 'expired' : 'used'),
-    h('td', {}, ...inv.redeemed.flatMap(r => [r.addr, h('br')])),
-    h('td', { class: 'muted' }, `created ${fmt(inv.created)}`, h('br'), `expires ${fmt(inv.expires)}`),
+    h('td', { class: 'status' }, inv.revoked ? 'revoked' : inv.active ? `open · ${inv.usesLeft} left` : inv.usesLeft ? 'expired' : 'used'),
+    h('td', { class: 'accounts' }, ...inv.redeemed.flatMap(r => [...addrParts(r.addr), h('br')])),
+    h('td', { class: 'muted dates' }, `${fmt(inv.created)} – ${fmt(inv.expires)}`),
     h('td', {}, inv.active ? h('button', { onclick: async () => { await api('DELETE', `api/invites/${inv.id}`); render(); } }, 'Revoke') : null)));
 
-  root.replaceChildren(h('h1', {}, 'Invites'), form, box ?? '',
-    h('table', {}, h('thead', {}, h('tr', {}, ...['Note', 'Status', 'Accounts', 'Dates', ''].map(t => h('th', {}, t)))), h('tbody', {}, ...rows)),
+  root.replaceChildren(h('h1', {}, 'Invites'), form, ...(box ? [box] : []),
+    h('table', {}, h('thead', {}, h('tr', {}, ...['Note', 'Status', 'Accounts', 'Valid', ''].map(t => h('th', {}, t)))), h('tbody', {}, ...rows)),
     h('p', {}, h('button', { onclick: () => { sessionStorage.removeItem('invite-admin-token'); token = ''; login(); } }, 'Sign out')));
 }
 
