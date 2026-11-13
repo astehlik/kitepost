@@ -381,7 +381,8 @@ function startMain(client: DcClient, initialChat?: string) {
     const react = (emoji: string) => void client.sendReaction(chat.id, m.id, emoji === mine ? '' : emoji).catch(e => console.warn(e));
     const counts = new Map<string, number>();
     for (const r of Object.values(m.reactions)) counts.set(r, (counts.get(r) ?? 0) + 1);
-    const reactButton = canReact ? h('button', { type: 'button', class: 'react', title: t('chat.react'), 'aria-label': t('chat.react') }, '☺') : null;
+    const reactButton = canReact ? h('button', { type: 'button', class: 'react', title: t('chat.react'), 'aria-label': t('chat.react') }) : null;
+    reactButton?.append(icon(ICONS.react));
     reactButton?.addEventListener('click', () => openReactions(reactButton, react));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
@@ -548,6 +549,7 @@ const ICONS = {
   qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z',
   addContact: 'M15 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 8v6M22 11h-6',
   edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
+  react: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
 
