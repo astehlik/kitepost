@@ -13,6 +13,7 @@ services:
     command: ["--default-standard-output=journal+console", "--default-standard-error=journal+console"]
     environment:
       MAIL_DOMAIN: _chatmail.test
+      CHATMAIL_INI: /etc/chatmail-test/chatmail.ini
       # The deploy fingerprint lives in /etc/chatmail, the rendered configs don't: deploy on every start.
       CMDEPLOY_STAGES: configure,activate
     volumes:
@@ -21,6 +22,7 @@ services:
       - chatmail_config:/etc/chatmail
       - ../../docker/chatmail/nginx-hook.sh:/usr/local/sbin/nginx-hook:ro
       - ./custom.d:/etc/nginx/custom.d:ro
+      - ./chatmail.ini:/etc/chatmail-test/chatmail.ini:ro
     networks:
       relay:
         ipv4_address: 172.30.99.10
@@ -28,6 +30,17 @@ services:
       test: ["CMD", "bash", "/opt/chatmail/docker/scripts/healthcheck.sh"]
       interval: 10s
       retries: 90
+
+  # Plain-HTTP iroh relay for "Add second device" tests; the real one needs DNS and a trusted certificate.
+  iroh:
+    image: ghcr.io/chatmail/docker:main
+    container_name: kitepost-test-iroh
+    entrypoint: ["/usr/local/bin/iroh-relay", "--dev", "--config-path", "/etc/iroh-relay.toml"]
+    volumes:
+      - ./iroh-relay.toml:/etc/iroh-relay.toml:ro
+    ports: ["127.0.0.1:3340:3340"]
+    healthcheck: { disable: true }
+    networks: [relay]
 
   invite:
     build:

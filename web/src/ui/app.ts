@@ -1,9 +1,11 @@
 import { fileReader, readBackup } from '../dc/backup';
 import { DcClient } from '../dc/client';
+import { looksLikeBackupQr, receiveBackup } from '../dc/transfer';
 import type { Chat, Message } from '../dc/types';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, dialog, formatTime, h, trustedSvg } from './dom';
+import { scanQr } from './scanner';
 
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
 let DEFAULT_RELAY = 'nine.testrun.org';
@@ -216,13 +218,24 @@ function renderAccountSetup(store: Store) {
       importBox.classList.remove('busy');
     }
   };
+  const scan = () => busy(async () => {
+    const qr = await scanQr('Add as second device', 'On your phone, open Delta Chat → Settings → Add second device and scan the QR code shown there.', looksLikeBackupQr);
+    if (!qr) return undefined;
+    let client: DcClient | undefined;
+    say('Connecting to your phone…');
+    await receiveBackup(qr, (got, total) => say(`Receiving… ${total ? Math.min(100, Math.round((got / total) * 100)) : 0} %`), async blob => {
+      client = await importFrom(blob);
+    });
+    return client;
+  });
   const importBox = h('div', { class: 'import' },
     h('h2', {}, 'Already using Delta Chat?'),
     h('p', {}, 'Use the same profile here as on your phone. Your chats, contacts and keys are copied over, and new messages arrive on both devices.'),
     importStatus, importErr,
     h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'primary', onclick: () => backup.click() }, 'Import backup file…')),
-    h('small', {}, 'In Delta Chat, export one under Settings → Chats and media → Export backup.'),
+      h('button', { type: 'button', class: 'primary', onclick: scan }, 'Scan QR from phone'),
+      h('button', { type: 'button', onclick: () => backup.click() }, 'Import backup file…')),
+    h('small', {}, 'Scanning needs Delta Chat on a chatmail relay. A backup file comes from Settings → Chats and media → Export backup.'),
     backup);
   backup.addEventListener('change', () => {
     const file = backup.files?.[0];

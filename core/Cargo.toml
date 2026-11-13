@@ -6,6 +6,9 @@ rust-version = "1.89"
 license = "MPL-2.0"
 publish = false
 
+[workspace]
+members = ["transfer"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

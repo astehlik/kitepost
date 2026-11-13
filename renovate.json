@@ -68,6 +68,16 @@
         "dependencies",
         "security-review"
       ]
+    },
+    {
+      "description": "iroh must stay protocol compatible with the iroh version of Delta Chat core (src/imex/transfer.rs)",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPackageNames": [
+        "iroh"
+      ],
+      "enabled": false
     }
   ]
 }

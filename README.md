@@ -20,22 +20,27 @@ sees ciphertext.
 
 - **New profile:** right after creating it, Kitepost shows a QR code. Scanning it with Delta Chat on
   a phone makes the two verified contacts.
-- **Same profile as the phone:** "Import backup file…" reads a backup exported in Delta Chat
-  (unencrypted, as the apps export it). Afterwards both devices receive all messages, and copies of
-  sent messages, read state and edits are kept in sync like between two Delta Chat devices.
+- **Same profile as the phone:** "Scan QR from phone" receives the profile from Delta Chat's
+  *Add second device* over the chatmail server's iroh relay. This needs a Delta Chat build with
+  `docs/upstream/0003-backup-transfer-relay.patch`, because current releases only offer the
+  transfer on the local network. Until then, "Import backup file…" reads a backup exported in
+  Delta Chat (unencrypted, as the apps export it). Afterwards both devices receive all messages,
+  and copies of sent messages, read state and edits are kept in sync like between two Delta
+  Chat devices.
 
 ## Layout
 
 | Path        | What                                                                  |
 |-------------|-----------------------------------------------------------------------|
 | `core/`     | Rust → WASM: keys, OpenPGP, message rendering/parsing, sans-I/O TLS    |
+| `core/transfer/` | Rust → WASM, loaded on demand: iroh receiver for *Add second device* |
 | `web/`      | TypeScript client: IMAP/SMTP, SecureJoin, encrypted IndexedDB, UI      |
 | `bridge/`   | Node WebSocket → TCP relay (SSRF-safe: public IPs and mail ports only)  |
 | `site/`     | Static landing page                                                    |
 | `invite/`   | One-time invite links that create accounts on a chatmail relay         |
 | `docker/`   | Images, nginx templates, Caddyfile, chatmail nginx hook                |
 | `e2e/`      | Interop and invite tests, local chatmail relay                         |
-| `docs/upstream/` | Patches proposed to chatmail/relay                                |
+| `docs/upstream/` | Patches proposed to chatmail/relay and chatmail/core             |
 
 ## Deploy with Docker Compose
 
@@ -126,6 +131,11 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
 - **Bridge**: only ports 993/465, only public IP addresses (it resolves first and connects to the
   checked IP, so DNS rebinding can't reach internal hosts), Origin check, per-IP connection limit,
   optional host allowlist. Restrict it to your relay with `BRIDGE_ALLOWED_HOSTS`.
+- **Second device**: the backup is received end-to-end encrypted over iroh (QUIC), authenticated
+  by the node id and token in the QR code; the relay only forwards ciphertext. The browser
+  connects to the relay itself, so its origin must be allowed by the CSP: same-origin relays are
+  covered by `'self'`, others need `CONNECT_SRC` (e.g. `wss://chat.example.org
+  https://chat.example.org`). The camera is only used while the scanner is open.
 - **Limit of any web app**: the code is delivered by the server on each visit. Users trust the
   operator every time they load it.
 
@@ -135,19 +145,23 @@ messages), broadcast channels, webxdc, calls, read receipts to contacts, ephemer
 ## Development
 
 ```sh
-./build-wasm.sh                          # needs rustup target wasm32-unknown-unknown
+./build-wasm.sh                          # needs the wasm32-unknown-unknown target, clang and llvm-ar
 (cd bridge && pnpm install && node server.mjs) &
 cd web && pnpm install && pnpm dev       # Vite proxies /bridge to the bridge on :8080
 ```
 
 Tests run against a local chatmail relay in Docker (`e2e/relay`, domain `_chatmail.test`, isolated
-network, nothing bound on host ports except the invite test port) and Delta Chat core
+network, only the invite service and the iroh relay bound on 127.0.0.1) and Delta Chat core
 (`deltachat-rpc-server`):
 
 ```sh
 python -m venv work/venv && work/venv/bin/pip install -r e2e/requirements.txt
 e2e/run-local.sh
 ```
+
+`e2e/test_transfer.py` needs a `deltachat-rpc-server` built with the core patch from
+`docs/upstream`: `DC_RPC_SERVER=/path/to/deltachat-rpc-server e2e/run-local.sh`. The test relay
+advertises a plain-HTTP iroh relay on `127.0.0.1:3340` for it.
 
 The interop test also runs against a public relay: `work/venv/bin/python e2e/test_interop.py`
 (nine.testrun.org, `RELAY=...` to change).

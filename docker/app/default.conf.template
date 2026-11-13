@@ -11,7 +11,7 @@ server {
     add_header Referrer-Policy no-referrer always;
     add_header Cross-Origin-Opener-Policy same-origin always;
     add_header Cross-Origin-Resource-Policy same-origin always;
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Permissions-Policy "camera=(self), microphone=(), geolocation=()" always;
 
     location = /config.json {
         default_type application/json;

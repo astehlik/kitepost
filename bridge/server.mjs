@@ -82,7 +82,7 @@ const CSP = [
   "style-src 'self'",
   "img-src 'self' blob: data:",
   "media-src 'self' blob:",
-  "connect-src 'self'",
+  `connect-src 'self' ${process.env.CONNECT_SRC ?? ''}`.trim(),
   "worker-src 'self'",
   "object-src 'none'",
   "base-uri 'none'",
@@ -96,7 +96,7 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'no-referrer',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
 };
 
 const MIME = {

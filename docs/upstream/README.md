@@ -1,6 +1,6 @@
-# Upstream proposals for chatmail/relay
+# Upstream proposals
 
-Both patches are against the chatmail/relay repository (the Docker image ships it in `/opt/chatmail`)
+Patches 0001 and 0002 are against the chatmail/relay repository (the Docker image ships it in `/opt/chatmail`)
 and were tested with the local relay in `e2e/relay`.
 
 ## 0001: include hook for operator-defined nginx locations
@@ -37,3 +37,27 @@ Steps to reproduce:
 The patch moves the fingerprint to `/etc/chatmail-deploy-fingerprint`, next to the configs it
 describes: a recreated container always deploys, while a plain restart still skips it. Until this is
 merged, `CMDEPLOY_STAGES=configure,activate` works around it by deploying on every start.
+
+## 0003: offer "Add second device" through the relay's iroh relay
+
+**Repository:** chatmail/core
+
+**Title:** imex: let backup transfer use the chatmail server's iroh relay
+
+`BackupProvider::prepare` binds its iroh endpoint with `RelayMode::Disabled`, so the `DCBACKUP` QR
+code only carries direct addresses. That works when both devices share a network, but not for a
+receiver that cannot reach the provider directly. Browsers are such a receiver: they cannot send UDP
+and only reach iroh nodes through a relay over WebSocket.
+
+Chatmail servers already run an iroh relay and advertise it via the `irohrelay` IMAP METADATA entry,
+which core uses for webxdc realtime channels. The patch uses that relay for the backup transfer too:
+
+- the provider binds with `RelayMode::Custom(<server relay>)` when the server advertises one, waits
+  up to 10 seconds for the relay connection and then includes its URL in the QR code; without an
+  advertised relay nothing changes;
+- the getter uses the relay from the QR code, so two native devices on different networks can
+  transfer as well. Direct addresses still come first, the relay is the fallback.
+
+No third-party relay is involved: the data only passes the user's own chatmail server, end-to-end
+encrypted by QUIC between the devices and authenticated by the node id and auth token from the QR
+code. Kitepost's `e2e/test_transfer.py` tests the patched provider against the browser receiver.
