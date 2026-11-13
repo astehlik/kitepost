@@ -130,6 +130,9 @@ select { font: inherit; padding: .4rem .5rem; border-radius: 8px; border: 1px so
 .dialog::backdrop { background: rgba(0,0,0,.4); }
 .dialog h2 { margin-top: 0; font-size: 1.2rem; }
 .dialog .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+/* Same rhythm as the onboarding forms. */
+.dialog .field + .field, .dialog .field + .remember { margin-top: .9rem; }
+.profile-info { display: flex; flex-direction: column; gap: .2rem; margin-top: 1.2rem; }
 .invite .qr, .card .qr { width: 220px; margin: 0 auto 1rem; }
 .invite .qr svg, .card .qr svg { width: 100%; height: auto; display: block; }
 .members { display: flex; flex-direction: column; gap: .4rem; margin-top: .8rem; max-height: 40vh; overflow-y: auto; }

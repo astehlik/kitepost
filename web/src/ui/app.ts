@@ -680,8 +680,9 @@ function profileDialog(client: DcClient, rebuild: () => void) {
     field(t('setup.displayName'), name),
     field(t('language'), lang),
     remember.el,
-    h('p', {}, h('small', {}, t('profile.address', { addr: client.config.addr }))),
-    h('p', {}, h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))), [
+    h('div', { class: 'profile-info' },
+      h('small', {}, t('profile.address', { addr: client.config.addr })),
+      h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))), [
     { label: t('profile.export'), onClick: () => { exportDialog(client); } },
     { label: t('profile.lock'), onClick: async () => { await client.setRemembered(false); location.reload(); } },
     {
