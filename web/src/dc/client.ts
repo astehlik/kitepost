@@ -2,6 +2,7 @@ import { ImapClient } from '../net/imap';
 import { SmtpClient } from '../net/smtp';
 import type { Store } from '../store';
 import type { BackupProfile } from './backup';
+import { backupFileName, buildBackup } from './backup-export';
 import {
   generateKeypair, parseMessage, publicKeyInfo, renderMessage,
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
@@ -319,6 +320,22 @@ export class DcClient extends EventTarget {
       ],
       encryption: { kind: 'asymmetric', keys: [] }, attach_pubkey: false, sign: true, compress: true, from_name: '',
     }, [], true);
+  }
+
+  /** Exports the profile for Delta Chat's "Restore from backup"; from then on both devices use it. */
+  async exportBackup(): Promise<{ blob: Blob; filename: string }> {
+    const blob = await buildBackup({
+      config: this.config,
+      contacts: [...this.contacts.values()],
+      chats: [...this.chats.values()],
+      messages: [...this.messages.values()].flat().filter(m => !m.id.startsWith('pending-')),
+      tokens: [...this.tokens.values()],
+    });
+    if (!this.config.bccSelf) {
+      this.config.bccSelf = true;
+      await this.saveConfig();
+    }
+    return { blob, filename: backupFileName(this.config.fingerprint) };
   }
 
   async setDisplayName(name: string) {

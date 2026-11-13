@@ -206,6 +206,12 @@ jobs:
           RELAY_IP: 172.30.99.10
         run: work/venv/bin/python -I e2e/test_import.py
 
+      - name: Backup export tests
+        env:
+          RELAY: _chatmail.test
+          RELAY_IP: 172.30.99.10
+        run: work/venv/bin/python -I e2e/test_export.py
+
       - name: Invite tests
         run: work/venv/bin/python -I e2e/test_invite.py
 

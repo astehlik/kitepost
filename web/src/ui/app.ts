@@ -559,12 +559,29 @@ function fingerprintDialog(client: DcClient, fp: string) {
     h('h3', {}, client.contactName(fp)), h('code', {}, formatFingerprint(fp))), [{ label: 'Close', primary: true }]);
 }
 
+function exportDialog(client: DcClient) {
+  dialog('Export backup', h('div', {},
+    h('p', {}, 'Saves this profile as a file for Delta Chat. On the phone, choose "I already have a profile" → "Restore from backup" and select the file. Afterwards both devices use the profile and receive all messages.'),
+    h('p', { class: 'warning' }, 'The file contains your secret key and is not encrypted. Delete it once it is imported, and never send it to anyone.')), [
+    { label: 'Cancel' },
+    {
+      label: 'Download', primary: true, onClick: async () => {
+        const { blob, filename } = await client.exportBackup();
+        const url = URL.createObjectURL(blob);
+        h('a', { href: url, download: filename }).click();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      },
+    },
+  ]);
+}
+
 function profileDialog(client: DcClient) {
   const name = h('input', { type: 'text', maxlength: '100', value: client.config.displayName });
   dialog('Profile', h('div', {},
     field('Display name', name),
     h('p', {}, h('small', {}, `Address: ${client.config.addr}`)),
     h('p', {}, h('small', {}, `Fingerprint: ${formatFingerprint(client.config.fingerprint)}`))), [
+    { label: 'Export backup', onClick: () => { exportDialog(client); } },
     { label: 'Lock', onClick: () => location.reload() },
     { label: 'Save', primary: true, onClick: () => client.setDisplayName(name.value) },
   ]);

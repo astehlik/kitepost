@@ -11,6 +11,7 @@ docker compose -f e2e/relay/compose.yaml up -d --build --wait
 (cd web && pnpm run build)
 RELAY=_chatmail.test RELAY_IP=172.30.99.10 work/venv/bin/python -I e2e/test_interop.py
 RELAY=_chatmail.test RELAY_IP=172.30.99.10 work/venv/bin/python -I e2e/test_import.py
+RELAY=_chatmail.test RELAY_IP=172.30.99.10 work/venv/bin/python -I e2e/test_export.py
 work/venv/bin/python -I e2e/test_invite.py
 # Needs a deltachat-rpc-server built with docs/upstream/0003-backup-transfer-relay.patch.
 if [ -n "${DC_RPC_SERVER:-}" ]; then

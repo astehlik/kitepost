@@ -146,3 +146,4 @@ textarea { resize: none; }
 .scanner .viewfinder { background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 1; max-width: 320px; margin: 0 auto .75rem; }
 .scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .scanner input { width: 100%; }
+.warning { color: var(--danger); font-weight: 600; }

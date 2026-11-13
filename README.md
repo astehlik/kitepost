@@ -27,6 +27,11 @@ sees ciphertext.
   Delta Chat (unencrypted, as the apps export it). Afterwards both devices receive all messages,
   and copies of sent messages, read state and edits are kept in sync like between two Delta
   Chat devices.
+- **Moving the profile to a phone:** Profile → "Export backup" writes a backup that Delta Chat
+  imports with "Restore from backup". Its database starts from `web/src/dc/backup-schema.sql`, a
+  fresh profile of the pinned Delta Chat core; core migrates it on import. After updating
+  `deltachat-rpc-server` in `e2e/requirements.txt`, regenerate it with
+  `work/venv/bin/python -I scripts/backup-schema.py`.
 
 ## Layout
 

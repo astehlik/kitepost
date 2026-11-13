@@ -128,7 +128,8 @@ function messageState(state: number, incoming: boolean): MessageState {
   return 'failed';
 }
 
-async function openDatabase(bytes: Uint8Array): Promise<Database> {
+/** Opens a database with sql.js, which is only loaded for imports and exports. */
+export async function openDatabase(bytes?: Uint8Array): Promise<Database> {
   const [{ default: initSqlJs }, { default: wasmUrl }] = await Promise.all([
     import('sql.js'),
     import('sql.js/dist/sql-wasm-browser.wasm?url'),
