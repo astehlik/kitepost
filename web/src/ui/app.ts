@@ -41,6 +41,17 @@ function showError(box: HTMLElement, e: unknown) {
   box.hidden = false;
 }
 
+/**
+ * Password managers file a passphrase under a username. Without a username field, KeePassXC
+ * misreads the first of two passphrase fields, so both forms get the same fixed one.
+ */
+function passwordManagerUsername() {
+  return h('input', {
+    type: 'text', name: 'username', autocomplete: 'username', value: 'Kitepost', readonly: true,
+    tabindex: '-1', 'aria-hidden': 'true', class: 'visually-hidden',
+  });
+}
+
 function rememberField() {
   const box = h('input', { type: 'checkbox' });
   const el = h('div', { class: 'remember' },
@@ -119,7 +130,7 @@ function screen(title: string, rerender: () => void, ...content: Node[]) {
 }
 
 function renderUnlock() {
-  const pass = h('input', { type: 'password', autocomplete: 'current-password', required: true });
+  const pass = h('input', { type: 'password', id: 'current-password', name: 'current-password', autocomplete: 'current-password', required: true });
   const remember = rememberField();
   const err = errorBox();
   const form = h('form', {
@@ -137,6 +148,7 @@ function renderUnlock() {
       }
     },
   },
+  passwordManagerUsername(),
   field(t('passphrase.label'), pass),
   remember.el,
   err,
@@ -153,8 +165,8 @@ function renderUnlock() {
 }
 
 function renderPassphraseSetup() {
-  const pass = h('input', { type: 'password', autocomplete: 'new-password', minlength: '10', required: true });
-  const pass2 = h('input', { type: 'password', autocomplete: 'new-password', required: true });
+  const pass = h('input', { type: 'password', id: 'new-password', name: 'new-password', autocomplete: 'new-password', minlength: '10', required: true });
+  const pass2 = h('input', { type: 'password', id: 'confirm-password', name: 'confirm-password', autocomplete: 'new-password', required: true });
   const remember = rememberField();
   const err = errorBox();
   const form = h('form', {
@@ -173,6 +185,7 @@ function renderPassphraseSetup() {
     },
   },
   h('p', {}, t('welcome.text')),
+  passwordManagerUsername(),
   field(t('passphrase.label'), pass, t('passphrase.hint')),
   field(t('passphrase.repeat'), pass2),
   remember.el,
