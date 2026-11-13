@@ -285,18 +285,52 @@ export class DcClient extends EventTarget {
       chat.unread = 0;
       await this.saveChat(chat);
     }
-    const read: string[] = [];
+    const read: Message[] = [];
     for (const m of this.messages.get(chatId) ?? []) {
       if (!m.unseenUid) continue;
       if (m.unseenUid.validity === this.config.uidValidity) this.seenQueue.add(m.unseenUid.uid);
-      await this.saveMessage({ ...m, unseenUid: undefined });
-      read.push(m.id);
+      await this.saveMessage({ ...m, unseenUid: undefined, wantsMdn: undefined });
+      read.push(m);
     }
     if (!read.length) return;
     await this.store.put('seenQueue', [...this.seenQueue]);
     this.poke();
-    // Other devices learn about read messages from a receipt to self, not from IMAP flags.
-    if (this.config.bccSelf) await this.sendSelfMdn(read).catch(e => console.warn('self MDN failed', e));
+
+    // Like core's markseen_msgs(): a receipt to each sender who asked for one, copied to the own
+    // devices, and for the rest a receipt to self only, because other devices learn about read
+    // messages from receipts, not from IMAP flags.
+    const bySender = new Map<Contact, string[]>();
+    const rest: string[] = [];
+    for (const m of read) {
+      const sender = this.contacts.get(m.from);
+      if (this.readReceipts && m.wantsMdn && !chat?.isRequest && sender?.publicKey && !sender.blocked) {
+        bySender.set(sender, [...(bySender.get(sender) ?? []), m.id]);
+      } else {
+        rest.push(m.id);
+      }
+    }
+    for (const [sender, mids] of bySender) await this.sendMdn(sender, mids).catch(e => console.warn('MDN failed', e));
+    if (this.config.bccSelf && rest.length) await this.sendSelfMdn(rest).catch(e => console.warn('self MDN failed', e));
+  }
+
+  get readReceipts(): boolean {
+    return this.config.readReceipts !== false;
+  }
+
+  async setReadReceipts(on: boolean) {
+    this.config.readReceipts = on;
+    await this.saveConfig();
+  }
+
+  private async sendMdn(to: Contact, mids: string[]) {
+    await this.send({
+      to: [{ name: to.name, addr: to.addr }], subject: 'Receipt Notification', text: '', mdn_for: mids,
+      headers: [
+        { name: 'Auto-Submitted', value: 'auto-replied', kind: 'raw' },
+        { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+      ],
+      encryption: { kind: 'asymmetric', keys: [to.publicKey] }, attach_pubkey: false, sign: true, compress: true, from_name: '',
+    }, to.relays, true);
   }
 
   /** Another device read these messages and already set `\Seen` on the server. */
@@ -522,6 +556,7 @@ export class DcClient extends EventTarget {
     const last = [...msgs].reverse().find(m => !m.info && m.state !== 'failed');
     const headers: OutgoingMessage['headers'] = [{ name: 'Chat-Version', value: '1.0', kind: 'raw' }];
     if (last) headers.push({ name: 'In-Reply-To', value: last.id, kind: 'messageid' });
+    if (!self && this.readReceipts) headers.push({ name: 'Chat-Disposition-Notification-To', value: this.config.addr, kind: 'raw' });
     if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
 
     const local: Message = {
@@ -800,6 +835,7 @@ export class DcClient extends EventTarget {
       id: mid, chatId: chat.id, from, text: p.text, timestamp: this.timestamp(p),
       state: own ? 'sent' : 'received', attachments: p.attachments, reactions: {},
       unseenUid: !own && this.currentUid ? { uid: this.currentUid, validity: this.config.uidValidity } : undefined,
+      wantsMdn: !own && p.encrypted && !!p.headers['chat-disposition-notification-to'] || undefined,
     });
     chat.lastActivity = Date.now();
     if (!own) chat.unread += 1;

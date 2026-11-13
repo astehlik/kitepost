@@ -671,6 +671,10 @@ function profileDialog(client: DcClient, rebuild: () => void) {
   const name = h('input', { type: 'text', maxlength: '100', value: client.config.displayName });
   const remember = rememberField();
   void client.isRemembered().then(on => { remember.box.checked = on; });
+  const receipts = h('input', { type: 'checkbox', checked: client.readReceipts });
+  const receiptsField = h('div', { class: 'remember' },
+    h('label', { class: 'check' }, receipts, t('profile.readReceipts')),
+    h('small', { class: 'hint' }, t('profile.readReceiptsHint')));
   const lang = languageSelect(() => {
     document.querySelector('dialog')?.close();
     rebuild();
@@ -679,6 +683,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
   dialog(t('profile.title'), h('div', {},
     field(t('setup.displayName'), name),
     field(t('language'), lang),
+    receiptsField,
     remember.el,
     h('div', { class: 'profile-info' },
       h('small', {}, t('profile.address', { addr: client.config.addr })),
@@ -689,6 +694,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
       label: t('save'), primary: true, onClick: async () => {
         await client.setDisplayName(name.value);
         await client.setRemembered(remember.box.checked);
+        await client.setReadReceipts(receipts.checked);
       },
     },
   ]);

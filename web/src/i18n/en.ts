@@ -116,6 +116,8 @@ export const en = {
   'profile.fingerprint': 'Fingerprint: {fp}',
   'profile.export': 'Export backup',
   'profile.lock': 'Lock',
+  'profile.readReceipts': 'Send read receipts',
+  'profile.readReceiptsHint': 'Others see when you have read their messages, and you see when they have read yours.',
   'export.title': 'Export backup',
   'export.text': 'Saves this profile as a file for Delta Chat. On the phone, choose "I already have a profile" → "Restore from backup" and select the file. Afterwards both devices use the profile and receive all messages.',
   'export.warning': 'The file contains your secret key and is not encrypted. Delete it once it is imported, and never send it to anyone.',

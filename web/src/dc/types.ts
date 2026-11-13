@@ -15,6 +15,8 @@ export interface Config {
   bridgeUrl: string;
   /** Another device uses this profile: copy sent messages to self, as core's bcc_self does. */
   bccSelf?: boolean;
+  /** Request and send read receipts, on unless turned off, like core's mdns_enabled. */
+  readReceipts?: boolean;
 }
 
 export interface Contact {
@@ -65,6 +67,8 @@ export interface Message {
   reactions: Record<string, string>;
   /** INBOX UID while `\Seen` still has to be set on the server. */
   unseenUid?: { uid: number; validity: number };
+  /** The sender asked for a read receipt (Chat-Disposition-Notification-To). */
+  wantsMdn?: boolean;
 }
 
 export interface AuthToken {

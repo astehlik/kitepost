@@ -1,7 +1,10 @@
 """Messaging between the web client and Delta Chat core."""
 
+import time
+
 import pytest
 from deltachat_rpc_client import EventType
+from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
 from helpers import PNG, addr_of, open_chat, wait_event, wait_text, web_send
@@ -23,6 +26,39 @@ def test_text_both_ways(web, dora):
     web_send(web.page, "Hi from the browser 🌐")
     snap = wait_text(dora.acc, "Hi from the browser 🌐")
     assert snap.show_padlock, "message not shown as encrypted in core"
+
+
+def wait_state(acc, msg_id, state, seconds=60):
+    deadline = time.time() + seconds
+    while acc.get_message_by_id(msg_id).get_snapshot().state != state:
+        assert time.time() < deadline, f"message {msg_id} did not reach state {state}"
+        time.sleep(0.5)
+
+
+def test_read_receipts_both_ways(web, dora):
+    web_send(web.page, "please read me")
+    snap = wait_text(dora.acc, "please read me")
+    dora.acc.mark_seen_messages([dora.acc.get_message_by_id(snap.id)])
+    expect(web.page.locator(".msg.out", has_text="please read me").locator(".meta")).to_contain_text("✓✓")
+
+    msg = dora.chat.send_text("read by the browser")
+    expect(web.page.locator(".msg.in", has_text="read by the browser")).to_be_visible()
+    wait_state(dora.acc, msg.id, MessageState.OUT_MDN_RCVD)
+
+
+def test_read_receipts_can_be_turned_off(web, dora):
+    web.page.get_by_role("button", name="Edit profile").click()
+    web.page.get_by_label("Send read receipts").uncheck()
+    web.page.get_by_role("button", name="Save").click()
+
+    msg = dora.chat.send_text("read silently")
+    expect(web.page.locator(".msg.in", has_text="read silently")).to_be_visible()
+    web_send(web.page, "no receipt wanted")
+    snap = wait_text(dora.acc, "no receipt wanted")
+    dora.acc.mark_seen_messages([dora.acc.get_message_by_id(snap.id)])
+    time.sleep(5)
+    assert dora.acc.get_message_by_id(msg.id).get_snapshot().state == MessageState.OUT_DELIVERED
+    expect(web.page.locator(".msg.out", has_text="no receipt wanted").locator(".meta")).not_to_contain_text("✓✓")
 
 
 def test_reactions(web, dora):

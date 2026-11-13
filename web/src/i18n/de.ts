@@ -118,6 +118,8 @@ export const de: Record<keyof typeof en, string> = {
   'profile.fingerprint': 'Fingerabdruck: {fp}',
   'profile.export': 'Backup exportieren',
   'profile.lock': 'Sperren',
+  'profile.readReceipts': 'Lesebestätigungen senden',
+  'profile.readReceiptsHint': 'Andere sehen, wenn du ihre Nachrichten gelesen hast, und du siehst, wenn sie deine gelesen haben.',
   'export.title': 'Backup exportieren',
   'export.text': 'Speichert dieses Profil als Datei für Delta Chat. Wähle auf dem Handy „Ich habe bereits ein Profil“ → „Aus Backup wiederherstellen“ und dann die Datei. Danach nutzen beide Geräte das Profil und empfangen alle Nachrichten.',
   'export.warning': 'Die Datei enthält deinen geheimen Schlüssel und ist nicht verschlüsselt. Lösche sie nach dem Import und schicke sie niemandem.',
