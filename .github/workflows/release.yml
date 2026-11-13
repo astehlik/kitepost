@@ -1,7 +1,8 @@
-name: Release images
+name: Publish images
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
 
 permissions: {}
@@ -42,10 +43,11 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+          # Version tags also get `latest` (flavor latest=auto), main gets `edge`.
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=edge,branch=main
 
       # No build cache here: a poisoned cache from a pull request must not reach published images.
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0

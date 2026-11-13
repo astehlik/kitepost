@@ -60,6 +60,9 @@ This publishes three services on `127.0.0.1` for a reverse proxy on the host:
 The client uses only relative URLs, so it works under any path. Change the mount points with
 `APP_URL` (link on the landing page) and `BRIDGE_URL` (relative to the client URL).
 
+Images are published to `ghcr.io/<owner>/kitepost-{site,app,bridge,invite}`: `edge` follows `main`,
+a tag `v1.2.3` publishes `1.2.3`, `1.2` and `latest`.
+
 ### Caddy on the host
 
 ```caddyfile
