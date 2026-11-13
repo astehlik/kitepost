@@ -441,14 +441,23 @@ function startMain(client: DcClient, initialChat?: string) {
         console.warn(e);
       }
     };
-    file.addEventListener('change', async () => {
-      const f = file.files?.[0];
-      file.value = '';
-      if (!f) return;
+    const attach = async (f: File) => {
       if (f.size > MAX_UPLOAD) return void dialog(t('chat.tooLargeTitle'), h('p', {}, t('chat.tooLargeText')), [{ label: t('ok') }]);
-      attachment = { filename: f.name.replace(/[\\/\p{Cc}]/gu, '_'), mime: f.type || 'application/octet-stream', data_b64: await blobToBase64(f) };
+      attachment = { filename: f.name.replace(/[\\/\p{Cc}]/gu, '_') || 'file', mime: f.type || 'application/octet-stream', data_b64: await blobToBase64(f) };
       chip.textContent = `📎 ${attachment.filename} ✕`;
       chip.hidden = false;
+    };
+    file.addEventListener('change', () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (f) void attach(f);
+    });
+    // Office apps put an image of copied text on the clipboard too, so text wins.
+    input.addEventListener('paste', ev => {
+      const f = ev.clipboardData?.files[0];
+      if (!f || ev.clipboardData?.getData('text/plain')) return;
+      ev.preventDefault();
+      void attach(f);
     });
     chip.addEventListener('click', () => { attachment = undefined; chip.hidden = true; });
     input.addEventListener('keydown', ev => {

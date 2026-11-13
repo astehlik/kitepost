@@ -147,6 +147,18 @@ def main():
             snap = dora.wait_for_incoming_msg().get_snapshot()
             assert snap.text == "a picture" and snap.file_name == "dot.png", snap
 
+            log("5b. pasting a file with Ctrl+V attaches it")
+            page.locator(".composer textarea").evaluate("""(el, hex) => {
+                const bytes = new Uint8Array(hex.match(/../g).map(b => parseInt(b, 16)));
+                const data = new DataTransfer();
+                data.items.add(new File([bytes], 'pasted.png', { type: 'image/png' }));
+                el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+            }""", png.read_bytes().hex())
+            expect(page.locator(".composer .chip")).to_contain_text("pasted.png")
+            web_send(page, "a pasted picture")
+            snap = dora.wait_for_incoming_msg().get_snapshot()
+            assert snap.text == "a pasted picture" and snap.file_name == "pasted.png", snap
+
             log("6. core group with web member")
             group = dora.create_group("Interop group")
             group.add_contact(dora.get_contact_by_id(ev.contact_id))
