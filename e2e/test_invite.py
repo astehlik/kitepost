@@ -4,6 +4,7 @@ Needs `docker compose -f e2e/relay/compose.yaml up -d --build` and a built `web/
 """
 
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -11,6 +12,9 @@ from pathlib import Path
 
 from deltachat_rpc_client import DeltaChat, Rpc
 from playwright.sync_api import expect, sync_playwright
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_interop import STEP_TIMEOUT  # noqa: E402, also installs the alarm handler
 
 ROOT = Path(__file__).resolve().parent.parent
 RELAY = "_chatmail.test"
@@ -22,6 +26,8 @@ TIMEOUT = 60_000
 
 
 def log(msg):
+    """Logs a step and restarts its timeout, see test_interop.py."""
+    signal.alarm(STEP_TIMEOUT)
     print(msg, flush=True)
 
 

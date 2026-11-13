@@ -16,6 +16,7 @@ jobs:
   core:
     name: Core (Rust/WASM)
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -58,6 +59,7 @@ jobs:
     name: Web client
     needs: core
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -97,6 +99,7 @@ jobs:
   services:
     name: Bridge and invite service
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -128,6 +131,7 @@ jobs:
   docker:
     name: Docker images
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
     strategy:
@@ -158,6 +162,7 @@ jobs:
     name: End-to-end (local chatmail relay + Delta Chat core)
     needs: web
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
@@ -230,6 +235,7 @@ jobs:
   zizmor:
     name: Workflow security (zizmor)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

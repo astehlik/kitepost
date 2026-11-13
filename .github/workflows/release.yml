@@ -15,6 +15,7 @@ jobs:
   images:
     name: Publish ${{ matrix.image }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     permissions:
       contents: read
       packages: write # push the images to ghcr.io

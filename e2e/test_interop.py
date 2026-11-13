@@ -7,6 +7,7 @@ nine.testrun.org.
 
 import os
 import secrets
+import signal
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,20 @@ URL = f"http://127.0.0.1:{PORT}/"
 TIMEOUT = 120_000
 
 
+# The RPC client waits for events without a timeout, so every step gets one.
+STEP_TIMEOUT = 180
+
+
+def _step_timeout(signum, frame):
+    raise TimeoutError(f"test step took longer than {STEP_TIMEOUT} s")
+
+
+signal.signal(signal.SIGALRM, _step_timeout)
+
+
 def log(msg):
+    """Logs a step and restarts its timeout."""
+    signal.alarm(STEP_TIMEOUT)
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
