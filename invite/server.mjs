@@ -149,26 +149,24 @@ async function successPage(lang, account, req) {
   const login = dclogin(account.addr, account.password);
   const installQr = await qrCode(publicUrl(req, 'install'));
   const loginQr = await qrCode(login);
-  const webOnly = `${APP_URL}#login=${encodeURIComponent(login)}`;
+  const web = `${APP_URL}#login=${encodeURIComponent(login)}`;
   return page(lang, T('readyTitle'), `<h1>${T('readyTitle')}</h1>
 <p>${T('readyAddress', { addr: esc(account.addr) })}</p>
-<ol class="steps">
-  <li><h2>${T('readyInstallHeading')}</h2>
-    <p>${T('readyInstallText')}</p>
-    <img class="qr" src="${installQr}" alt="${T('readyInstallQrAlt')}" width="320" height="320">
-    <p><a class="button" href="install">${T('readyInstallButton')}</a></p></li>
-  <li><h2>${T('readyAppHeading')}</h2>
-    <p>${T('readyAppText')}</p>
-    <img class="qr" src="${loginQr}" alt="${T('readyQrAlt')}" width="320" height="320">
-    <p><a class="button primary" href="${esc(login)}">${T('readyAppButton')}</a></p></li>
-  <li><h2>${T('readyWebHeading')}</h2>
-    <p>${T('readyWebText')}</p>
-    <p><a class="button" href="${esc(APP_URL)}">${T('readyWebButton')}</a></p></li>
-</ol>
+<p>${T('readyWebText')}</p>
+<p><a class="button primary" href="${esc(web)}">${T('readyWebButton')}</a></p>
 <p class="warn">${T('readyWarn')}</p>
-<details class="web-only"><summary>${T('readyWebOnlyHeading')}</summary>
-  <p>${T('readyWebOnlyText')}</p>
-  <p><a class="button" href="${esc(webOnly)}">${T('readyWebOnlyButton')}</a></p></details>`);
+<details class="alternative"><summary>${T('readyPhoneOnlyHeading')}</summary>
+  <ol class="steps">
+    <li><h2>${T('readyInstallHeading')}</h2>
+      <p>${T('readyInstallText')}</p>
+      <img class="qr" src="${installQr}" alt="${T('readyInstallQrAlt')}" width="320" height="320">
+      <p><a class="button" href="install">${T('readyInstallButton')}</a></p></li>
+    <li><h2>${T('readyAppHeading')}</h2>
+      <p>${T('readyAppText')}</p>
+      <img class="qr" src="${loginQr}" alt="${T('readyQrAlt')}" width="320" height="320">
+      <p><a class="button" href="${esc(login)}">${T('readyAppButton')}</a></p></li>
+  </ol>
+  <p class="small">${T('readyPhoneOnlyLater')}</p></details>`);
 }
 
 function installPage(lang) {

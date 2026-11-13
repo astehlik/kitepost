@@ -130,11 +130,10 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
 - `/join/admin`: create, list and revoke invites (admin token, ≥ 24 characters). A link is shown only
   once; storage keeps only its SHA-256.
 - `/join/<token>`: the friend presses *Create my account* (a POST, so link previews in messengers
-  don't use up the invite). The result page leads phone first: a QR code to `/join/install`
-  (Google Play, F-Droid, other platforms), then a `dclogin:` QR code and button for the app, then
-  how to bring the profile into the web client with a backup. Logging in on both devices would give
-  them different keys. Users without a smartphone can open the web client already logged in; the
-  credentials travel in the URL fragment, so no server sees them. Set `INVITE_PUBLIC_URL` if the
+  don't use up the invite). The result page leads to the web client, already logged in; the
+  credentials travel in the URL fragment, so no server sees them. A collapsed alternative is for
+  phone-only use: a QR code to the download page `/join/install` (Google Play, F-Droid,
+  get.delta.chat) and a `dclogin:` QR code and button for the app. Set `INVITE_PUBLIC_URL` if the
   service is not reachable at `https://<host>/join/`.
 - **Handoff to the phone**: after creating a profile, and later under *Edit profile → Set up phone*,
   the web client encrypts a backup with a random AES-GCM key, uploads the ciphertext to
