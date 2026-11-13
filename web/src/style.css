@@ -85,10 +85,10 @@ textarea { resize: none; }
 .who small, .who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status { font-size: .8rem; color: var(--muted); }
 .status.ok { color: var(--ok); }
-.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: .3rem; padding: 0 .6rem .6rem; border-bottom: 1px solid var(--border); }
-.actions button { display: flex; flex-direction: column; align-items: center; gap: .2rem; padding: .5rem .2rem; border: 0; border-radius: 10px; background: none; font-size: .8rem; color: var(--muted); }
-.actions button:hover { background: var(--bg); color: var(--text); filter: none; }
-.icon-button svg, .actions svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.nav-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: .3rem; padding: 0 .6rem .6rem; border-bottom: 1px solid var(--border); }
+.nav-actions button { display: flex; flex-direction: column; align-items: center; gap: .2rem; padding: .5rem .2rem; border: 0; border-radius: 10px; background: none; font-size: .8rem; color: var(--muted); }
+.nav-actions button:hover { background: var(--bg); color: var(--text); filter: none; }
+.icon-button svg, .nav-actions svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .icon-button svg { width: 18px; height: 18px; }
 .avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 1.05rem; user-select: none; }
 .chatlist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }

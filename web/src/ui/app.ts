@@ -278,7 +278,7 @@ function startMain(client: DcClient) {
   edit.append(icon(ICONS.edit));
   const sidebar = h('aside', { class: 'sidebar' },
     h('header', { class: 'profile' }, me, status, edit),
-    h('nav', { class: 'actions' },
+    h('nav', { class: 'nav-actions' },
       action(ICONS.qr, 'My invite', () => showInvite(client)),
       action(ICONS.addContact, 'Add contact', () => joinDialog(client, open)),
       action(ICONS.group, 'New group', () => groupDialog(client, open))),
