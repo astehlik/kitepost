@@ -150,6 +150,15 @@ def main():
             msg.send_reaction("👍")
             expect(page.locator(".msg .reactions", has_text="👍")).to_be_visible(timeout=TIMEOUT)
 
+            log("4b. web reacts to core's message; choosing it again removes it")
+            incoming = page.locator(".msg.in", has_text="Hello from Delta Chat core ✓")
+            incoming.hover()
+            incoming.get_by_role("button", name="React").click()
+            page.locator(".quick-reactions button", has_text="❤️").click()
+            wait_event(dora, EventType.REACTIONS_CHANGED, lambda e: "❤️" in str(msg.get_reactions()))
+            incoming.locator(".reaction.mine").click()
+            wait_event(dora, EventType.REACTIONS_CHANGED, lambda e: "❤️" not in str(msg.get_reactions()))
+
             log("4c. typing :shortcode suggests emojis, Enter inserts; the picker inserts too")
             box = page.locator(".composer textarea")
             box.press_sequentially("Emoji test :thumbsu")

@@ -87,11 +87,13 @@ export const de: Record<keyof typeof en, string> = {
   'chat.tooLargeTitle': 'Datei zu groß',
   'chat.tooLargeText': 'Es können Dateien bis 10 MB gesendet werden.',
   'chat.newMessage': 'Neue Nachricht',
+  'chat.react': 'Reagieren',
   'chat.emoji': 'Emoji einfügen',
   'emoji.title': 'Emojis',
   'emoji.search': 'Emojis suchen',
   'emoji.loading': 'Emojis werden geladen…',
   'emoji.none': 'Kein passendes Emoji',
+  'emoji.more': 'Weitere Reaktionen',
 
   'invite.myTitle': 'Meine Einladung',
   'invite.groupTitle': 'Gruppeneinladung',

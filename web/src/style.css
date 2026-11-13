@@ -152,9 +152,21 @@ select { font: inherit; padding: .4rem .5rem; border-radius: 8px; border: 1px so
 .warning { color: var(--danger); font-weight: 600; }
 .remember .hint { display: block; margin: .2rem 0 0 1.6rem; color: var(--muted); font-size: .8rem; }
 .grow { position: relative; }
+.msg { position: relative; }
+.msg .react { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 1rem; line-height: 1; opacity: 0; transition: opacity .1s; }
+.msg.out .react { left: -38px; }
+.msg.in .react { right: -38px; }
+.msg:hover .react, .msg .react:focus-visible { opacity: 1; }
+@media (hover: none) { .msg .react { opacity: .7; } }
+.reactions { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
+.reaction { padding: .05rem .45rem; border-radius: 999px; font-size: .9rem; background: var(--bg); }
+.reaction.mine { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--panel)); }
+.reaction:disabled { opacity: 1; cursor: default; }
 .popover { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: .4rem; }
+.quick-reactions { display: flex; gap: .1rem; }
 button.emoji { width: 38px; height: 38px; padding: 0; border: 0; border-radius: 8px; background: none; font-size: 1.45rem; line-height: 1; }
 button.emoji:hover { background: var(--bg); filter: none; }
+button.emoji.more { font-size: 1.1rem; color: var(--muted); }
 .emoji-picker { width: min(320px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: .4rem; }
 .emoji-grid { max-height: 300px; overflow-y: auto; }
 .emoji-grid h3 { position: sticky; top: 0; margin: 0; padding: .3rem .2rem; font-size: .75rem; color: var(--muted); background: var(--panel); }

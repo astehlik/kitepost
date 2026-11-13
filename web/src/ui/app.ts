@@ -374,14 +374,24 @@ function startMain(client: DcClient, initialChat?: string) {
   function messageView(chat: Chat, m: Message): Node {
     if (m.info) return h('div', { class: 'info' }, m.text);
     const out = m.from === 'self';
-    const reactions = Object.values(m.reactions);
     const state = out ? { pending: '⏳', sent: '✓', read: '✓✓', failed: '⚠', received: '' }[m.state] : '';
+    const canReact = !chat.left && !chat.isRequest && m.id.includes('@');
+    const mine = m.reactions.self;
+    // One reaction per person: choosing the own one again removes it.
+    const react = (emoji: string) => void client.sendReaction(chat.id, m.id, emoji === mine ? '' : emoji).catch(e => console.warn(e));
+    const counts = new Map<string, number>();
+    for (const r of Object.values(m.reactions)) counts.set(r, (counts.get(r) ?? 0) + 1);
+    const reactButton = canReact ? h('button', { type: 'button', class: 'react', title: t('chat.react'), 'aria-label': t('chat.react') }, '☺') : null;
+    reactButton?.addEventListener('click', () => openReactions(reactButton, react));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       ...m.attachments.map(attachmentView),
       m.text ? h('div', { class: 'text' }, m.text) : null,
       h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state ? ` ${state}` : '', m.error ? ` ${m.error}` : ''),
-      reactions.length ? h('div', { class: 'reactions' }, reactions.join(' ')) : null);
+      counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
+        type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: () => react(r),
+      }, n > 1 ? `${r} ${n}` : r))) : null,
+      reactButton);
   }
 
   function renderPane() {
@@ -520,6 +530,16 @@ function startMain(client: DcClient, initialChat?: string) {
   }, { signal });
   renderAll();
   client.start();
+}
+
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+function openReactions(anchor: HTMLElement, react: (emoji: string) => void) {
+  const box = h('div', { class: 'quick-reactions' });
+  const close = popover(anchor, box);
+  const choose = (emoji: string) => { close(); react(emoji); };
+  box.append(...QUICK_REACTIONS.map(e => h('button', { type: 'button', class: 'emoji', onclick: () => choose(e) }, e)),
+    h('button', { type: 'button', class: 'emoji more', title: t('emoji.more'), 'aria-label': t('emoji.more'), onclick: () => box.replaceChildren(emojiPicker(choose)) }, '＋'));
 }
 
 // ------------------------------------------------------------------ avatars & icons

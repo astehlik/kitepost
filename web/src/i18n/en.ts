@@ -85,11 +85,13 @@ export const en = {
   'chat.tooLargeTitle': 'File too large',
   'chat.tooLargeText': 'Files up to 10 MB can be sent.',
   'chat.newMessage': 'New message',
+  'chat.react': 'React',
   'chat.emoji': 'Insert emoji',
   'emoji.title': 'Emojis',
   'emoji.search': 'Search emojis',
   'emoji.loading': 'Loading emojis…',
   'emoji.none': 'No matching emoji',
+  'emoji.more': 'More reactions',
 
   'invite.myTitle': 'My invite',
   'invite.groupTitle': 'Group invite',

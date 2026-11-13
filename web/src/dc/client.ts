@@ -551,6 +551,34 @@ export class DcClient extends EventTarget {
     await this.saveChat(chat);
   }
 
+  /** Sets or, with an empty string, removes the own reaction, like core's send_reaction(). */
+  async sendReaction(chatId: string, msgId: string, reaction: string) {
+    const chat = this.chats.get(chatId);
+    const target = this.messages.get(chatId)?.find(m => m.id === msgId);
+    if (!chat || !target || target.info || !msgId.includes('@')) throw new Error('unknown message');
+    const self = chat.type === 'self';
+    const members = self ? [] : this.memberContacts(chat);
+    if (!self && !members.length) throw new Error(t('error.noKey'));
+    const headers: OutgoingMessage['headers'] = [
+      { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+      { name: 'In-Reply-To', value: msgId, kind: 'messageid' },
+    ];
+    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
+    if (!self || this.config.bccSelf) {
+      await this.send({
+        to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
+        subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,
+        text: reaction, content_disposition: 'reaction', headers,
+        encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
+        attach_pubkey: true, sign: true, compress: true,
+      }, members.flatMap(m => m.relays), true);
+    }
+    const reactions = { ...target.reactions };
+    if (reaction) reactions.self = reaction;
+    else delete reactions.self;
+    await this.saveMessage({ ...target, reactions });
+  }
+
     async createGroup(name: string, memberFps: string[]): Promise<string> {
     const chat: Chat = {
       id: `g-${createId()}`, type: 'group', name: cleanName(name) || t('group.default'), grpid: createId(),
