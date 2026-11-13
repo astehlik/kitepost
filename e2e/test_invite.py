@@ -97,6 +97,7 @@ def main():
             unlock_new_profile(web, web_link)
             expect(web.locator(".field", has_text="E-mail address").locator("input")).to_have_value(addr)
             web.get_by_role("button", name="Create profile").click()
+            web.get_by_role("button", name="Continue").click()
             expect(web.locator(".status.ok")).to_be_visible(timeout=TIMEOUT)
             assert web.locator(".profile small").inner_text() == addr
 

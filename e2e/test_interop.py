@@ -61,15 +61,23 @@ def new_core_account(dc, name):
     return acc
 
 
-def setup_web(page):
+def set_passphrase(page):
     page.goto(URL)
     page.locator('input[type="password"]').nth(0).fill("correct horse battery")
     page.locator('input[type="password"]').nth(1).fill("correct horse battery")
     page.get_by_role("button", name="Continue").click()
+
+
+def setup_web(page, phone):
+    set_passphrase(page)
     page.locator(".field", has_text="Display name").locator("input").fill("Webby")
     page.locator(".field", has_text="Chatmail relay").locator("input").fill(RELAY)
     page.get_by_role("button", name="Create profile").click()
+    expect(page.get_by_role("heading", name="Connect your phone")).to_be_visible(timeout=TIMEOUT)
+    phone.secure_join(page.get_by_label("Invite link").input_value())
+    wait_event(phone, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
     expect(page.locator(".status.ok")).to_be_visible(timeout=TIMEOUT)
+    expect(page.locator(".chatlist li", has_text="Phone")).to_be_visible(timeout=TIMEOUT)
     addr = page.locator(".profile small").inner_text()
     log(f"web account: {addr}")
     return addr
@@ -100,7 +108,8 @@ def main():
             page.on("pageerror", lambda e: log(f"page error: {e}"))
             page.set_default_timeout(TIMEOUT)
 
-            web_addr = setup_web(page)
+            log("0. phone scans the QR shown right after profile creation")
+            web_addr = setup_web(page, new_core_account(dc, "Phone"))
             dora = new_core_account(dc, "Dora")
 
             log("1. web joins core's invite (SecureJoin v3, web = joiner)")

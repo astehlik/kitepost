@@ -174,7 +174,7 @@ function renderAccountSetup(store: Store) {
           ? { addr: addr.value, password: password.value }
           : { addr: `${randomAlnum(9)}@${relay.value.trim().toLowerCase()}`, password: randomAlnum(22) };
         const client = await DcClient.setup(store, { ...params, displayName: name.value, bridgeUrl: bridge.value.trim() || DEFAULT_BRIDGE });
-        startMain(client);
+        await renderConnectPhone(client);
       } catch (e) {
         showError(err, e);
       } finally {
@@ -191,6 +191,24 @@ function renderAccountSetup(store: Store) {
   h('button', { class: 'primary', type: 'submit' }, 'Create profile'));
   screen('Set up your profile', form);
   name.focus();
+}
+
+async function renderConnectPhone(client: DcClient) {
+  const link = await client.inviteLink();
+  const done = () => {
+    client.removeEventListener('change', onChange);
+    startMain(client);
+  };
+  // The handshake runs over IMAP, so the client must already be online while the code is shown.
+  const onChange = (ev: Event) => { if ((ev as CustomEvent<string>).detail === 'chats' && client.chats.size) done(); };
+  client.addEventListener('change', onChange);
+  client.start();
+  screen('Connect your phone',
+    h('p', {}, 'Open Delta Chat on your phone, tap the QR code button and scan this code. Your phone and Kitepost become verified contacts, so you can message between them right away.'),
+    h('div', { class: 'qr' }, trustedSvg(qrSvg(link))),
+    h('input', { type: 'text', readonly: true, value: link, 'aria-label': 'Invite link', onfocus: (e: Event) => (e.target as HTMLInputElement).select() }),
+    h('p', {}, h('small', {}, 'No Delta Chat yet? Get it from delta.chat, or skip this and share your invite later via My invite.')),
+    h('button', { class: 'primary', onclick: done }, 'Continue'));
 }
 
 // ------------------------------------------------------------------ main view
