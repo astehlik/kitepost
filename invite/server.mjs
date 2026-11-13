@@ -6,6 +6,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto
 import { mkdir, readFile, rename, writeFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import QRCode from 'qrcode';
+import { LANGUAGES, requestLanguage, translator } from './i18n.mjs';
 import { hashPassword } from './sha512crypt.mjs';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -87,12 +88,17 @@ function dclogin(addr, password) {
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-function page(title, body, { script = false } = {}) {
+/** `switchLanguage` adds links to the other languages, for pages that can safely be reloaded. */
+function page(lang, title, body, { script = false, switchLanguage = false } = {}) {
+  const others = switchLanguage
+    ? `<p class="lang-switch">${Object.entries(LANGUAGES).filter(([code]) => code !== lang)
+      .map(([code, m]) => `<a href="?lang=${code}" hreflang="${code}" lang="${code}">${m.langName}</a>`).join(' · ')}</p>`
+    : '';
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
 <title>${esc(title)}</title><link rel="stylesheet" href="style.css"></head>
-<body><main class="card">${body}</main>${script ? '<script src="admin.js" type="module"></script>' : ''}</body></html>`;
+<body><main class="card">${body}${others}</main>${script ? '<script src="admin.js" type="module"></script>' : ''}</body></html>`;
 }
 
 const SECURITY_HEADERS = {
@@ -103,40 +109,43 @@ const SECURITY_HEADERS = {
   'X-Robots-Tag': 'noindex',
 };
 
-function send(res, status, body, type = 'text/html; charset=utf-8') {
-  res.writeHead(status, { 'Content-Type': type, ...SECURITY_HEADERS });
+function send(res, status, body, type = 'text/html; charset=utf-8', headers = {}) {
+  res.writeHead(status, { 'Content-Type': type, ...SECURITY_HEADERS, ...headers });
   res.end(body);
 }
 
-function invalidPage() {
-  return page('Invite not valid', `<h1>This invite is no longer valid</h1>
-<p>It may have been used already or expired. Ask the person who sent it for a new one.</p>`);
+function invalidPage(lang) {
+  const T = translator(lang);
+  return page(lang, T('invalidTitle'), `<h1>${T('invalidHeading')}</h1>
+<p>${T('invalidText')}</p>`, { switchLanguage: true });
 }
 
-function invitePage(inv) {
-  return page(`Invitation to ${SITE_NAME}`, `<h1>You're invited to ${esc(SITE_NAME)}</h1>
-<p>Accept to get a new chat address on <strong>${esc(MAIL_DOMAIN)}</strong>. Use it with the Delta Chat app on your phone or computer, or right here in the browser.</p>
+function invitePage(lang, inv) {
+  const T = translator(lang);
+  return page(lang, T('inviteTitle', { site: SITE_NAME }), `<h1>${T('inviteHeading', { site: esc(SITE_NAME) })}</h1>
+<p>${T('inviteText', { domain: esc(MAIL_DOMAIN) })}</p>
 ${inv.note ? `<p class="note">${esc(inv.note)}</p>` : ''}
-<form method="post"><button class="primary" type="submit">Create my account</button></form>
-<p class="small">The link works only once. Nothing is created until you press the button.</p>`);
+<form method="post"><button class="primary" type="submit">${T('inviteButton')}</button></form>
+<p class="small">${T('inviteOnce')}</p>`, { switchLanguage: true });
 }
 
-async function successPage(account) {
+async function successPage(lang, account) {
+  const T = translator(lang);
   const login = dclogin(account.addr, account.password);
   const qr = await QRCode.toDataURL(login, { errorCorrectionLevel: 'M', margin: 2, width: 320 });
   const web = `${APP_URL}#login=${encodeURIComponent(login)}`;
-  return page('Your account is ready', `<h1>Your account is ready</h1>
-<p>Your address: <strong>${esc(account.addr)}</strong></p>
+  return page(lang, T('readyTitle'), `<h1>${T('readyTitle')}</h1>
+<p>${T('readyAddress', { addr: esc(account.addr) })}</p>
 <ol class="choices">
-  <li><h2>Delta Chat app</h2>
-    <p>Install <a href="https://delta.chat/download" rel="noopener noreferrer">Delta Chat</a>. Then scan this code under <em>Add as second device</em> → <em>Scan QR code</em> (or "Log into your server" on the welcome screen), or tap the button on this device.</p>
-    <img class="qr" src="${qr}" alt="Login QR code" width="320" height="320">
-    <p><a class="button primary" href="${esc(login)}">Open in Delta Chat</a></p></li>
-  <li><h2>In the browser</h2>
-    <p>Use the web client without installing anything.</p>
-    <p><a class="button" href="${esc(web)}">Open the web client</a></p></li>
+  <li><h2>${T('readyAppHeading')}</h2>
+    <p>${T('readyAppText')}</p>
+    <img class="qr" src="${qr}" alt="${T('readyQrAlt')}" width="320" height="320">
+    <p><a class="button primary" href="${esc(login)}">${T('readyAppButton')}</a></p></li>
+  <li><h2>${T('readyWebHeading')}</h2>
+    <p>${T('readyWebText')}</p>
+    <p><a class="button" href="${esc(web)}">${T('readyWebButton')}</a></p></li>
 </ol>
-<p class="warn">Save this now: the page cannot be shown again. The QR code contains your password, so don't share it.</p>`);
+<p class="warn">${T('readyWarn')}</p>`);
 }
 
 // ------------------------------------------------------------------ admin API
@@ -208,9 +217,13 @@ const STATIC = {
 let redeeming = Promise.resolve();
 
 const server = createServer(async (req, res) => {
+  let lang = 'en';
+  let setCookie;
   try {
     const url = new URL(req.url, 'http://x');
     const path = url.pathname.replace(/^\/+/, '');
+    ({ lang, setCookie } = requestLanguage(req, url));
+    const html = (status, body) => send(res, status, body, undefined, { Vary: 'Accept-Language, Cookie', ...(setCookie ? { 'Set-Cookie': setCookie } : {}) });
     if (path === 'healthz') return send(res, 200, 'ok', 'text/plain');
     if (STATIC[path]) {
       const [type, file] = STATIC[path];
@@ -218,15 +231,16 @@ const server = createServer(async (req, res) => {
       return res.end(await readFile(file));
     }
     if (path === 'admin') {
-      if (!ADMIN_TOKEN) return send(res, 404, page('Not found', '<h1>Not found</h1>'));
-      return send(res, 200, page('Invites', '<div id="admin"></div>', { script: true }));
+      const T = translator(lang);
+      if (!ADMIN_TOKEN) return html(404, page(lang, T('notFound'), `<h1>${T('notFound')}</h1>`));
+      return html(200, page(lang, T('adminTitle'), '<div id="admin"></div>', { script: true, switchLanguage: true }));
     }
     if (path.startsWith('api/')) return admin(req, res, path);
 
-    if (!/^[A-Za-z0-9_-]{24}$/.test(path)) return send(res, 404, invalidPage());
+    if (!/^[A-Za-z0-9_-]{24}$/.test(path)) return html(404, invalidPage(lang));
     const hash = sha256(path);
     const inv = invites.find(i => i.hash === hash);
-    if (req.method === 'GET') return send(res, inv && isActive(inv) ? 200 : 410, inv && isActive(inv) ? invitePage(inv) : invalidPage());
+    if (req.method === 'GET') return html(inv && isActive(inv) ? 200 : 410, inv && isActive(inv) ? invitePage(lang, inv) : invalidPage(lang));
     if (req.method !== 'POST') return send(res, 405, '');
 
     let account;
@@ -239,12 +253,13 @@ const server = createServer(async (req, res) => {
     });
     redeeming = job.catch(() => {});
     await job;
-    if (!account) return send(res, 410, invalidPage());
+    if (!account) return html(410, invalidPage(lang));
     console.log(`invite ${inv.id} redeemed: ${account.addr}`);
-    return send(res, 200, await successPage(account));
+    return html(200, await successPage(lang, account));
   } catch (e) {
     console.error(e);
-    send(res, 500, page('Error', '<h1>Something went wrong</h1><p>Please try again later.</p>'));
+    const T = translator(lang);
+    send(res, 500, page(lang, T('errorTitle'), `<h1>${T('errorHeading')}</h1><p>${T('errorText')}</p>`));
   }
 });
 

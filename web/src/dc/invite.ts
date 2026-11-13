@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { normalizeFingerprint } from '../wasm';
 
 export interface Invite {
@@ -21,7 +22,7 @@ function decodeName(v: string | undefined): string | undefined {
 
 function normalizeAddr(a: string): string {
   const addr = decodeURIComponent(a).trim().toLowerCase();
-  if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(addr)) throw new Error('Bad e-mail address in invite');
+  if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(addr)) throw new Error(t('error.badInviteAddr'));
   return addr;
 }
 
@@ -35,7 +36,7 @@ export function parseInvite(link: string): Invite {
   } else if (/^OPENPGP4FPR:/i.test(text)) {
     payload = text.slice('OPENPGP4FPR:'.length).replace('%23', '#');
   } else {
-    throw new Error('Not a Delta Chat invite link');
+    throw new Error(t('error.notInvite'));
   }
   const [fpPart, fragment = ''] = payload.split('#', 2);
   const fingerprint = normalizeFingerprint(fpPart);
@@ -57,8 +58,8 @@ export function parseInvite(link: string): Invite {
     v3 = true;
     invitenumber = '';
   }
-  if (!addrs.length || invitenumber === undefined || !auth) throw new Error('Invite link is incomplete');
-  if (params.has('b')) throw new Error('Channel invites are not supported yet');
+  if (!addrs.length || invitenumber === undefined || !auth) throw new Error(t('error.inviteIncomplete'));
+  if (params.has('b')) throw new Error(t('error.channelInvite'));
 
   const grpid = valid(params.get('x'));
   const grpname = decodeName(params.get('g'));

@@ -2,6 +2,7 @@ import { fileReader, readBackup } from '../dc/backup';
 import { DcClient } from '../dc/client';
 import { looksLikeBackupQr, receiveBackup } from '../dc/transfer';
 import type { Chat, Message } from '../dc/types';
+import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, dialog, formatTime, h, trustedSvg } from './dom';
@@ -37,6 +38,16 @@ function errorBox() {
 function showError(box: HTMLElement, e: unknown) {
   box.textContent = e instanceof Error ? e.message : String(e);
   box.hidden = false;
+}
+
+function languageSelect(onChange: () => void) {
+  const select = h('select', { 'aria-label': t('language') },
+    ...Object.entries(LANGUAGES).map(([code, name]) => h('option', { value: code, selected: code === getLanguage() }, name)));
+  select.addEventListener('change', () => {
+    setLanguage(select.value as Lang);
+    onChange();
+  });
+  return select;
 }
 
 // ------------------------------------------------------------------ lock & onboarding
@@ -82,9 +93,12 @@ export async function boot() {
   else renderPassphraseSetup();
 }
 
-function screen(title: string, ...content: Node[]) {
+/** An onboarding card; `rerender` redraws it after the language changed. */
+function screen(title: string, rerender: () => void, ...content: Node[]) {
   clear(root());
-  root().append(h('main', { class: 'onboarding' }, h('div', { class: 'card' }, h('h1', {}, title), ...content)));
+  root().append(h('main', { class: 'onboarding' },
+    h('div', { class: 'card' }, h('h1', {}, title), ...content,
+      h('div', { class: 'card-footer' }, languageSelect(rerender)))));
 }
 
 function renderUnlock() {
@@ -106,17 +120,17 @@ function renderUnlock() {
       }
     },
   },
-  field('Passphrase', pass),
+  field(t('passphrase.label'), pass),
   err,
-  h('button', { class: 'primary', type: 'submit' }, 'Unlock'),
+  h('button', { class: 'primary', type: 'submit' }, t('unlock.button')),
   h('button', {
     type: 'button', class: 'link danger',
-    onclick: () => dialog('Delete profile?', h('p', {}, 'All messages and keys stored in this browser will be erased. This cannot be undone.'), [
-      { label: 'Cancel' },
-      { label: 'Delete', primary: true, onClick: async () => { await Store.destroy(); location.reload(); } },
+    onclick: () => dialog(t('unlock.deleteTitle'), h('p', {}, t('unlock.deleteText')), [
+      { label: t('cancel') },
+      { label: t('delete'), primary: true, onClick: async () => { await Store.destroy(); location.reload(); } },
     ]),
-  }, 'Forgot passphrase? Delete profile'));
-  screen('Unlock Kitepost', form);
+  }, t('unlock.forgot')));
+  screen(t('unlock.title'), renderUnlock, form);
   pass.focus();
 }
 
@@ -127,7 +141,7 @@ function renderPassphraseSetup() {
   const form = h('form', {
     onsubmit: async (ev: Event) => {
       ev.preventDefault();
-      if (pass.value !== pass2.value) return showError(err, 'Passphrases do not match');
+      if (pass.value !== pass2.value) return showError(err, t('passphrase.mismatch'));
       form.classList.add('busy');
       try {
         renderAccountSetup(await Store.create(pass.value));
@@ -137,24 +151,24 @@ function renderPassphraseSetup() {
       }
     },
   },
-  h('p', {}, 'Your keys and messages are stored encrypted in this browser. Choose a passphrase to protect them; it never leaves this device.'),
-  field('Passphrase', pass, 'At least 10 characters.'),
-  field('Repeat passphrase', pass2),
+  h('p', {}, t('welcome.text')),
+  field(t('passphrase.label'), pass, t('passphrase.hint')),
+  field(t('passphrase.repeat'), pass2),
   err,
-  h('button', { class: 'primary', type: 'submit' }, 'Continue'));
-  screen('Welcome to Kitepost', form);
+  h('button', { class: 'primary', type: 'submit' }, t('continue')));
+  screen(t('welcome.title'), renderPassphraseSetup, form);
   pass.focus();
 }
 
 function renderAccountSetup(store: Store) {
-  const name = h('input', { type: 'text', maxlength: '100', placeholder: 'Your name' });
+  const name = h('input', { type: 'text', maxlength: '100', placeholder: t('setup.yourName') });
   const relay = h('input', { type: 'text', value: DEFAULT_RELAY, required: true, spellcheck: 'false' });
   const existing = h('input', { type: 'checkbox' });
   const addr = h('input', { type: 'text', inputmode: 'email', spellcheck: 'false', placeholder: 'you@example.org', autocomplete: 'username' });
   const password = h('input', { type: 'password', autocomplete: 'current-password' });
   const bridge = h('input', { type: 'text', value: DEFAULT_BRIDGE, spellcheck: 'false' });
-  const existingFields = h('div', { hidden: true }, field('E-mail address', addr), field('Password', password));
-  const relayField = field('Chatmail relay', relay, 'A new random address is created on this relay.');
+  const existingFields = h('div', { hidden: true }, field(t('setup.email'), addr), field(t('setup.password'), password));
+  const relayField = field(t('setup.relay'), relay, t('setup.relayHint'));
   existing.addEventListener('change', () => {
     existingFields.hidden = !existing.checked;
     relayField.hidden = existing.checked;
@@ -185,22 +199,22 @@ function renderAccountSetup(store: Store) {
       }
     },
   },
-  field('Display name', name),
+  field(t('setup.displayName'), name),
   relayField,
-  h('label', { class: 'check' }, existing, 'Use an existing chatmail or e-mail address'),
+  h('label', { class: 'check' }, existing, t('setup.existing')),
   existingFields,
-  h('details', {}, h('summary', {}, 'Advanced'), field('Bridge URL', bridge, 'WebSocket bridge that relays the end-to-end TLS stream.')),
+  h('details', {}, h('summary', {}, t('setup.advanced')), field(t('setup.bridge'), bridge, t('setup.bridgeHint'))),
   err,
-  h('button', { class: 'primary', type: 'submit' }, 'Create profile'));
+  h('button', { class: 'primary', type: 'submit' }, t('setup.create')));
 
   const backup = h('input', { type: 'file', accept: '.tar,application/x-tar', hidden: true });
   const importStatus = h('p', { class: 'hint', hidden: true });
   const importErr = errorBox();
   const bridgeUrl = () => bridge.value.trim() || DEFAULT_BRIDGE;
-  const say = (t: string) => { importStatus.textContent = t; };
+  const say = (text: string) => { importStatus.textContent = text; };
   const importFrom = async (blob: Blob) => {
     const profile = await readBackup(fileReader(blob), blob.size, importKeypair, publicKeyInfo, say);
-    say(`Signing in as ${profile.addr}…`);
+    say(t('import.signingIn', { addr: profile.addr }));
     return DcClient.importBackup(store, profile, bridgeUrl());
   };
   const busy = async (job: () => Promise<DcClient | undefined>) => {
@@ -219,30 +233,30 @@ function renderAccountSetup(store: Store) {
     }
   };
   const scan = () => busy(async () => {
-    const qr = await scanQr('Add as second device', 'On your phone, open Delta Chat → Settings → Add second device and scan the QR code shown there.', looksLikeBackupQr);
+    const qr = await scanQr(t('import.scanTitle'), t('import.scanHint'), looksLikeBackupQr);
     if (!qr) return undefined;
     let client: DcClient | undefined;
-    say('Connecting to your phone…');
-    await receiveBackup(qr, (got, total) => say(`Receiving… ${total ? Math.min(100, Math.round((got / total) * 100)) : 0} %`), async blob => {
+    say(t('import.connecting'));
+    await receiveBackup(qr, (got, total) => say(t('import.receiving', { percent: total ? Math.min(100, Math.round((got / total) * 100)) : 0 })), async blob => {
       client = await importFrom(blob);
     });
     return client;
   });
   const importBox = h('div', { class: 'import' },
-    h('h2', {}, 'Already using Delta Chat?'),
-    h('p', {}, 'Use the same profile here as on your phone. Your chats, contacts and keys are copied over, and new messages arrive on both devices.'),
+    h('h2', {}, t('import.title')),
+    h('p', {}, t('import.text')),
     importStatus, importErr,
     h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'primary', onclick: scan }, 'Scan QR from phone'),
-      h('button', { type: 'button', onclick: () => backup.click() }, 'Import backup file…')),
-    h('small', {}, 'Scanning needs Delta Chat on a chatmail relay. A backup file comes from Settings → Chats and media → Export backup.'),
+      h('button', { type: 'button', class: 'primary', onclick: scan }, t('import.scan')),
+      h('button', { type: 'button', onclick: () => backup.click() }, t('import.file'))),
+    h('small', {}, t('import.note')),
     backup);
   backup.addEventListener('change', () => {
     const file = backup.files?.[0];
     backup.value = '';
     if (file) void busy(() => importFrom(file));
   });
-  screen('Set up your profile', form, importBox);
+  screen(t('setup.title'), () => renderAccountSetup(store), form, importBox);
   name.focus();
 }
 
@@ -256,36 +270,46 @@ async function renderConnectPhone(client: DcClient) {
   const onChange = (ev: Event) => { if ((ev as CustomEvent<string>).detail === 'chats' && client.chats.size) done(); };
   client.addEventListener('change', onChange);
   client.start();
-  screen('Connect your phone',
-    h('p', {}, 'Open Delta Chat on your phone, tap the QR code button and scan this code. Your phone and Kitepost become verified contacts, so you can message between them right away.'),
+  const render = () => screen(t('connect.title'), render,
+    h('p', {}, t('connect.text')),
     h('div', { class: 'qr' }, trustedSvg(qrSvg(link))),
-    h('input', { type: 'text', readonly: true, value: link, 'aria-label': 'Invite link', onfocus: (e: Event) => (e.target as HTMLInputElement).select() }),
-    h('p', {}, h('small', {}, 'No Delta Chat yet? Get it from delta.chat, or skip this and share your invite later via My invite.')),
-    h('button', { class: 'primary', onclick: done }, 'Continue'));
+    h('input', { type: 'text', readonly: true, value: link, 'aria-label': t('invite.link'), onfocus: (e: Event) => (e.target as HTMLInputElement).select() }),
+    h('p', {}, h('small', {}, t('connect.noApp'))),
+    h('button', { class: 'primary', onclick: done }, t('continue')));
+  render();
 }
 
 // ------------------------------------------------------------------ main view
 
-function startMain(client: DcClient) {
-  let current: string | undefined;
+// Listeners of the previous main view, removed when it is rebuilt, e.g. after a language change.
+let mainListeners: AbortController | undefined;
+
+function startMain(client: DcClient, initialChat?: string) {
+  mainListeners?.abort();
+  mainListeners = new AbortController();
+  const { signal } = mainListeners;
+  let current = initialChat;
   const objectUrls: string[] = [];
 
   const status = h('span', { class: 'status' });
   const chatList = h('ul', { class: 'chatlist' });
   const pane = h('section', { class: 'pane' });
   const me = h('div', { class: 'me' });
-  const edit = h('button', { class: 'icon-button', title: 'Edit profile', 'aria-label': 'Edit profile', onclick: () => profileDialog(client) });
+  const edit = h('button', {
+    class: 'icon-button', title: t('nav.editProfile'), 'aria-label': t('nav.editProfile'),
+    onclick: () => profileDialog(client, () => startMain(client, current)),
+  });
   edit.append(icon(ICONS.edit));
   const sidebar = h('aside', { class: 'sidebar' },
     h('header', { class: 'profile' }, me, status, edit),
     h('nav', { class: 'nav-actions' },
-      action(ICONS.qr, 'My invite', () => showInvite(client)),
-      action(ICONS.addContact, 'Add contact', () => joinDialog(client, open)),
-      action(ICONS.group, 'New group', () => groupDialog(client, open))),
+      action(ICONS.qr, t('nav.myInvite'), () => showInvite(client)),
+      action(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
+      action(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))),
     chatList);
 
   function renderProfile() {
-    const name = client.config.displayName || 'Me';
+    const name = client.config.displayName || t('me');
     me.replaceChildren(avatar(name, client.config.addr),
       h('span', { class: 'who' }, h('strong', {}, name), h('small', {}, client.config.addr)));
   }
@@ -293,7 +317,7 @@ function startMain(client: DcClient) {
   root().append(h('div', { class: 'layout' }, sidebar, pane));
 
   function renderStatus() {
-    status.textContent = client.status === 'connected' ? '● online' : client.status === 'connecting' ? '○ connecting' : '○ offline';
+    status.textContent = t(client.status === 'connected' ? 'status.online' : client.status === 'connecting' ? 'status.connecting' : 'status.offline');
     status.title = client.status;
     status.className = `status ${client.status === 'connected' ? 'ok' : ''}`;
   }
@@ -311,9 +335,9 @@ function startMain(client: DcClient) {
           h('div', { class: 'row' },
             h('strong', {}, client.chatTitle(chat) || '…'),
             chat.unread ? h('span', { class: 'badge' }, String(chat.unread)) : null),
-          h('small', {}, chat.isRequest ? 'Contact request' : last ? `${last.from === 'self' && !last.info ? 'Me: ' : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : ''))));
+          h('small', {}, chat.isRequest ? t('list.request') : last ? `${last.from === 'self' && !last.info ? t('list.mePrefix') : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : ''))));
     }
-    if (!chatList.children.length) chatList.append(h('li', { class: 'empty' }, 'No chats yet. Share your invite link or add a contact.'));
+    if (!chatList.children.length) chatList.append(h('li', { class: 'empty' }, t('list.empty')));
     document.title = unread ? `(${unread}) Kitepost` : 'Kitepost';
   }
 
@@ -334,7 +358,7 @@ function startMain(client: DcClient) {
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       ...m.attachments.map(attachmentView),
       m.text ? h('div', { class: 'text' }, m.text) : null,
-      h('div', { class: 'meta' }, m.edited ? 'edited · ' : '', formatTime(m.timestamp), state ? ` ${state}` : '', m.error ? ` ${m.error}` : ''),
+      h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state ? ` ${state}` : '', m.error ? ` ${m.error}` : ''),
       reactions.length ? h('div', { class: 'reactions' }, reactions.join(' ')) : null);
   }
 
@@ -343,34 +367,34 @@ function startMain(client: DcClient) {
     clear(pane);
     const chat = current ? client.chats.get(current) : undefined;
     if (!chat) {
-      pane.append(h('div', { class: 'placeholder' }, h('p', {}, 'Select a chat.'), h('p', {}, 'Everything is end-to-end encrypted and decrypted only in this browser.')));
+      pane.append(h('div', { class: 'placeholder' }, h('p', {}, t('pane.select')), h('p', {}, t('pane.e2e'))));
       return;
     }
     const contact = chat.contact ? client.contacts.get(chat.contact) : undefined;
     const subtitle = chat.type === 'self'
-      ? 'Notes, synced with your other devices'
+      ? t('chat.savedSubtitle')
       : chat.type === 'group'
-      ? `${chat.members.length + 1} members`
+      ? t('chat.members', { n: chat.members.length + 1 })
       : contact ? contact.addr : '';
     const header = h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
       h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
-      chat.type === 'group' ? h('button', { onclick: () => showInvite(client, chat.id) }, 'Invite link') : null,
-      contact ? h('button', { onclick: () => fingerprintDialog(client, contact.fingerprint) }, 'Encryption') : null,
-      h('button', { onclick: () => dialog('Delete chat?', h('p', {}, 'Messages are deleted from this browser only.'), [
-        { label: 'Cancel' },
-        { label: 'Delete', primary: true, onClick: async () => { await client.deleteChat(chat.id); current = undefined; renderAll(); } },
-      ]) }, 'Delete'));
+      chat.type === 'group' ? h('button', { onclick: () => showInvite(client, chat.id) }, t('invite.link')) : null,
+      contact ? h('button', { onclick: () => fingerprintDialog(client, contact.fingerprint) }, t('chat.encryption')) : null,
+      h('button', { onclick: () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteText')), [
+        { label: t('cancel') },
+        { label: t('delete'), primary: true, onClick: async () => { await client.deleteChat(chat.id); current = undefined; renderAll(); } },
+      ]) }, t('delete')));
 
     const list = h('div', { class: 'messages' });
     for (const m of client.messages.get(chat.id) ?? []) list.append(messageView(chat, m));
 
     const request = chat.isRequest
       ? h('div', { class: 'request' },
-        h('span', {}, 'This is a contact request. Accept it to reply.'),
-        h('button', { class: 'primary', onclick: () => client.acceptChat(chat.id) }, 'Accept'),
-        h('button', { onclick: async () => { await client.blockChat(chat.id); current = undefined; renderAll(); } }, 'Block'))
+        h('span', {}, t('chat.request')),
+        h('button', { class: 'primary', onclick: () => client.acceptChat(chat.id) }, t('accept')),
+        h('button', { onclick: async () => { await client.blockChat(chat.id); current = undefined; renderAll(); } }, t('block')))
       : null;
 
     pane.append(header, list, request ?? composer(chat));
@@ -380,7 +404,7 @@ function startMain(client: DcClient) {
 
   function composer(chat: Chat): Node {
     let attachment: AttachmentData | undefined;
-    const input = h('textarea', { rows: '1', placeholder: chat.left ? 'You are not a member of this group' : 'Message', disabled: chat.left });
+    const input = h('textarea', { rows: '1', placeholder: chat.left ? t('chat.notMember') : t('chat.message'), disabled: chat.left });
     const file = h('input', { type: 'file', hidden: true });
     const chip = h('span', { class: 'chip', hidden: true });
     const send = async () => {
@@ -400,7 +424,7 @@ function startMain(client: DcClient) {
       const f = file.files?.[0];
       file.value = '';
       if (!f) return;
-      if (f.size > MAX_UPLOAD) return void dialog('File too large', h('p', {}, 'Files up to 10 MB can be sent.'), [{ label: 'OK' }]);
+      if (f.size > MAX_UPLOAD) return void dialog(t('chat.tooLargeTitle'), h('p', {}, t('chat.tooLargeText')), [{ label: t('ok') }]);
       attachment = { filename: f.name.replace(/[\\/\p{Cc}]/gu, '_'), mime: f.type || 'application/octet-stream', data_b64: await blobToBase64(f) };
       chip.textContent = `📎 ${attachment.filename} ✕`;
       chip.hidden = false;
@@ -413,9 +437,9 @@ function startMain(client: DcClient) {
       }
     });
     return h('footer', { class: 'composer' },
-      h('button', { class: 'icon', title: 'Attach file', disabled: chat.left, onclick: () => file.click() }, '📎'),
+      h('button', { class: 'icon', title: t('chat.attach'), 'aria-label': t('chat.attach'), disabled: chat.left, onclick: () => file.click() }, '📎'),
       h('div', { class: 'grow' }, chip, input), file,
-      h('button', { class: 'primary', disabled: chat.left, onclick: send }, 'Send'));
+      h('button', { class: 'primary', disabled: chat.left, onclick: send }, t('chat.send')));
   }
 
   function open(chatId: string) {
@@ -442,20 +466,20 @@ function startMain(client: DcClient) {
       const ta = pane.querySelector('textarea');
       if (ta && draft) ta.value = draft;
     }
-  });
+  }, { signal });
   client.addEventListener('incoming', ev => {
     const { chatId } = (ev as CustomEvent<{ chatId: string }>).detail;
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
       const chat = client.chats.get(chatId);
-      if (chat && !chat.isRequest) new Notification(client.chatTitle(chat), { body: 'New message' });
+      if (chat && !chat.isRequest) new Notification(client.chatTitle(chat), { body: t('chat.newMessage') });
     }
-  });
+  }, { signal });
   if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     if (current) void client.markRead(current);
     client.poke();
-  });
+  }, { signal });
   renderAll();
   client.start();
 }
@@ -506,38 +530,36 @@ function chatAvatar(client: DcClient, chat: Chat) {
 async function showInvite(client: DcClient, chatId?: string) {
   const link = await client.inviteLink(chatId);
   const body = h('div', { class: 'invite' },
-    h('p', {}, chatId
-      ? 'Anyone with this link can join the group. Share it only through a channel you trust.'
-      : 'Share this link or let the other person scan the QR code with Delta Chat. Whoever uses it gets a verified, end-to-end encrypted connection to you.'),
+    h('p', {}, t(chatId ? 'invite.groupText' : 'invite.myText')),
     h('div', { class: 'qr' }, trustedSvg(qrSvg(link))),
-    h('input', { type: 'text', readonly: true, value: link, onfocus: (e: Event) => (e.target as HTMLInputElement).select() }));
-  dialog(chatId ? 'Group invite' : 'My invite', body, [
-    { label: 'Copy link', onClick: async () => { await navigator.clipboard.writeText(link); return false; } },
-    { label: 'Close', primary: true },
+    h('input', { type: 'text', readonly: true, value: link, 'aria-label': t('invite.link'), onfocus: (e: Event) => (e.target as HTMLInputElement).select() }));
+  dialog(t(chatId ? 'invite.groupTitle' : 'invite.myTitle'), body, [
+    { label: t('invite.copy'), onClick: async () => { await navigator.clipboard.writeText(link); return false; } },
+    { label: t('close'), primary: true },
   ]);
 }
 
 function joinDialog(client: DcClient, open: (id: string) => void) {
   const input = h('textarea', { rows: '3', placeholder: 'https://i.delta.chat/#…', spellcheck: 'false' });
-  dialog('Add contact or join group', h('div', {}, h('p', {}, 'Paste an invite link from Delta Chat.'), input), [
-    { label: 'Cancel' },
-    { label: 'Connect', primary: true, onClick: async () => open(await client.joinInvite(input.value)) },
+  dialog(t('join.title'), h('div', {}, h('p', {}, t('join.text')), input), [
+    { label: t('cancel') },
+    { label: t('connect'), primary: true, onClick: async () => open(await client.joinInvite(input.value)) },
   ]);
   input.focus();
 }
 
 function groupDialog(client: DcClient, open: (id: string) => void) {
-  const name = h('input', { type: 'text', maxlength: '100', placeholder: 'Group name' });
+  const name = h('input', { type: 'text', maxlength: '100', placeholder: t('group.namePlaceholder') });
   const boxes = [...client.contacts.values()]
     .filter(c => c.publicKey && !c.blocked)
     .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: c.name || c.addr }));
   const list = h('div', { class: 'members' }, ...boxes.map(b => h('label', { class: 'check' }, b.box, b.label)));
-  if (!boxes.length) list.append(h('p', {}, 'Add contacts first.'));
-  dialog('New group', h('div', {}, field('Name', name), list), [
-    { label: 'Cancel' },
+  if (!boxes.length) list.append(h('p', {}, t('group.addContactsFirst')));
+  dialog(t('group.title'), h('div', {}, field(t('group.name'), name), list), [
+    { label: t('cancel') },
     {
-      label: 'Create', primary: true, onClick: async () => {
-        if (!name.value.trim()) throw new Error('Please enter a name');
+      label: t('create'), primary: true, onClick: async () => {
+        if (!name.value.trim()) throw new Error(t('group.enterName'));
         open(await client.createGroup(name.value, boxes.filter(b => b.box.checked).map(b => b.fp)));
       },
     },
@@ -551,21 +573,19 @@ function formatFingerprint(fp: string): string {
 
 function fingerprintDialog(client: DcClient, fp: string) {
   const c = client.contacts.get(fp);
-  dialog('End-to-end encryption', h('div', { class: 'fingerprints' },
-    h('p', {}, c?.verified
-      ? '✔ Connected through an invite link, which checked both keys.'
-      : 'Messages are end-to-end encrypted with this key. To check it, compare the fingerprints in person.'),
-    h('h3', {}, client.config.displayName || 'Me'), h('code', {}, formatFingerprint(client.config.fingerprint)),
-    h('h3', {}, client.contactName(fp)), h('code', {}, formatFingerprint(fp))), [{ label: 'Close', primary: true }]);
+  dialog(t('e2e.title'), h('div', { class: 'fingerprints' },
+    h('p', {}, t(c?.verified ? 'e2e.invite' : 'e2e.compare')),
+    h('h3', {}, client.config.displayName || t('me')), h('code', {}, formatFingerprint(client.config.fingerprint)),
+    h('h3', {}, client.contactName(fp)), h('code', {}, formatFingerprint(fp))), [{ label: t('close'), primary: true }]);
 }
 
 function exportDialog(client: DcClient) {
-  dialog('Export backup', h('div', {},
-    h('p', {}, 'Saves this profile as a file for Delta Chat. On the phone, choose "I already have a profile" → "Restore from backup" and select the file. Afterwards both devices use the profile and receive all messages.'),
-    h('p', { class: 'warning' }, 'The file contains your secret key and is not encrypted. Delete it once it is imported, and never send it to anyone.')), [
-    { label: 'Cancel' },
+  dialog(t('export.title'), h('div', {},
+    h('p', {}, t('export.text')),
+    h('p', { class: 'warning' }, t('export.warning'))), [
+    { label: t('cancel') },
     {
-      label: 'Download', primary: true, onClick: async () => {
+      label: t('export.download'), primary: true, onClick: async () => {
         const { blob, filename } = await client.exportBackup();
         const url = URL.createObjectURL(blob);
         h('a', { href: url, download: filename }).click();
@@ -575,15 +595,21 @@ function exportDialog(client: DcClient) {
   ]);
 }
 
-function profileDialog(client: DcClient) {
+/** `rebuild` redraws the main view after the language changed. */
+function profileDialog(client: DcClient, rebuild: () => void) {
   const name = h('input', { type: 'text', maxlength: '100', value: client.config.displayName });
-  dialog('Profile', h('div', {},
-    field('Display name', name),
-    h('p', {}, h('small', {}, `Address: ${client.config.addr}`)),
-    h('p', {}, h('small', {}, `Fingerprint: ${formatFingerprint(client.config.fingerprint)}`))), [
-    { label: 'Export backup', onClick: () => { exportDialog(client); } },
-    { label: 'Lock', onClick: () => location.reload() },
-    { label: 'Save', primary: true, onClick: () => client.setDisplayName(name.value) },
+  const lang = languageSelect(() => {
+    document.querySelector('dialog')?.close();
+    rebuild();
+    profileDialog(client, rebuild);
+  });
+  dialog(t('profile.title'), h('div', {},
+    field(t('setup.displayName'), name),
+    field(t('language'), lang),
+    h('p', {}, h('small', {}, t('profile.address', { addr: client.config.addr }))),
+    h('p', {}, h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))), [
+    { label: t('profile.export'), onClick: () => { exportDialog(client); } },
+    { label: t('profile.lock'), onClick: () => location.reload() },
+    { label: t('save'), primary: true, onClick: () => client.setDisplayName(name.value) },
   ]);
 }
-

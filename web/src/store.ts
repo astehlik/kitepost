@@ -1,3 +1,4 @@
+import { t } from './i18n';
 // Encrypted key-value store on IndexedDB. Every record is AES-256-GCM encrypted with a
 // non-extractable key derived from the user's passphrase, so profile data at rest is
 // unreadable without it.
@@ -93,7 +94,7 @@ export class Store {
       if ((await unseal(key, verifier, 'verifier')) !== VERIFIER) throw new Error();
     } catch {
       db.close();
-      throw new Error('Wrong passphrase');
+      throw new Error(t('unlock.wrong'));
     }
     return new Store(db, key);
   }

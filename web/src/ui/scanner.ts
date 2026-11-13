@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { h } from './dom';
 
 interface Detector {
@@ -23,11 +24,11 @@ export function scanQr(title: string, hint: string, accept: (text: string) => bo
   return new Promise(resolve => {
     const video = h('video', { muted: true, playsinline: true });
     const canvas = h('canvas', { hidden: true });
-    const status = h('p', { class: 'hint' }, 'Starting camera…');
-    const paste = h('input', { type: 'text', placeholder: 'Or paste the code text here', spellcheck: 'false', 'aria-label': 'QR code text' });
+    const status = h('p', { class: 'hint' }, t('scanner.starting'));
+    const paste = h('input', { type: 'text', placeholder: t('scanner.paste'), spellcheck: 'false', 'aria-label': t('scanner.pasteLabel') });
     const dlg = h('dialog', { class: 'dialog scanner' },
       h('h2', {}, title), h('p', {}, hint), h('div', { class: 'viewfinder' }, video), canvas, status, paste,
-      h('div', { class: 'actions' }, h('button', { onclick: () => finish(undefined) }, 'Cancel')));
+      h('div', { class: 'actions' }, h('button', { onclick: () => finish(undefined) }, t('cancel'))));
     let stream: MediaStream | undefined;
     let done = false;
     const finish = (text: string | undefined) => {
@@ -41,7 +42,7 @@ export function scanQr(title: string, hint: string, accept: (text: string) => bo
     const check = (text: string | undefined) => {
       if (!text) return;
       if (accept(text)) finish(text.trim());
-      else status.textContent = 'This is not the right QR code.';
+      else status.textContent = t('scanner.wrong');
     };
     paste.addEventListener('input', () => check(paste.value));
     dlg.addEventListener('cancel', () => finish(undefined));
@@ -53,13 +54,13 @@ export function scanQr(title: string, hint: string, accept: (text: string) => bo
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
       } catch {
-        status.textContent = 'No camera available. Paste the code text instead.';
+        status.textContent = t('scanner.noCamera');
         return;
       }
       if (done) return finish(undefined);
       video.srcObject = stream;
       await video.play();
-      status.textContent = 'Point the camera at the QR code.';
+      status.textContent = t('scanner.point');
       const decode = await decoder();
       const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
       while (!done) {

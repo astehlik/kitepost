@@ -11,7 +11,7 @@ ARG VMAIL_GID=996
 ENV NODE_ENV=production PORT=8080 MAILBOXES_DIR=/mailboxes DATA_FILE=/data/invites.json
 WORKDIR /app
 COPY --from=deps /app/node_modules node_modules
-COPY package.json server.mjs sha512crypt.mjs ./
+COPY package.json server.mjs sha512crypt.mjs i18n.mjs ./
 COPY public public
 RUN mkdir /data && chown ${VMAIL_UID}:${VMAIL_GID} /data
 USER ${VMAIL_UID}:${VMAIL_GID}

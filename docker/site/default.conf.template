@@ -1,3 +1,27 @@
+# Language: ?lang= from the switch (remembered in a cookie that the app and invite pages share),
+# then that cookie, then Accept-Language.
+map $arg_lang $site_lang_arg {
+    ~^(en|de)$ $1;
+    default "";
+}
+map $cookie_kitepost_lang $site_lang_cookie {
+    ~^(en|de)$ $1;
+    default "";
+}
+map $http_accept_language $site_lang_accept {
+    ~*^de de;
+    default en;
+}
+map "$site_lang_arg:$site_lang_cookie:$site_lang_accept" $site_lang {
+    ~^(?<l>en|de): $l;
+    ~^:(?<l>en|de): $l;
+    ~:(?<l>\w+)$ $l;
+}
+map $site_lang_arg $site_lang_set_cookie {
+    "" "";
+    default "kitepost_lang=$site_lang_arg; Path=/; Max-Age=31536000; SameSite=Lax";
+}
+
 server {
     listen 8080;
     server_tokens off;
@@ -12,6 +36,17 @@ server {
     # Lets the app live at any path without editing the HTML.
     sub_filter 'href="app/"' 'href="${APP_URL}"';
     sub_filter_once off;
+
+    location = / {
+        # add_header here replaces the server-level ones, so they are repeated.
+        add_header Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
+        add_header Vary "Accept-Language, Cookie" always;
+        add_header Cache-Control "no-cache" always;
+        add_header Set-Cookie $site_lang_set_cookie;
+        try_files /index.$site_lang.html =404;
+    }
 
     location / {
         expires 1h;

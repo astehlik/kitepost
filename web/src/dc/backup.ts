@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Database, SqlValue } from 'sql.js';
 import type { AttachmentData } from '../wasm';
 import { SELF_CHAT, type AuthToken, type Chat, type Contact, type Message, type MessageState } from './types';
@@ -145,26 +146,26 @@ export async function readBackup(
   keyInfo: (addr: string, keyB64: string) => { fingerprint: string; key: string; relays: string[] | null; can_encrypt: boolean },
   progress: Progress,
 ): Promise<BackupProfile> {
-  progress('Reading backup…');
+  progress(t('backup.reading'));
   const entries = await listTar(readAt, total);
   const dbEntry = entries.get(DB_NAME);
-  if (!dbEntry) throw new Error('This is not a Delta Chat backup');
+  if (!dbEntry) throw new Error(t('backup.notBackup'));
   const header = await readAt(dbEntry.offset, 16);
-  if (cstr(header) !== 'SQLite format 3') throw new Error('Encrypted backups are not supported. Export the backup without a passphrase.');
+  if (cstr(header) !== 'SQLite format 3') throw new Error(t('backup.encrypted'));
 
-  progress('Opening database…');
+  progress(t('backup.opening'));
   const db = await openDatabase(await readAt(dbEntry.offset, dbEntry.size));
   try {
     const config = new Map(rows(db, 'SELECT keyname, value FROM config').map(r => [str(r.keyname), str(r.value)]));
     if (num(config.get('backup_version') ?? null) > MAX_BACKUP_VERSION) {
-      throw new Error('This backup is from a newer Delta Chat version than Kitepost supports');
+      throw new Error(t('backup.tooNew'));
     }
     const addr = (config.get('configured_addr') ?? '').toLowerCase();
-    if (!addr || config.get('configured') !== '1') throw new Error('The profile in this backup is not configured');
+    if (!addr || config.get('configured') !== '1') throw new Error(t('backup.notConfigured'));
 
     const transports = rows(db, 'SELECT id, addr, configured_param, is_published FROM transports');
     const transport = transports.find(t => str(t.addr).toLowerCase() === addr);
-    if (!transport) throw new Error(`No login data for ${addr} in the backup`);
+    if (!transport) throw new Error(t('backup.noLogin', { addr }));
     const login = JSON.parse(str(transport.configured_param));
     const password = String(login.imap_password ?? '');
     const imapHost = String(login.imap?.[0]?.connection?.host ?? '');
@@ -172,13 +173,13 @@ export async function readBackup(
     const relays = transports.filter(t => num(t.is_published)).map(t => str(t.addr).toLowerCase());
 
     const keyRow = rows(db, 'SELECT private_key FROM keypairs WHERE id = ?', [num(config.get('key_id') ?? null)])[0];
-    if (!keyRow) throw new Error('No secret key in the backup');
+    if (!keyRow) throw new Error(t('backup.noKey'));
     const secretKey = toBase64(keyRow.private_key as Uint8Array);
     const self = importKey(secretKey, addr, relays.length ? relays : [addr]);
 
     const sync = rows(db, 'SELECT uidvalidity, uid_next FROM imap_sync WHERE transport_id = ? AND folder = ?', [num(transport.id), 'INBOX'])[0];
 
-    progress('Importing contacts…');
+    progress(t('backup.contacts'));
     const fpById = new Map<number, string>([[CONTACT_SELF, 'self']]);
     const contacts: Contact[] = [];
     const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.blocked, c.verifier, k.public_key
@@ -199,7 +200,7 @@ export async function readBackup(
       }
     }
 
-    progress('Importing chats…');
+    progress(t('backup.chats'));
     const chats: Chat[] = [];
     const chatIdMap = new Map<number, string>();
     const members = new Map<number, number[]>();
@@ -226,7 +227,7 @@ export async function readBackup(
       }
     }
 
-    progress('Importing messages…');
+    progress(t('backup.messages'));
     const reactions = new Map<number, Record<string, string>>();
     for (const r of rows(db, 'SELECT msg_id, contact_id, reaction FROM reactions')) {
       const fp = fpById.get(num(r.contact_id));
@@ -256,7 +257,7 @@ export async function readBackup(
             data_b64: toBase64(await readAt(blob.offset, blob.size)), size: blob.size,
           });
         }
-        const text = str(r.txt) || (file && !blob ? `📎 ${p.get('v') ?? 'attachment'} (not imported)` : '');
+        const text = str(r.txt) || (file && !blob ? t('backup.notImported', { name: p.get('v') ?? file.split('/').pop()! }) : '');
         if (!text && !attachments.length) continue;
         const timestamp = num(r.timestamp) * 1000;
         const incoming = from !== 'self';

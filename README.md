@@ -33,6 +33,15 @@ sees ciphertext.
   `deltachat-rpc-server` in `e2e/requirements.txt`, regenerate it with
   `work/venv/bin/python -I scripts/backup-schema.py`.
 
+## Languages
+
+Kitepost is available in English and German. The web client, the landing page and the invite pages
+pick the language from the browser and offer a switch. The choice is stored in the cookie
+`kitepost_lang` for the whole host, so switching on one of them switches all three. A new
+language needs `web/src/i18n/<code>.ts` (the compiler reports missing keys), an entry in
+`invite/i18n.mjs`, `site/index.<code>.html` and the language code in the maps of
+`docker/site/default.conf.template`.
+
 ## Layout
 
 | Path        | What                                                                  |

@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { ImapClient } from '../net/imap';
 import { SmtpClient } from '../net/smtp';
 import type { Store } from '../store';
@@ -188,7 +189,7 @@ export class DcClient extends EventTarget {
   // ---------------------------------------------------------------- contacts & chats
 
   contactName(fp: string): string {
-    if (fp === 'self') return this.config.displayName || 'Me';
+    if (fp === 'self') return this.config.displayName || t('me');
     const c = this.contacts.get(fp);
     return c ? c.name || c.addr : fp.slice(0, 8);
   }
@@ -244,7 +245,7 @@ export class DcClient extends EventTarget {
   }
 
   chatTitle(chat: Chat): string {
-    if (chat.type === 'self') return 'Saved messages';
+    if (chat.type === 'self') return t('chat.saved');
     return chat.type === 'single' && chat.contact ? this.contactName(chat.contact) : chat.name;
   }
 
@@ -361,7 +362,7 @@ export class DcClient extends EventTarget {
 
   async joinInvite(link: string): Promise<string> {
     const invite = parseInvite(link);
-    if (invite.fingerprint === this.config.fingerprint) throw new Error('This is your own invite link');
+    if (invite.fingerprint === this.config.fingerprint) throw new Error(t('error.ownInvite'));
     const known = this.contacts.get(invite.fingerprint);
     if (!known) {
       await this.saveContact({
@@ -411,7 +412,7 @@ export class DcClient extends EventTarget {
     }
     this.bob.set(state.id, state);
     await this.store.put(`bob/${state.id}`, state);
-    await this.addInfo(chat.id, `Establishing a secure connection with ${invite.name || invite.addrs[0]}…`);
+    await this.addInfo(chat.id, t('info.connecting', { name: invite.name || invite.addrs[0] }));
     return chat.id;
   }
 
@@ -490,10 +491,10 @@ export class DcClient extends EventTarget {
   async sendText(chatId: string, text: string, attachment?: AttachmentData) {
     const chat = this.chats.get(chatId);
     if (!chat) throw new Error('unknown chat');
-    if (chat.left) throw new Error('You are no longer a member of this group');
+    if (chat.left) throw new Error(t('error.notMember'));
     const self = chat.type === 'self';
     const members = self ? [] : this.memberContacts(chat);
-    if (!self && !members.length) throw new Error('No encryption key for this chat yet');
+    if (!self && !members.length) throw new Error(t('error.noKey'));
 
     const msgs = this.messages.get(chatId) ?? [];
     const last = [...msgs].reverse().find(m => !m.info && m.state !== 'failed');
@@ -530,12 +531,12 @@ export class DcClient extends EventTarget {
 
   async createGroup(name: string, memberFps: string[]): Promise<string> {
     const chat: Chat = {
-      id: `g-${createId()}`, type: 'group', name: cleanName(name) || 'Group', grpid: createId(),
+      id: `g-${createId()}`, type: 'group', name: cleanName(name) || t('group.default'), grpid: createId(),
       members: memberFps.filter(fp => this.contacts.get(fp)?.publicKey), isRequest: false, left: false,
       lastActivity: Date.now(), unread: 0,
     };
     await this.saveChat(chat);
-    await this.addInfo(chat.id, 'Group created. Members will see it once you send the first message.');
+    await this.addInfo(chat.id, t('info.groupCreated'));
     return chat.id;
   }
 
@@ -629,7 +630,7 @@ export class DcClient extends EventTarget {
       if (!chat) {
         if (!p.headers['chat-group-name']) return;
         chat = {
-          id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name']) || 'Group', grpid,
+          id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name']) || t('group.default'), grpid,
           members, isRequest: false, left: false, lastActivity: Date.now(), unread: 0,
         };
       } else if (members.length) {
@@ -773,7 +774,7 @@ export class DcClient extends EventTarget {
     if (!chat) {
       if (removed && addrEq(removed, this.config.addr)) return undefined;
       chat = {
-        id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name'] ?? '') || 'Group', grpid,
+        id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name'] ?? '') || t('group.default'), grpid,
         members: [], isRequest: !this.isAccepted(sender), left: false, lastActivity: Date.now(), unread: 0,
       };
     }
@@ -785,15 +786,15 @@ export class DcClient extends EventTarget {
       if (removed) {
         if (addrEq(removed, this.config.addr)) {
           chat.left = true;
-          await this.addInfo(chat.id, `${this.contactName(sender.fingerprint)} removed you from the group.`);
+          await this.addInfo(chat.id, t('info.removedYou', { name: this.contactName(sender.fingerprint) }));
         } else {
           for (const fp of members) if (addrEq(this.contacts.get(fp)?.addr ?? '', removed)) members.delete(fp);
-          await this.addInfo(chat.id, `${removed} was removed by ${this.contactName(sender.fingerprint)}.`);
+          await this.addInfo(chat.id, t('info.removed', { addr: removed, name: this.contactName(sender.fingerprint) }));
         }
       }
       if (added) {
         if (addrEq(added, this.config.addr)) chat.left = false;
-        else await this.addInfo(chat.id, `${added} was added by ${this.contactName(sender.fingerprint)}.`);
+        else await this.addInfo(chat.id, t('info.added', { addr: added, name: this.contactName(sender.fingerprint) }));
       }
       chat.members = [...members];
       const name = cleanName(p.headers['chat-group-name'] ?? '');
@@ -885,7 +886,7 @@ export class DcClient extends EventTarget {
             attach_pubkey: true, sign: true, compress: false,
           }, members.flatMap(m => m.relays), true);
           await this.saveMessage({
-            id: mid, chatId: chat.id, from: 'self', text: `${this.contactName(fp)} joined the group.`,
+            id: mid, chatId: chat.id, from: 'self', text: t('info.joinedGroup', { name: this.contactName(fp) }),
             timestamp: Date.now(), state: 'sent', info: true, attachments: [], reactions: {},
           });
           return 'done';
@@ -893,13 +894,13 @@ export class DcClient extends EventTarget {
         const chat = await this.singleChat(fp, false);
         if (chat.isRequest) await this.acceptChat(chat.id);
         await this.sendHandshake(bob, 'vc-contact-confirm');
-        await this.addInfo(chat.id, `${this.contactName(fp)} joined via your invite. The connection is verified.`);
+        await this.addInfo(chat.id, t('info.joinedInvite', { name: this.contactName(fp) }));
         return 'ignore';
       }
       case 'vc-contact-confirm': {
         for (const b of [...this.bob.values()]) {
           if (b.stage !== 'confirm' || b.invite.group || p.signature !== b.invite.fingerprint) continue;
-          await this.finishBob(b, 'Secure connection established. The contact is verified.');
+          await this.finishBob(b, t('info.connected'));
         }
         return 'ignore';
       }
@@ -908,7 +909,7 @@ export class DcClient extends EventTarget {
         if (addrEq(added, this.config.addr)) {
           for (const b of [...this.bob.values()]) {
             if (b.stage === 'confirm' && b.invite.group?.grpid === p.headers['chat-group-id'] && p.signature === b.invite.fingerprint) {
-              await this.finishBob(b, 'You joined the group.');
+              await this.finishBob(b, t('info.youJoined'));
             }
           }
         }

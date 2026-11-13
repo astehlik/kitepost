@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Kitepost: Ende-zu-Ende-verschlüsselter Chat im Browser, für das Delta-Chat-Netzwerk. Keine Installation, kein Klartext auf irgendeinem Server.">
+  <title>Kitepost</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="alternate" hreflang="en" href="?lang=en">
+</head>
+<body>
+  <header class="hero">
+    <nav class="wrap nav">
+      <span class="brand"><img src="icon.svg" alt="" width="28" height="28"> Kitepost</span>
+      <span class="nav-right">
+        <a class="lang" href="?lang=en" hreflang="en" lang="en">English</a>
+        <a class="btn small" href="app/">App öffnen</a>
+      </span>
+    </nav>
+    <div class="wrap hero-body">
+      <h1>Verschlüsselter Chat, der komplett in deinem Browser&nbsp;läuft.</h1>
+      <p class="lead">Kitepost ist ein Client für das Delta-Chat-Netzwerk, kompiliert zu WebAssembly. Deine Schlüssel, deine Nachrichten und die TLS-Verbindung zu deinem Relay bleiben auf deinem Gerät. Nichts zu installieren, und kein Server sieht jemals Klartext.</p>
+      <p class="cta">
+        <a class="btn" href="app/">Jetzt chatten</a>
+        <a class="btn ghost" href="#how">So funktioniert’s</a>
+      </p>
+      <p class="compat">Funktioniert mit den Delta-Chat-Apps für Android, iOS und Desktop.</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="wrap" id="start">
+      <h2>In drei Schritten loslegen</h2>
+      <ol class="steps">
+        <li>
+          <h3>Profil anlegen</h3>
+          <p>Öffne die App und wähle eine Passphrase. Sie verschlüsselt dein Profil in diesem Browser und verlässt ihn nie. Wähle einen Anzeigenamen. Für dich wird eine neue Adresse auf dem Chatmail-Relay angelegt, oder du meldest dich mit einer vorhandenen an. Du nutzt schon Delta Chat? Dann importiere stattdessen ein Backup deines Profils.</p>
+        </li>
+        <li>
+          <h3>Mit jemandem verbinden</h3>
+          <p>Tippe auf <strong>Meine Einladung</strong> und teile den Link oder QR-Code, oder füge unter <strong>Kontakt hinzufügen</strong> den Einladungslink einer anderen Person ein. Beim Verbindungsaufbau werden beide Schlüssel geprüft, der Kontakt ist also <em>verifiziert</em> und nicht nur hinzugefügt.</p>
+        </li>
+        <li>
+          <h3>Chatten</h3>
+          <p>Schicke Nachrichten, Bilder und Dateien, erstelle Gruppen und teile Gruppen-Einladungen. Alles ist mit OpenPGP Ende-zu-Ende-verschlüsselt, genau wie in den Delta-Chat-Apps.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="band" id="how">
+      <div class="wrap">
+        <h2>So funktioniert’s</h2>
+        <div class="diagram" role="img" aria-label="Der Browser verbindet sich über die Bridge mit dem Chatmail-Relay; die Bridge sieht nur TLS-Chiffretext">
+          <div class="node you"><strong>Dein Browser</strong><span>Schlüssel · Entschlüsselung · TLS</span></div>
+          <div class="link"><span>TLS in WebSocket</span></div>
+          <div class="node"><strong>Bridge</strong><span>leitet verschlüsselte Bytes weiter</span></div>
+          <div class="link"><span>TLS (IMAP / SMTP)</span></div>
+          <div class="node"><strong>Chatmail-Relay</strong><span>speichert verschlüsselte Mails</span></div>
+        </div>
+        <div class="grid">
+          <article>
+            <h3>Delta-Chat-Core in WebAssembly</h3>
+            <p>Verschlüsselung, Schlüsselverwaltung und Nachrichtenformate verwenden den Code von Delta Chat Core (rPGP, Mail-Parser, SecureJoin), für den Browser kompiliert. Nachrichten sind deshalb voll kompatibel mit den offiziellen Apps.</p>
+          </article>
+          <article>
+            <h3>TLS endet in deinem Browser</h3>
+            <p>Browser können selbst keine Mail-Verbindungen öffnen, deshalb leitet eine kleine Bridge die Bytes weiter. Die TLS-Sitzung zu deinem Relay läuft in der Seite und prüft dessen Zertifikat. So kann die Bridge nichts lesen oder verändern, was sie weiterleitet.</p>
+          </article>
+          <article>
+            <h3>Verschlüsselt gespeichert</h3>
+            <p>Dein Profil liegt in der IndexedDB des Browsers, verschlüsselt mit AES-256-GCM und einem Schlüssel, der aus deiner Passphrase abgeleitet wird. Eine strikte Content Security Policy sorgt dafür, dass nur der eigene Code der App auf der Seite läuft.</p>
+          </article>
+          <article>
+            <h3>Verifizierte Kontakte</h3>
+            <p>Einladungslinks enthalten den Schlüssel-Fingerabdruck der einladenden Person und ein Einmal-Geheimnis. Beide Seiten prüfen die Schlüssel beim SecureJoin-Handshake, damit ein Server dazwischen sie nicht austauschen kann.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap" id="faq">
+      <h2>Gut zu wissen</h2>
+      <details>
+        <summary>Kann ich Kitepost zusammen mit der Delta-Chat-App auf meinem Handy nutzen?</summary>
+        <p>Ja, auf zwei Arten. Mit demselben Profil: Öffne in Delta Chat Einstellungen → Chats und Medien → Backup exportieren und wähle beim Einrichten von Kitepost „Backup-Datei importieren“. Danach empfangen beide Geräte alle Nachrichten, und was du auf einem sendest oder liest, erscheint auch auf dem anderen. Oder mit einem eigenen Profil: Kitepost zeigt direkt nach dem Einrichten einen QR-Code. Scannst du ihn mit Delta Chat auf deinem Handy, sind beide verbunden.</p>
+        <p>Es geht auch andersherum: Profil → Backup exportieren in Kitepost speichert eine Datei, die Delta Chat mit „Ich habe bereits ein Profil“ → „Aus Backup wiederherstellen“ importiert.</p>
+      </details>
+      <details>
+        <summary>Was passiert, wenn ich meine Passphrase vergesse?</summary>
+        <p>Das Profil lässt sich nicht wiederherstellen, weil niemand sonst den Schlüssel hat. Du kannst es auf dem Entsperr-Bildschirm löschen und ein neues anlegen.</p>
+      </details>
+      <details>
+        <summary>Welche Browser werden unterstützt?</summary>
+        <p>Aktuelle Versionen von Firefox, Chrome, Edge und Safari. Die Daten liegen pro Browser und Gerät. Private Fenster vergessen beim Schließen alles.</p>
+      </details>
+      <details>
+        <summary>Ist der Browser so sicher wie eine native App?</summary>
+        <p>Die Kryptografie ist dieselbe. Der Unterschied liegt darin, wie der Code zu dir kommt: Eine Web-App wird bei jedem Besuch von diesem Server geladen, du vertraust also jedes Mal dem Betreiber. Für die höchste Sicherheit nutze die nativen Delta-Chat-Apps oder betreibe diesen Client selbst.</p>
+      </details>
+      <details>
+        <summary>Kann ich Kitepost selbst betreiben?</summary>
+        <p>Ja. Startseite, Web-Client und Bridge sind drei kleine Container, die hinter jedem Reverse Proxy und in Unterverzeichnissen laufen. Die Docker-Compose-Einrichtung steht in der README des Projekts.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <p>Kitepost ist ein unabhängiges Projekt, steht in keiner Verbindung zu Delta Chat und funktioniert mit dem <a href="https://delta.chat" rel="noopener noreferrer">Delta-Chat</a>-Netzwerk.</p>
+  </footer>
+</body>
+</html>

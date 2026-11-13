@@ -37,3 +37,4 @@ td.status, td.dates { white-space: nowrap; }
   td.accounts { overflow-wrap: anywhere; }
 }
 .error { color: #b3261e; }
+.lang-switch { margin: 1.5rem 0 0; font-size: .9rem; text-align: right; }

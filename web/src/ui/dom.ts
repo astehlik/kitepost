@@ -1,3 +1,4 @@
+import { getLanguage } from '../i18n';
 type Child = Node | string | false | null | undefined;
 type Attrs = Record<string, string | boolean | ((ev: Event) => void) | undefined>;
 
@@ -54,8 +55,8 @@ export function formatTime(ts: number): string {
   const d = new Date(ts);
   const now = new Date();
   return d.toDateString() === now.toDateString()
-    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+    ? d.toLocaleTimeString(getLanguage(), { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString(getLanguage(), { day: 'numeric', month: 'short' });
 }
 
 export function base64ToBlob(b64: string, type: string): Blob {
