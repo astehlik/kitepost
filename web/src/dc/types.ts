@@ -23,6 +23,7 @@ export interface Contact {
   name: string;
   publicKey: string;
   relays: string[];
+  /** Connected via SecureJoin in Kitepost; current core no longer records this, so imports lack it. */
   verified: boolean;
   blocked: boolean;
 }

@@ -220,6 +220,12 @@ export class DcClient extends EventTarget {
     return chat;
   }
 
+  /** Like core, messages from contacts with an accepted chat are not contact requests. */
+  private isAccepted(c: Contact): boolean {
+    const chat = this.chats.get(`c-${c.fingerprint}`);
+    return c.verified || (!!chat && !chat.isRequest);
+  }
+
   private async singleChat(fp: string, isRequest: boolean): Promise<Chat> {
     const id = `c-${fp}`;
     const existing = this.chats.get(id);
@@ -684,7 +690,7 @@ export class DcClient extends EventTarget {
       if (!found) return;
       chat = found;
     } else {
-      chat = await this.singleChat(sender.fingerprint, !sender.verified);
+      chat = await this.singleChat(sender.fingerprint, !this.isAccepted(sender));
     }
     await this.applyMessage(p, mid, chat, sender.fingerprint);
   }
@@ -751,7 +757,7 @@ export class DcClient extends EventTarget {
       if (removed && addrEq(removed, this.config.addr)) return undefined;
       chat = {
         id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name'] ?? '') || 'Group', grpid,
-        members: [], isRequest: !sender.verified, left: false, lastActivity: Date.now(), unread: 0,
+        members: [], isRequest: !this.isAccepted(sender), left: false, lastActivity: Date.now(), unread: 0,
       };
     }
     const isNew = !this.chats.has(chat.id);

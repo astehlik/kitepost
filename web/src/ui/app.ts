@@ -343,7 +343,7 @@ function startMain(client: DcClient) {
       ? 'Notes, synced with your other devices'
       : chat.type === 'group'
       ? `${chat.members.length + 1} members`
-      : contact ? `${contact.addr}${contact.verified ? ' · ✔ verified' : ''}` : '';
+      : contact ? contact.addr : '';
     const header = h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
@@ -500,7 +500,9 @@ function formatFingerprint(fp: string): string {
 function fingerprintDialog(client: DcClient, fp: string) {
   const c = client.contacts.get(fp);
   dialog('End-to-end encryption', h('div', { class: 'fingerprints' },
-    h('p', {}, c?.verified ? '✔ Verified through an invite link.' : 'Not verified. Compare fingerprints in person or connect via an invite link.'),
+    h('p', {}, c?.verified
+      ? '✔ Connected through an invite link, which checked both keys.'
+      : 'Messages are end-to-end encrypted with this key. To check it, compare the fingerprints in person.'),
     h('h3', {}, client.config.displayName || 'Me'), h('code', {}, formatFingerprint(client.config.fingerprint)),
     h('h3', {}, client.contactName(fp)), h('code', {}, formatFingerprint(fp))), [{ label: 'Close', primary: true }]);
 }
