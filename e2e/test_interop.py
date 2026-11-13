@@ -197,7 +197,13 @@ def main():
             snap = wait_text(dora, "Erin in web group")
             assert dora.get_chat_by_id(snap.chat_id).get_basic_snapshot().name == "Web group", snap
 
-            log("9. reload: encrypted storage unlocks and history persists")
+            log("9. renaming the profile updates the header without a reload")
+            page.get_by_role("button", name="Edit profile").click()
+            page.locator("dialog .field input").fill("Webby Renamed")
+            page.get_by_role("button", name="Save").click()
+            expect(page.locator(".profile strong")).to_have_text("Webby Renamed")
+
+            log("10. reload: encrypted storage unlocks and history persists")
             page.reload()
             page.locator('input[type="password"]').fill("correct horse battery")
             page.get_by_role("button", name="Unlock").click()

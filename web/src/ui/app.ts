@@ -273,16 +273,22 @@ function startMain(client: DcClient) {
   const status = h('span', { class: 'status' });
   const chatList = h('ul', { class: 'chatlist' });
   const pane = h('section', { class: 'pane' });
+  const me = h('div', { class: 'me' });
+  const edit = h('button', { class: 'icon-button', title: 'Edit profile', 'aria-label': 'Edit profile', onclick: () => profileDialog(client) });
+  edit.append(icon(ICONS.edit));
   const sidebar = h('aside', { class: 'sidebar' },
-    h('header', { class: 'profile' },
-      h('div', { class: 'who' }, h('strong', {}, client.config.displayName || 'Me'), h('small', {}, client.config.addr)),
-      status),
-    h('div', { class: 'toolbar' },
-      h('button', { onclick: () => showInvite(client) }, 'My invite'),
-      h('button', { onclick: () => joinDialog(client, open) }, 'Add contact'),
-      h('button', { onclick: () => groupDialog(client, open) }, 'New group'),
-      h('button', { onclick: () => profileDialog(client) }, 'Profile')),
+    h('header', { class: 'profile' }, me, status, edit),
+    h('nav', { class: 'actions' },
+      action(ICONS.qr, 'My invite', () => showInvite(client)),
+      action(ICONS.addContact, 'Add contact', () => joinDialog(client, open)),
+      action(ICONS.group, 'New group', () => groupDialog(client, open))),
     chatList);
+
+  function renderProfile() {
+    const name = client.config.displayName || 'Me';
+    me.replaceChildren(avatar(name, client.config.addr),
+      h('span', { class: 'who' }, h('strong', {}, name), h('small', {}, client.config.addr)));
+  }
   clear(root());
   root().append(h('div', { class: 'layout' }, sidebar, pane));
 
@@ -300,10 +306,12 @@ function startMain(client: DcClient) {
       const msgs = client.messages.get(chat.id) ?? [];
       const last = msgs[msgs.length - 1];
       chatList.append(h('li', { class: chat.id === current ? 'active' : '', onclick: () => open(chat.id) },
-        h('div', { class: 'row' },
-          h('strong', {}, client.chatTitle(chat) || '…'),
-          chat.unread ? h('span', { class: 'badge' }, String(chat.unread)) : null),
-        h('small', {}, chat.isRequest ? 'Contact request' : last ? `${last.from === 'self' && !last.info ? 'Me: ' : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : '')));
+        chatAvatar(client, chat),
+        h('div', { class: 'item' },
+          h('div', { class: 'row' },
+            h('strong', {}, client.chatTitle(chat) || '…'),
+            chat.unread ? h('span', { class: 'badge' }, String(chat.unread)) : null),
+          h('small', {}, chat.isRequest ? 'Contact request' : last ? `${last.from === 'self' && !last.info ? 'Me: ' : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : ''))));
     }
     if (!chatList.children.length) chatList.append(h('li', { class: 'empty' }, 'No chats yet. Share your invite link or add a contact.'));
     document.title = unread ? `(${unread}) Kitepost` : 'Kitepost';
@@ -346,6 +354,7 @@ function startMain(client: DcClient) {
       : contact ? contact.addr : '';
     const header = h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
+      chatAvatar(client, chat),
       h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
       chat.type === 'group' ? h('button', { onclick: () => showInvite(client, chat.id) }, 'Invite link') : null,
       contact ? h('button', { onclick: () => fingerprintDialog(client, contact.fingerprint) }, 'Encryption') : null,
@@ -416,6 +425,7 @@ function startMain(client: DcClient) {
 
   function renderAll() {
     root().querySelector('.layout')?.classList.toggle('chat-open', !!current);
+    renderProfile();
     renderList();
     renderPane();
     renderStatus();
@@ -425,6 +435,7 @@ function startMain(client: DcClient) {
     const what = (ev as CustomEvent<string>).detail;
     if (what === 'status') return renderStatus();
     renderList();
+    if (what === 'config') renderProfile();
     if (what === 'chats' || what === `messages:${current}` || what === 'config') {
       const draft = pane.querySelector('textarea')?.value;
       renderPane();
@@ -447,6 +458,47 @@ function startMain(client: DcClient) {
   });
   renderAll();
   client.start();
+}
+
+// ------------------------------------------------------------------ avatars & icons
+
+const ICONS = {
+  qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z',
+  addContact: 'M15 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 8v6M22 11h-6',
+  edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
+  group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
+};
+
+function icon(d: string): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', d);
+  svg.append(path);
+  return svg;
+}
+
+function action(d: string, label: string, onclick: () => void) {
+  const b = h('button', { onclick }, h('span', {}, label));
+  b.prepend(icon(d));
+  return b;
+}
+
+/** Letter avatar with a stable color per address, like Delta Chat's. */
+function avatar(name: string, key: string, letter?: string) {
+  let hash = 0;
+  for (const c of key) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+  const el = h('span', { class: 'avatar', 'aria-hidden': 'true' }, letter ?? ([...name.trim()][0] ?? '?').toUpperCase());
+  el.style.background = `hsl(${hash % 360} 42% 42%)`;
+  return el;
+}
+
+function chatAvatar(client: DcClient, chat: Chat) {
+  if (chat.type === 'self') return avatar('', 'self', '★');
+  const key = chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.addr ?? chat.id : chat.grpid ?? chat.id;
+  return avatar(client.chatTitle(chat), key);
 }
 
 // ------------------------------------------------------------------ dialogs
