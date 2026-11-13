@@ -39,7 +39,10 @@ services:
     volumes:
       - ./iroh-relay.toml:/etc/iroh-relay.toml:ro
     ports: ["127.0.0.1:3340:3340"]
-    healthcheck: { disable: true }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3340/ping"]
+      interval: 2s
+      retries: 30
     networks: [relay]
 
   invite:
