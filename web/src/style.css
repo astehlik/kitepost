@@ -130,3 +130,7 @@ textarea { resize: none; }
   .back { display: inline-block; }
   .msg { max-width: 88%; }
 }
+.card .import { border-top: 1px solid var(--border); margin-top: 1.5rem; padding-top: 1rem; }
+.card .import h2 { font-size: 1.05rem; margin: 0 0 .5rem; }
+.card .import .hint { color: var(--muted); }
+.card .import .row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; }

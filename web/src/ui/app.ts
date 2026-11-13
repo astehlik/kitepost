@@ -1,7 +1,8 @@
+import { fileReader, readBackup } from '../dc/backup';
 import { DcClient } from '../dc/client';
 import type { Chat, Message } from '../dc/types';
 import { Store } from '../store';
-import { qrSvg, type AttachmentData } from '../wasm';
+import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, dialog, formatTime, h, trustedSvg } from './dom';
 
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
@@ -189,7 +190,46 @@ function renderAccountSetup(store: Store) {
   h('details', {}, h('summary', {}, 'Advanced'), field('Bridge URL', bridge, 'WebSocket bridge that relays the end-to-end TLS stream.')),
   err,
   h('button', { class: 'primary', type: 'submit' }, 'Create profile'));
-  screen('Set up your profile', form);
+
+  const backup = h('input', { type: 'file', accept: '.tar,application/x-tar', hidden: true });
+  const importStatus = h('p', { class: 'hint', hidden: true });
+  const importErr = errorBox();
+  const bridgeUrl = () => bridge.value.trim() || DEFAULT_BRIDGE;
+  const say = (t: string) => { importStatus.textContent = t; };
+  const importFrom = async (blob: Blob) => {
+    const profile = await readBackup(fileReader(blob), blob.size, importKeypair, publicKeyInfo, say);
+    say(`Signing in as ${profile.addr}…`);
+    return DcClient.importBackup(store, profile, bridgeUrl());
+  };
+  const busy = async (job: () => Promise<DcClient | undefined>) => {
+    importErr.hidden = true;
+    importStatus.hidden = false;
+    importBox.classList.add('busy');
+    try {
+      const client = await job();
+      if (client) startMain(client);
+      else importStatus.hidden = true;
+    } catch (e) {
+      importStatus.hidden = true;
+      showError(importErr, e);
+    } finally {
+      importBox.classList.remove('busy');
+    }
+  };
+  const importBox = h('div', { class: 'import' },
+    h('h2', {}, 'Already using Delta Chat?'),
+    h('p', {}, 'Use the same profile here as on your phone. Your chats, contacts and keys are copied over, and new messages arrive on both devices.'),
+    importStatus, importErr,
+    h('div', { class: 'row' },
+      h('button', { type: 'button', class: 'primary', onclick: () => backup.click() }, 'Import backup file…')),
+    h('small', {}, 'In Delta Chat, export one under Settings → Chats and media → Export backup.'),
+    backup);
+  backup.addEventListener('change', () => {
+    const file = backup.files?.[0];
+    backup.value = '';
+    if (file) void busy(() => importFrom(file));
+  });
+  screen('Set up your profile', form, importBox);
   name.focus();
 }
 

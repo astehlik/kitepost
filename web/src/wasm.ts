@@ -50,6 +50,7 @@ export interface ParsedMessage {
   is_reaction: boolean;
   attachments: AttachmentData[];
   mdn_for: string[];
+  is_sync: boolean;
 }
 
 export interface ParseContext {
@@ -85,6 +86,10 @@ export interface OutgoingMessage {
 
 export function generateKeypair(addr: string, relays: string[]): KeyPair {
   return JSON.parse(core.generate_keypair(addr, relays.join(','), Math.floor(Date.now() / 1000)));
+}
+
+export function importKeypair(secretB64: string, addr: string, relays: string[]): KeyPair {
+  return JSON.parse(core.import_keypair(secretB64, addr, relays.join(','), Math.floor(Date.now() / 1000)));
 }
 
 export function publicKeyInfo(addr: string, key: string): KeyInfo {

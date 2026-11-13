@@ -41,6 +41,20 @@ pub fn generate_keypair(addr: &str, relays_csv: &str, now: u32) -> Result<String
     })
 }
 
+/// Derives the public key for a secret key from a Delta Chat backup.
+#[wasm_bindgen]
+pub fn import_keypair(secret_b64: &str, addr: &str, relays_csv: &str, now: u32) -> Result<String, JsError> {
+    let secret = keys::secret_from_base64(secret_b64).map_err(js_err)?;
+    secret.verify_bindings().map_err(|e| JsError::new(&e.to_string()))?;
+    let public =
+        keys::secret_key_to_public_key(secret.clone(), now, addr, relays_csv).map_err(js_err)?;
+    to_json(&KeyPair {
+        secret: keys::to_base64(&secret),
+        public: keys::to_base64(&public),
+        fingerprint: keys::public_fingerprint(&public),
+    })
+}
+
 #[wasm_bindgen]
 pub fn public_key_info(addr: &str, public_b64: &str) -> Result<String, JsError> {
     let key = keys::public_from_base64(public_b64).map_err(js_err)?;

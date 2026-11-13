@@ -16,6 +16,14 @@ Browsers cannot open TCP sockets, so a small **bridge** relays bytes. TLS is ter
 the page* and the relay certificate is checked against the WebPKI roots, so the bridge only ever
 sees ciphertext.
 
+## Getting started
+
+- **New profile:** right after creating it, Kitepost shows a QR code. Scanning it with Delta Chat on
+  a phone makes the two verified contacts.
+- **Same profile as the phone:** "Import backup file…" reads a backup exported in Delta Chat
+  (unencrypted, as the apps export it). Afterwards both devices receive all messages, and copies of
+  sent messages and edits are kept in sync like between two Delta Chat devices.
+
 ## Layout
 
 | Path        | What                                                                  |
@@ -121,8 +129,8 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
 - **Limit of any web app**: the code is delivered by the server on each visit. Users trust the
   operator every time they load it.
 
-Not supported yet: multi-device with the same profile, broadcast channels, webxdc, calls,
-read-receipt sending, ephemeral messages.
+Not supported yet: encrypted backups, multi-device sync items (other than sent messages),
+broadcast channels, webxdc, calls, read-receipt sending, ephemeral messages.
 
 ## Development
 

@@ -75,6 +75,8 @@ pub struct ParsedMessage {
     pub is_reaction: bool,
     pub attachments: Vec<AttachmentOut>,
     pub mdn_for: Vec<String>,
+    /// Multi-device sync message from another device of the same profile.
+    pub is_sync: bool,
 }
 
 fn key_info(addr: &str, key: &SignedPublicKey) -> KeyInfo {
@@ -194,11 +196,16 @@ struct Content {
     is_reaction: bool,
     attachments: Vec<AttachmentOut>,
     mdn_for: Vec<String>,
+    is_sync: bool,
 }
 
 fn collect_content(part: &ParsedMail, out: &mut Content, budget: &mut usize) -> Result<()> {
     let mimetype = part.ctype.mimetype.to_lowercase();
     if mimetype == "multipart/report" {
+        if part.ctype.params.get("report-type").map(String::as_str) == Some("multi-device-sync") {
+            out.is_sync = true;
+            return Ok(());
+        }
         if part.ctype.params.get("report-type").map(String::as_str)
             == Some("disposition-notification")
             && let Some(report) = part.subparts.get(1)
@@ -412,6 +419,7 @@ pub fn parse(raw: &[u8], ctx: ParseContext) -> Result<ParsedMessage> {
         is_reaction: false,
         attachments: vec![],
         mdn_for: vec![],
+        is_sync: false,
     };
     let mut budget = MAX_ATTACHMENT_BYTES;
     if let Some(inner) = &inner_mail {
@@ -436,5 +444,6 @@ pub fn parse(raw: &[u8], ctx: ParseContext) -> Result<ParsedMessage> {
         is_reaction: content.is_reaction,
         attachments: content.attachments,
         mdn_for: content.mdn_for,
+        is_sync: content.is_sync,
     })
 }

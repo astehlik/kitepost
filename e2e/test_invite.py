@@ -53,7 +53,7 @@ def main():
             unlock_new_profile(page, APP)
             page.locator(".field", has_text="Chatmail relay").locator("input").fill(RELAY)
             page.get_by_role("button", name="Create profile").click()
-            expect(page.locator(".error")).to_contain_text("failed", timeout=TIMEOUT)
+            expect(page.locator("form .error")).to_contain_text("failed", timeout=TIMEOUT)
 
             log("2. admin creates a one-time invite")
             admin = browser.new_page()

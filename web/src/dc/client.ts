@@ -1,6 +1,7 @@
 import { ImapClient } from '../net/imap';
 import { SmtpClient } from '../net/smtp';
 import type { Store } from '../store';
+import type { BackupProfile } from './backup';
 import {
   generateKeypair, parseMessage, publicKeyInfo, renderMessage,
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
@@ -77,6 +78,27 @@ export class DcClient extends EventTarget {
     };
     await store.put('config', config);
     return new DcClient(store, config);
+  }
+
+  static async importBackup(store: Store, b: BackupProfile, bridgeUrl: string): Promise<DcClient> {
+    const imap = await ImapClient.connect(bridgeUrl, b.host);
+    try {
+      await imap.login(b.addr, b.password);
+    } finally {
+      imap.close();
+    }
+    const config: Config = {
+      addr: b.addr, password: b.password, imapHost: b.host, smtpHost: b.host, displayName: cleanName(b.displayName),
+      secretKey: b.secretKey, publicKey: b.publicKey, fingerprint: b.fingerprint,
+      inviteNumber: b.inviteNumber ?? createId(), uidValidity: b.uidValidity, lastUid: b.lastUid, bridgeUrl, bccSelf: true,
+    };
+    for (const c of b.contacts) await store.put(`contact/${c.fingerprint}`, c);
+    for (const c of b.chats) await store.put(`chat/${c.id}`, c);
+    for (const m of b.messages) await store.put(`msg/${m.chatId}/${m.id}`, m);
+    for (const t of b.tokens) await store.put(`token/${t.token}`, t);
+    await store.put('seen', b.seen);
+    await store.put('config', config);
+    return (await DcClient.load(store))!;
   }
 
   static async load(store: Store): Promise<DcClient | undefined> {
@@ -350,8 +372,10 @@ export class DcClient extends EventTarget {
   private async send(
     msg: Partial<OutgoingMessage> & Pick<OutgoingMessage, 'to' | 'subject' | 'text' | 'headers' | 'encryption' | 'attach_pubkey' | 'sign' | 'compress'>,
     recipients: string[],
+    bccSelf = false,
   ): Promise<string> {
     const { config } = this;
+    if (bccSelf && config.bccSelf) recipients = [...recipients, config.addr];
     const rendered = renderMessage({
       rfc724_mid: createMid(),
       from_addr: config.addr,
@@ -414,7 +438,7 @@ export class DcClient extends EventTarget {
         gossip: members.length > 1 ? members.map(m => ({ addr: m.addr, key: m.publicKey })) : [],
         encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
         attach_pubkey: true, sign: true, compress: true,
-      }, members.flatMap(m => m.relays));
+      }, members.flatMap(m => m.relays), true);
       await this.store.delete(`msg/${chatId}/${local.id}`);
       this.messages.set(chatId, (this.messages.get(chatId) ?? []).filter(m => m.id !== local.id));
       await this.saveMessage({ ...local, id: mid, state: 'sent' });
@@ -472,7 +496,10 @@ export class DcClient extends EventTarget {
     const mid = stripMid(p.headers['message-id']);
     if (!mid || this.seen.has(mid)) return false;
     await this.markSeen(mid);
-    if (addrEq(p.from.addr, this.config.addr)) return false;
+    if (addrEq(p.from.addr, this.config.addr)) {
+      await this.receiveOwn(p, mid);
+      return false;
+    }
     if (p.decryption_error) console.warn('decryption failed', mid, p.decryption_error);
 
     if (p.headers['secure-join-invitenumber'] || p.headers['secure-join']) {
@@ -499,6 +526,47 @@ export class DcClient extends EventTarget {
     }
     await this.handleChatMessage(p, mid, sender);
     return false;
+  }
+
+  /** Messages sent by another device of this profile, like core's receive_imf for outgoing messages. */
+  private async receiveOwn(p: ParsedMessage, mid: string) {
+    if (!p.encrypted || p.signature !== this.config.fingerprint) return;
+    if (!this.config.bccSelf) {
+      this.config.bccSelf = true;
+      await this.saveConfig();
+    }
+    if (p.is_sync || p.mdn_for.length || p.headers['secure-join'] || p.headers['secure-join-invitenumber']) return;
+    for (const g of p.gossip) {
+      if (g.fingerprint !== this.config.fingerprint && g.can_encrypt && !this.contacts.get(g.fingerprint)?.publicKey) {
+        await this.upsertContact(g.fingerprint, g.addr, g.key).catch(() => undefined);
+      }
+    }
+    const grpid = p.headers['chat-group-id'];
+    let chat: Chat | undefined;
+    if (grpid) {
+      chat = this.groupByGrpid(grpid);
+      const members = this.recipientFingerprints(p).filter(fp => fp !== this.config.fingerprint && this.contacts.has(fp));
+      if (!chat) {
+        if (!p.headers['chat-group-name']) return;
+        chat = {
+          id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name']) || 'Group', grpid,
+          members, isRequest: false, left: false, lastActivity: Date.now(), unread: 0,
+        };
+      } else if (members.length) {
+        chat.members = members;
+      }
+      const name = cleanName(p.headers['chat-group-name'] ?? '');
+      if (name) chat.name = name;
+      if (p.headers['chat-group-member-removed'] && addrEq(p.headers['chat-group-member-removed'], this.config.addr)) chat.left = true;
+      await this.saveChat(chat);
+    } else {
+      const fp = p.intended_recipients.find(f => f !== this.config.fingerprint && this.contacts.get(f)?.publicKey)
+        ?? this.recipientFingerprints(p).find(f => f !== this.config.fingerprint);
+      if (!fp) return;
+      chat = await this.singleChat(fp, false);
+      if (chat.isRequest) await this.acceptChat(chat.id);
+    }
+    await this.applyMessage(p, mid, chat, 'self');
   }
 
   private async senderContact(p: ParsedMessage): Promise<Contact | undefined> {
@@ -528,18 +596,21 @@ export class DcClient extends EventTarget {
     } else {
       chat = await this.singleChat(sender.fingerprint, !sender.verified);
     }
+    await this.applyMessage(p, mid, chat, sender.fingerprint);
+  }
 
+  private async applyMessage(p: ParsedMessage, mid: string, chat: Chat, from: string) {
     const edit = stripMid(p.headers['chat-edit']);
     const del = p.headers['chat-delete'];
     if (edit) {
       const orig = this.messageById(edit);
-      if (orig && orig.from === sender.fingerprint) await this.saveMessage({ ...orig, text: p.text, edited: true });
+      if (orig && orig.from === from) await this.saveMessage({ ...orig, text: p.text, edited: true });
       return;
     }
     if (del) {
       for (const id of del.split(/\s+/).map(stripMid)) {
         const orig = this.messageById(id);
-        if (orig && orig.from === sender.fingerprint) {
+        if (orig && orig.from === from) {
           this.messages.set(orig.chatId, (this.messages.get(orig.chatId) ?? []).filter(m => m.id !== id));
           await this.store.delete(`msg/${orig.chatId}/${id}`);
           this.changed(`messages:${orig.chatId}`);
@@ -552,22 +623,23 @@ export class DcClient extends EventTarget {
       if (target) {
         const reactions = { ...target.reactions };
         const r = p.text.trim().slice(0, 32);
-        if (r) reactions[sender.fingerprint] = r;
-        else delete reactions[sender.fingerprint];
+        if (r) reactions[from] = r;
+        else delete reactions[from];
         await this.saveMessage({ ...target, reactions });
       }
       return;
     }
     if (!p.text && !p.attachments.length) return;
 
+    const own = from === 'self';
     await this.saveMessage({
-      id: mid, chatId: chat.id, from: sender.fingerprint, text: p.text, timestamp: this.timestamp(p),
-      state: 'received', attachments: p.attachments, reactions: {},
+      id: mid, chatId: chat.id, from, text: p.text, timestamp: this.timestamp(p),
+      state: own ? 'sent' : 'received', attachments: p.attachments, reactions: {},
     });
     chat.lastActivity = Date.now();
-    chat.unread += 1;
+    if (!own) chat.unread += 1;
     await this.saveChat(chat);
-    this.dispatchEvent(new CustomEvent('incoming', { detail: { chatId: chat.id, from: sender.fingerprint } }));
+    if (!own) this.dispatchEvent(new CustomEvent('incoming', { detail: { chatId: chat.id, from } }));
   }
 
   /** Resolves recipients to member fingerprints like core's receive_imf does. */
@@ -697,7 +769,7 @@ export class DcClient extends EventTarget {
             gossip: members.map(m => ({ addr: m.addr, key: m.publicKey })),
             encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
             attach_pubkey: true, sign: true, compress: false,
-          }, members.flatMap(m => m.relays));
+          }, members.flatMap(m => m.relays), true);
           await this.saveMessage({
             id: mid, chatId: chat.id, from: 'self', text: `${this.contactName(fp)} joined the group.`,
             timestamp: Date.now(), state: 'sent', info: true, attachments: [], reactions: {},

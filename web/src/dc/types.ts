@@ -13,6 +13,8 @@ export interface Config {
   uidValidity: number;
   lastUid: number;
   bridgeUrl: string;
+  /** Another device uses this profile: copy sent messages to self, as core's bcc_self does. */
+  bccSelf?: boolean;
 }
 
 export interface Contact {

@@ -9,4 +9,5 @@ cargo test --quiet --release --manifest-path core/Cargo.toml
 (cd invite && node --test)
 (cd web && pnpm run build)
 RELAY=_chatmail.test RELAY_IP=172.30.99.10 work/venv/bin/python -I e2e/test_interop.py
+RELAY=_chatmail.test RELAY_IP=172.30.99.10 work/venv/bin/python -I e2e/test_import.py
 work/venv/bin/python -I e2e/test_invite.py

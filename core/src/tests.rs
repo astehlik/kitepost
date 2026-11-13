@@ -157,3 +157,16 @@ fn unencrypted_cannot_carry_protected_securejoin_headers() {
 fn underscore_hostnames_are_valid_server_names() {
     assert!(rustls::pki_types::ServerName::try_from("_chatmail.test").is_ok());
 }
+
+#[test]
+fn backup_secret_key_yields_same_fingerprint() {
+    let a = account("alice@example.org");
+    let json = crate::import_keypair(&a.secret, &a.addr, "alice@example.org,alice@other.example", 1_700_000_100).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["fingerprint"], a.fp);
+    let public = crate::keys::public_from_base64(v["public"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        crate::keys::addresses_from_public_key(&public).unwrap(),
+        ["alice@example.org", "alice@other.example"]
+    );
+}
