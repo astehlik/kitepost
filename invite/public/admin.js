@@ -98,8 +98,8 @@ async function render(created) {
     h('td', {}, inv.note || h('span', { class: 'muted' }, '—')),
     h('td', { class: 'status' }, T(inv.revoked ? 'revoked' : inv.active ? 'open' : inv.usesLeft ? 'expired' : 'used', { n: inv.usesLeft })),
     h('td', { class: 'accounts' }, ...inv.redeemed.flatMap(r => [...addrParts(r.addr), h('br')])),
-    h('td', { class: 'muted dates' }, `${fmt(inv.created)} – ${fmt(inv.expires)}`),
-    h('td', {}, inv.active ? h('button', { onclick: async () => { await api('DELETE', `api/invites/${inv.id}`); render(); } }, T('revoke')) : null)));
+    h('td', { class: 'muted dates' }, h('span', {}, `${fmt(inv.created)} –`), ' ', h('span', {}, fmt(inv.expires))),
+    h('td', { class: 'action' }, inv.active ? h('button', { class: 'compact', onclick: async () => { await api('DELETE', `api/invites/${inv.id}`); render(); } }, T('revoke')) : null)));
 
   root.replaceChildren(h('h1', {}, T('title')), form, ...(box ? [box] : []),
     h('table', {}, h('thead', {}, h('tr', {}, ...[T('note'), T('status'), T('accounts'), T('valid'), ''].map(t => h('th', {}, t)))), h('tbody', {}, ...rows)),
