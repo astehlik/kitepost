@@ -1,5 +1,7 @@
 """The invite service against the local relay with registration closed."""
 
+import re
+
 import pytest
 from deltachat_rpc_client import DeltaChat
 from playwright.sync_api import expect
@@ -56,6 +58,13 @@ def test_admin_needs_the_token(context):
     page.locator('input[type="password"]').fill("wrong-token-wrong-token-wrong")
     page.get_by_role("button", name="Sign in").click()
     expect(page.locator(".error")).to_have_text("Wrong admin token")
+
+
+def test_copy_gives_feedback(admin):
+    create_invite(admin)
+    admin.get_by_role("button", name="Copy").click()
+    expect(admin.locator(".linkrow button")).to_have_text(re.compile("Copied|copy it with Ctrl"))
+    expect(admin.locator(".linkrow button")).to_have_text("Copy", timeout=5000)
 
 
 def test_invite_works_once(admin, context):

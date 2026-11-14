@@ -5,14 +5,14 @@ const MESSAGES = {
   en: {
     wrongToken: 'Wrong admin token', failed: 'Request failed ({status})', token: 'Admin token', title: 'Invites', signIn: 'Sign in',
     notePlaceholder: 'For whom? (shown on the invite page)', note: 'Note', days: 'Valid for days (0 = no expiry)',
-    uses: 'Number of accounts', create: 'Create invite link', created: 'New invite link (shown only once):', copy: 'Copy',
+    uses: 'Number of accounts', create: 'Create invite link', created: 'New invite link (shown only once):', copy: 'Copy', copied: 'Copied ✓', copyFailed: 'Link selected, copy it with Ctrl+C',
     revoke: 'Revoke', status: 'Status', accounts: 'Accounts', valid: 'Valid', signOut: 'Sign out', never: 'never',
     revoked: 'revoked', open: 'open · {n} left', expired: 'expired', used: 'used',
   },
   de: {
     wrongToken: 'Falsches Admin-Token', failed: 'Anfrage fehlgeschlagen ({status})', token: 'Admin-Token', title: 'Einladungen', signIn: 'Anmelden',
     notePlaceholder: 'Für wen? (steht auf der Einladungsseite)', note: 'Notiz', days: 'Gültig für Tage (0 = unbegrenzt)',
-    uses: 'Anzahl Konten', create: 'Einladungslink erstellen', created: 'Neuer Einladungslink (wird nur einmal angezeigt):', copy: 'Kopieren',
+    uses: 'Anzahl Konten', create: 'Einladungslink erstellen', created: 'Neuer Einladungslink (wird nur einmal angezeigt):', copy: 'Kopieren', copied: 'Kopiert ✓', copyFailed: 'Link markiert, mit Strg+C kopieren',
     revoke: 'Widerrufen', status: 'Status', accounts: 'Konten', valid: 'Gültig', signOut: 'Abmelden', never: 'nie',
     revoked: 'widerrufen', open: 'offen · noch {n}', expired: 'abgelaufen', used: 'benutzt',
   },
@@ -20,6 +20,19 @@ const MESSAGES = {
 const lang = document.documentElement.lang in MESSAGES ? document.documentElement.lang : 'en';
 const T = (key, params = {}) => MESSAGES[lang][key].replace(/\{(\w+)\}/g, (m, n) => (n in params ? String(params[n]) : m));
 let token = sessionStorage.getItem('invite-admin-token') ?? '';
+
+async function copyLink(button, text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = T('copied');
+  } catch {
+    // The clipboard API needs a secure context and permission; fall back to a selection.
+    getSelection().selectAllChildren(document.getElementById('link'));
+    button.textContent = T('copyFailed');
+  }
+  clearTimeout(button.reset);
+  button.reset = setTimeout(() => { button.textContent = T('copy'); }, 2500);
+}
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -92,7 +105,7 @@ async function render(created) {
   const box = created ? h('div', { class: 'created' },
     h('strong', {}, T('created')),
     h('div', { class: 'linkrow' }, h('code', { id: 'link' }, created),
-      h('button', { onclick: () => navigator.clipboard.writeText(created) }, T('copy')))) : null;
+      h('button', { onclick: e => copyLink(e.currentTarget, created) }, T('copy')))) : null;
 
   const rows = list.map(inv => h('tr', {},
     h('td', {}, inv.note || h('span', { class: 'muted' }, '—')),
