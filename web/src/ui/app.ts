@@ -509,7 +509,14 @@ function startMain(client: DcClient, initialChat?: string) {
       forgetMessages();
       const [headerKey, header] = chatHeader(chat);
       const footer = chatFooter(chat);
-      shown = { chatId: chat.id, header, headerKey, footer, footerKey: footerKey(chat), list: h('div', { class: 'messages' }) };
+      const list = h('div', { class: 'messages' });
+      shown = { chatId: chat.id, header, headerKey, footer, footerKey: footerKey(chat), list };
+      // Scroll anchoring keeps the top in place when the growing composer shrinks the list.
+      let height = 0;
+      new ResizeObserver(() => {
+        if (list.scrollHeight - list.scrollTop - height < 40) list.scrollTop = list.scrollHeight;
+        height = list.clientHeight;
+      }).observe(list);
       pane.replaceChildren(header, shown.list, footer);
     } else {
       const [headerKey, header] = chatHeader(chat);

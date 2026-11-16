@@ -144,6 +144,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .request span { flex: 1; }
 .composer { display: flex; gap: .5rem; align-items: flex-end; padding: .6rem 1rem; background: var(--panel); border-top: 1px solid var(--border); }
 .composer .grow { flex: 1; display: flex; flex-direction: column; gap: .3rem; }
+.composer textarea { field-sizing: content; max-height: calc(8lh + 1rem + 2px); }
 .chip { font-size: .8rem; cursor: pointer; color: var(--muted); }
 .icon { padding: .45rem .55rem; }
 

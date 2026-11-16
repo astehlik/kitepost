@@ -105,6 +105,31 @@ def test_new_messages_leave_the_chat_in_place(web, dora):
     expect(page.locator("[data-probe=kept]")).to_have_count(1)
 
 
+def test_composer_grows_up_to_a_limit(web, dora):
+    page = web.page
+    for i in range(8):
+        dora.chat.send_text(f"filler {i}\n" + "line\n" * 6)
+    dora.chat.send_text("latest")
+    latest = page.locator(".msg.in", has_text="latest")
+    expect(latest).to_be_visible()
+    box = page.locator(".composer textarea")
+    height = lambda: box.evaluate("el => el.offsetHeight")
+    at_bottom = "() => { const l = document.querySelector('.messages'); return l.scrollHeight - l.scrollTop - l.clientHeight < 2; }"
+    one_line = height()
+
+    box.fill("1\n2\n3")
+    assert height() > one_line * 2
+    page.wait_for_function(at_bottom, timeout=2000)
+    box.fill("\n".join(str(i) for i in range(30)))
+    capped = height()
+    assert one_line * 4 < capped < one_line * 10
+    assert box.evaluate("el => el.scrollHeight > el.clientHeight")
+    page.wait_for_function(at_bottom, timeout=2000)
+
+    box.fill("")
+    assert height() == one_line
+
+
 def test_emoji_completion_and_picker(web, dora):
     box = web.page.locator(".composer textarea")
     box.press_sequentially("Emoji test :thumbsu")
