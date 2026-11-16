@@ -109,13 +109,27 @@ function rows(db: Database, sql: string, params: SqlValue[] = []): Record<string
   }
 }
 
+/** Like core's `Params`: a newline inside a value is stored as an empty line before the continuation. */
 function params(raw: SqlValue): Map<string, string> {
   const map = new Map<string, string>();
-  for (const line of String(raw ?? '').split('\n')) {
-    const i = line.indexOf('=');
-    if (i > 0) map.set(line.slice(0, i), line.slice(i + 1));
+  const lines = String(raw ?? '').split('\n');
+  for (let n = 0; n < lines.length; n++) {
+    const i = lines[n].indexOf('=');
+    if (i <= 0) continue;
+    const key = lines[n].slice(0, i);
+    let value = lines[n].slice(i + 1);
+    while (lines[n + 1] === '') {
+      value += `\n${lines[n + 2] ?? ''}`;
+      n += 2;
+    }
+    map.set(key, value);
   }
   return map;
+}
+
+function messageId(raw: SqlValue): string | undefined {
+  const v = str(raw).trim();
+  return (v.match(/<([^>]+)>/)?.[1] ?? v.split(/\s+/)[0]) || undefined;
 }
 
 const str = (v: SqlValue) => (v == null ? '' : String(v));
@@ -240,7 +254,7 @@ export async function readBackup(
     const chatById = new Map(chats.map(c => [c.id, c]));
     for (const [dcId, chatId] of chatIdMap) {
       const chat = chatById.get(chatId)!;
-      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, state, txt, param FROM msgs
+      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, state, txt, param, mime_in_reply_to FROM msgs
         WHERE chat_id = ? AND hidden = 0 AND state != ? ORDER BY timestamp DESC, id DESC LIMIT ?`, [dcId, STATE_OUT_DRAFT, MAX_MESSAGES_PER_CHAT]);
       for (const r of msgRows.reverse()) {
         const fromId = num(r.from_id);
@@ -261,8 +275,10 @@ export async function readBackup(
         if (!text && !attachments.length) continue;
         const timestamp = num(r.timestamp) * 1000;
         const incoming = from !== 'self';
+        const quote = p.get('q');
         messages.push({
           id: str(r.rfc724_mid) || `backup-${num(r.id)}`, chatId, from, text, timestamp,
+          quote, replyTo: quote !== undefined && !p.has('a') ? messageId(r.mime_in_reply_to) : undefined,
           state: info ? 'received' : messageState(num(r.state), incoming),
           info: info || undefined, attachments, reactions: reactions.get(num(r.id)) ?? {},
         });

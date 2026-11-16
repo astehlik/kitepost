@@ -10,8 +10,10 @@ from helpers import PNG, RELAY_IP, addr_of, open_chat, transport, wait_own_msg, 
 
 def test_export_restores_in_core(web, dora, rpc, tmp_path):
     page = web.page
-    dora.chat.send_text("hello web")
-    expect(page.locator(".msg.in", has_text="hello web")).to_be_visible()
+    web_send(page, "question\nin two lines")
+    question = wait_text(dora.acc, "question\nin two lines")
+    dora.chat.send_message(text="hello web", quoted_msg=question.id)
+    expect(page.locator(".msg.in", has_text="hello web").locator(".quote")).to_be_visible()
     png = tmp_path / "dot.png"
     png.write_bytes(PNG)
     page.locator('.composer input[type="file"]').set_input_files(str(png))
@@ -46,6 +48,9 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         assert {"Dora", "Export group", "Phone"} <= set(chats), list(chats)
         snaps = [m.get_snapshot() for m in chats["Dora"].get_messages()]
         assert {"hello web", "hello dora"} <= {s.text for s in snaps}
+        quoted = next(s for s in snaps if s.text == "hello web")
+        assert quoted.quote.text == "question\nin two lines", quoted.quote
+        assert restored.get_message_by_id(quoted.quote.message_id).get_snapshot().text == "question\nin two lines"
         pic = next(s for s in snaps if s.text == "hello dora")
         assert pic.file_name == "dot.png" and Path(pic.file).read_bytes() == PNG, pic
         contact = restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot()
