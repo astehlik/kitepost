@@ -37,29 +37,37 @@ function rendersAsEmoji(ctx: CanvasRenderingContext2D, emoji: string, width: num
 }
 
 /** Emoji versions this browser cannot display, e.g. Firefox's bundled font lags behind the system's. */
-function unsupportedVersions(): Set<string> {
+async function unsupportedVersions(): Promise<Set<string>> {
   const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
   if (!ctx) return new Set();
   ctx.canvas.width = ctx.canvas.height = 40;
   ctx.font = `32px ${getComputedStyle(document.body).fontFamily}`;
   ctx.textBaseline = 'top';
-  const width = ctx.measureText('😀').width;
+  await document.fonts.ready;
+  // A fresh browser may still be loading its emoji font, which would look like missing support.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const width = ctx.measureText('😀').width;
+    if (rendersAsEmoji(ctx, '😀', width)) {
+      return new Set(Object.entries(VERSION_SAMPLES).filter(([, e]) => !rendersAsEmoji(ctx, e, width)).map(([v]) => v));
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
   // Without a reliable reference, e.g. with canvas fingerprinting protection, hide nothing.
-  if (!rendersAsEmoji(ctx, '😀', width)) return new Set();
-  return new Set(Object.entries(VERSION_SAMPLES).filter(([, e]) => !rendersAsEmoji(ctx, e, width)).map(([v]) => v));
+  return new Set();
 }
 
 const baseHexcode = (hex: string) => hex.replace(/-FE0F/g, '');
 const cache = new Map<Lang, Promise<EmojiData>>();
 
 async function fetchData(lang: Lang) {
-  const [compact, messages, shortcodes, versions] = await Promise.all([
+  const [compact, messages, shortcodes, versions, unsupported] = await Promise.all([
     lang === 'de' ? import('emojibase-data/de/compact.json') : import('emojibase-data/en/compact.json'),
     lang === 'de' ? import('emojibase-data/de/messages.json') : import('emojibase-data/en/messages.json'),
     import('emojibase-data/en/shortcodes/github.json'),
     import('emojibase-data/versions/emoji.json'),
+    unsupportedVersions(),
   ]);
-  const hidden = new Set([...unsupportedVersions()].flatMap(v => (versions.default as Record<string, string[]>)[v] ?? []).map(baseHexcode));
+  const hidden = new Set([...unsupported].flatMap(v => (versions.default as Record<string, string[]>)[v] ?? []).map(baseHexcode));
   return {
     compact: compact.default.filter(e => !hidden.has(baseHexcode(e.hexcode))),
     messages: messages.default,
