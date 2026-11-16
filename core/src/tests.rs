@@ -32,6 +32,7 @@ fn message(from: &Account, encryption: Encryption, sign: bool) -> OutgoingMessag
         to: vec![],
         subject: "Message from Alice".into(),
         text: "Hello\nworld".into(),
+        quote: None,
         content_disposition: None,
         headers: vec![HeaderSpec {
             name: "Chat-Version".into(),
@@ -188,4 +189,37 @@ fn self_mdn_roundtrip() {
     let parsed = parse(raw.as_bytes(), ctx).unwrap();
     assert_eq!(parsed.signature.as_deref(), Some(a.fp.as_str()));
     assert_eq!(parsed.mdn_for, ["one@localhost", "two@localhost"]);
+}
+
+fn bob_parses(msg: OutgoingMessage, bob: &Account) -> crate::parse::ParsedMessage {
+    parse(render(msg).unwrap().raw.as_bytes(), ctx(bob, vec![])).unwrap()
+}
+
+#[test]
+fn quote_roundtrip() {
+    let alice = account("alice@example.org");
+    let bob = account("bob@example.net");
+    let mut msg = message(&alice, Encryption::Asymmetric { keys: vec![bob.public.clone()] }, true);
+    msg.quote = Some("first line\n> nested".into());
+    let parsed = bob_parses(msg, &bob);
+    assert_eq!(parsed.quote.as_deref(), Some("first line\n> nested"));
+    assert_eq!(parsed.text, "Hello\nworld");
+}
+
+#[test]
+fn leading_angle_bracket_is_not_a_quote() {
+    let alice = account("alice@example.org");
+    let bob = account("bob@example.net");
+    let mut msg = message(&alice, Encryption::Asymmetric { keys: vec![bob.public.clone()] }, true);
+    msg.text = "> not a quote".into();
+    let parsed = bob_parses(msg, &bob);
+    assert_eq!(parsed.quote, None);
+    assert_eq!(parsed.text, "> not a quote");
+}
+
+#[test]
+fn quote_as_core_sends_it() {
+    let (quote, text) = crate::parse::split_top_quote("> quoted\r\n>no space\r\n\r\nanswer");
+    assert_eq!(quote.as_deref(), Some("quoted\nno space"));
+    assert_eq!(text, "answer");
 }

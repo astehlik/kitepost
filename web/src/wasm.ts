@@ -47,6 +47,7 @@ export interface ParsedMessage {
   autocrypt: KeyInfo | null;
   gossip: KeyInfo[];
   text: string;
+  quote: string | null;
   is_reaction: boolean;
   attachments: AttachmentData[];
   mdn_for: string[];
@@ -73,6 +74,7 @@ export interface OutgoingMessage {
   to: Addr[];
   subject: string;
   text: string;
+  quote?: string;
   content_disposition?: string;
   headers: { name: string; value: string; kind: HeaderKind }[];
   gossip: { addr: string; key: string }[];

@@ -63,6 +63,9 @@ export interface Message {
   info?: boolean;
   error?: string;
   edited?: boolean;
+  /** Quoted text of a reply and the Message-ID it replies to (In-Reply-To). */
+  quote?: string;
+  replyTo?: string;
   attachments: AttachmentData[];
   reactions: Record<string, string>;
   /** INBOX UID while `\Seen` still has to be set on the server. */

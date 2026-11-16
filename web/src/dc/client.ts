@@ -544,7 +544,7 @@ export class DcClient extends EventTarget {
     ];
   }
 
-  async sendText(chatId: string, text: string, attachment?: AttachmentData) {
+  async sendText(chatId: string, text: string, attachment?: AttachmentData, quoted?: Message) {
     const chat = this.chats.get(chatId);
     if (!chat) throw new Error('unknown chat');
     if (chat.left) throw new Error(t('error.notMember'));
@@ -555,13 +555,16 @@ export class DcClient extends EventTarget {
     const msgs = this.messages.get(chatId) ?? [];
     const last = [...msgs].reverse().find(m => !m.info && m.state !== 'failed');
     const headers: OutgoingMessage['headers'] = [{ name: 'Chat-Version', value: '1.0', kind: 'raw' }];
-    if (last) headers.push({ name: 'In-Reply-To', value: last.id, kind: 'messageid' });
+    const replyTo = quoted?.id ?? last?.id;
+    if (replyTo) headers.push({ name: 'In-Reply-To', value: replyTo, kind: 'messageid' });
+    // Like core's set_quote(): a message without text is quoted by its attachment's name.
+    const quote = quoted ? quoted.text || quoted.attachments[0]?.filename || '' : undefined;
     if (!self && this.readReceipts) headers.push({ name: 'Chat-Disposition-Notification-To', value: this.config.addr, kind: 'raw' });
     if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
 
     const local: Message = {
       id: `pending-${createId()}`, chatId, from: 'self', text, timestamp: Date.now(), state: 'pending',
-      attachments: attachment ? [attachment] : [], reactions: {},
+      quote, replyTo: quoted?.id, attachments: attachment ? [attachment] : [], reactions: {},
     };
     await this.saveMessage(local);
     if (chat.isRequest) await this.acceptChat(chatId);
@@ -570,7 +573,7 @@ export class DcClient extends EventTarget {
       const mid = self && !this.config.bccSelf ? createMid() : await this.send({
         to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
         subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,
-        text, headers, attachment,
+        text, quote, headers, attachment,
         gossip: members.length > 1 ? members.map(m => ({ addr: m.addr, key: m.publicKey })) : [],
         encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
         attach_pubkey: true, sign: true, compress: true,
@@ -833,6 +836,7 @@ export class DcClient extends EventTarget {
     const own = from === 'self';
     await this.saveMessage({
       id: mid, chatId: chat.id, from, text: p.text, timestamp: this.timestamp(p),
+      quote: p.quote ?? undefined, replyTo: p.quote !== null ? stripMid(p.headers['in-reply-to']) || undefined : undefined,
       state: own ? 'sent' : 'received', attachments: p.attachments, reactions: {},
       unseenUid: !own && this.currentUid ? { uid: this.currentUid, validity: this.config.uidValidity } : undefined,
       wantsMdn: !own && p.encrypted && !!p.headers['chat-disposition-notification-to'] || undefined,

@@ -95,6 +95,8 @@ export const en = {
   'chat.tooLargeText': 'Files up to 10 MB can be sent.',
   'chat.newMessage': 'New message',
   'chat.react': 'React',
+  'chat.reply': 'Reply',
+  'chat.replyCancel': 'Cancel reply',
   'chat.emoji': 'Insert emoji',
   'emoji.title': 'Emojis',
   'emoji.search': 'Search emojis',

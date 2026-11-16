@@ -97,6 +97,8 @@ export const de: Record<keyof typeof en, string> = {
   'chat.tooLargeText': 'Es können Dateien bis 10 MB gesendet werden.',
   'chat.newMessage': 'Neue Nachricht',
   'chat.react': 'Reagieren',
+  'chat.reply': 'Antworten',
+  'chat.replyCancel': 'Antwort abbrechen',
   'chat.emoji': 'Emoji einfügen',
   'emoji.title': 'Emojis',
   'emoji.search': 'Emojis suchen',

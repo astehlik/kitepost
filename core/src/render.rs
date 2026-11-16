@@ -71,6 +71,9 @@ pub struct OutgoingMessage {
     pub to: Vec<NamedAddr>,
     pub subject: String,
     pub text: String,
+    /// Text of the replied-to message, sent as `> ` lines before `text` like core's mimefactory.
+    #[serde(default)]
+    pub quote: Option<String>,
     #[serde(default)]
     pub content_disposition: Option<String>,
     #[serde(default)]
@@ -176,6 +179,18 @@ fn mdn_body(mid: &str, additional: &[String]) -> MimePart<'static> {
     )
 }
 
+fn body_text(req: &OutgoingMessage) -> String {
+    match &req.quote {
+        Some(quote) => {
+            let lines: String = quote.split('\n').map(|line| format!("> {line}\n")).collect();
+            format!("{lines}\n{}", req.text)
+        }
+        // Like core: an empty first line keeps the receiver from taking the text for a quote.
+        None if req.text.starts_with('>') => format!("\n{}", req.text),
+        None => req.text.clone(),
+    }
+}
+
 pub fn render(req: OutgoingMessage) -> Result<RenderedEmail> {
     let public_key: SignedPublicKey = public_from_base64(&req.self_public_key)?;
     let secret_key: SignedSecretKey = secret_from_base64(&req.self_secret_key)?;
@@ -210,7 +225,7 @@ pub fn render(req: OutgoingMessage) -> Result<RenderedEmail> {
 
     let mut main_part = match req.mdn_for.split_first() {
         Some((first, rest)) => mdn_body(first, rest),
-        None => MimePart::new("text/plain", req.text.clone()),
+        None => MimePart::new("text/plain", body_text(&req)),
     };
     if let Some(disposition) = &req.content_disposition {
         main_part = main_part.header("Content-Disposition", Raw::new(disposition.clone()));

@@ -79,6 +79,34 @@ def test_reactions(web, dora):
     wait_event(dora.acc, EventType.REACTIONS_CHANGED, lambda e: "❤️" not in str(msg.get_reactions()))
 
 
+def test_quotes_both_ways(web, dora):
+    page = web.page
+    web_send(page, "question from the browser")
+    question = wait_text(dora.acc, "question from the browser")
+    dora.chat.send_message(text="answer from core", quoted_msg=question.id)
+    incoming = page.locator(".msg.in", has_text="answer from core")
+    expect(incoming.locator(".quote")).to_contain_text("question from the browser")
+    expect(incoming.locator(".text")).to_have_text("answer from core")
+
+    incoming.hover()
+    incoming.get_by_role("button", name="Reply").click()
+    expect(page.locator(".composer .reply")).to_contain_text("answer from core")
+    web_send(page, "follow-up from the browser")
+    expect(page.locator(".msg.out", has_text="follow-up").locator(".quote")).to_contain_text("answer from core")
+    expect(page.locator(".composer .reply")).to_be_hidden()
+    reply = wait_text(dora.acc, "follow-up from the browser")
+    assert reply.quote.text == "answer from core"
+    assert reply.quote.message_id == dora.acc.get_message_by_id(reply.quote.message_id).id
+
+    incoming.hover()
+    incoming.get_by_role("button", name="Reply").click()
+    page.locator(".composer textarea").press("Escape")
+    expect(page.locator(".composer .reply")).to_be_hidden()
+    web_send(page, "> not a quote")
+    plain = wait_text(dora.acc, "> not a quote")
+    assert plain.quote is None
+
+
 def test_new_messages_leave_the_chat_in_place(web, dora):
     page = web.page
     for i in range(8):

@@ -372,6 +372,7 @@ function startMain(client: DcClient, initialChat?: string) {
   let current = initialChat;
   let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement } | undefined;
   const rendered = new Map<string, { node: Element; key: string; urls: string[] }>();
+  let startReply: ((m: Message) => void) | undefined;
 
   const status = h('span', { class: 'status' });
   const chatList = h('ul', { class: 'chatlist' });
@@ -431,11 +432,31 @@ function startMain(client: DcClient, initialChat?: string) {
     return safeImage ? h('div', { class: 'attachment' }, h('img', { src: url, alt: a.filename }), link) : h('div', { class: 'attachment' }, link);
   }
 
+  const authorName = (from: string) => from === 'self' ? t('me') : client.contactName(from);
+  const repliedTo = (chat: Chat, m: Message) => m.replyTo ? client.messages.get(chat.id)?.find(x => x.id === m.replyTo) : undefined;
+
   /** Everything `messageView` shows, so that unchanged messages keep their nodes. */
   function messageKey(chat: Chat, m: Message): string {
+    const parent = m.quote !== undefined ? repliedTo(chat, m) : undefined;
     return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.reactions, formatTime(m.timestamp),
-      m.attachments.map(a => [a.filename, a.mime, a.data_b64.length]),
+      m.attachments.map(a => [a.filename, a.mime, a.data_b64.length]), m.quote, parent && authorName(parent.from),
       chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
+  }
+
+  function jumpTo(id: string) {
+    const node = rendered.get(id)?.node;
+    if (!node) return;
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    node.classList.add('flash');
+    setTimeout(() => node.classList.remove('flash'), 1200);
+  }
+
+  function quoteView(chat: Chat, m: Message): Element | null {
+    if (m.quote === undefined) return null;
+    const parent = repliedTo(chat, m);
+    return h('blockquote', { class: parent ? 'quote linked' : 'quote', onclick: parent ? () => jumpTo(parent.id) : undefined },
+      parent ? h('strong', {}, authorName(parent.from)) : null,
+      h('span', {}, m.quote || '…'));
   }
 
   function messageView(chat: Chat, m: Message, urls: string[]): Element {
@@ -451,15 +472,18 @@ function startMain(client: DcClient, initialChat?: string) {
     const reactButton = canReact ? h('button', { type: 'button', class: 'react', title: t('chat.react'), 'aria-label': t('chat.react') }) : null;
     reactButton?.append(icon(ICONS.react));
     reactButton?.addEventListener('click', () => openReactions(reactButton, e => void whileBusy(reactButton, () => react(e)).catch(errorDialog)));
+    const replyButton = canReact ? h('button', { type: 'button', class: 'reply', title: t('chat.reply'), 'aria-label': t('chat.reply'), onclick: () => startReply?.(m) }) : null;
+    replyButton?.append(icon(ICONS.reply));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
+      quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, m.text) : null,
       h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state ? ` ${state}` : '', m.error ? ` ${m.error}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
-      reactButton);
+      canReact ? h('div', { class: 'actions' }, replyButton, reactButton) : null);
   }
 
   function forgetMessages() {
@@ -571,24 +595,40 @@ function startMain(client: DcClient, initialChat?: string) {
 
   function composer(chat: Chat): Element {
     let attachment: AttachmentData | undefined;
+    let quoted: Message | undefined;
     const input = h('textarea', { rows: '1', placeholder: chat.left ? t('chat.notMember') : t('chat.message'), disabled: chat.left });
     const file = h('input', { type: 'file', hidden: true });
     const chip = h('span', { class: 'chip', hidden: true });
+    const replyBox = h('div', { class: 'reply', hidden: true });
+    const setReply = (m?: Message) => {
+      quoted = m;
+      replyBox.hidden = !m;
+      replyBox.replaceChildren();
+      if (!m) return;
+      replyBox.append(
+        h('div', {}, h('strong', {}, authorName(m.from)), h('span', {}, m.text || m.attachments[0]?.filename || '')),
+        h('button', { type: 'button', class: 'icon', title: t('chat.replyCancel'), 'aria-label': t('chat.replyCancel'), onclick: () => { setReply(); input.focus(); } }, '✕'));
+      input.focus();
+    };
+    startReply = setReply;
     const send = async () => {
       const text = input.value.trim();
       if (!text && !attachment) return;
       const att = attachment;
+      const q = quoted;
       const before = client.messages.get(chat.id)?.length ?? 0;
       input.value = '';
       attachment = undefined;
       chip.hidden = true;
+      setReply();
       try {
-        await client.sendText(chat.id, text, att);
+        await client.sendText(chat.id, text, att, q);
       } catch (e) {
         // A message that was created shows its error itself.
         if ((client.messages.get(chat.id)?.length ?? 0) > before) return console.warn(e);
         const ta = pane.querySelector('textarea');
         if (ta && !ta.value) ta.value = text;
+        if (q && !quoted) setReply(q);
         errorDialog(e);
       }
     };
@@ -611,7 +651,7 @@ function startMain(client: DcClient, initialChat?: string) {
       void attach(f);
     });
     chip.addEventListener('click', () => { attachment = undefined; chip.hidden = true; });
-    const grow = h('div', { class: 'grow' }, chip, input);
+    const grow = h('div', { class: 'grow' }, replyBox, chip, input);
     // Before the Enter handler below, so that Enter picks a suggestion instead of sending.
     attachEmojiCompletion(input, grow);
     const emojiButton = h('button', { class: 'icon', type: 'button', title: t('chat.emoji'), 'aria-label': t('chat.emoji'), disabled: chat.left }, '😊');
@@ -622,6 +662,9 @@ function startMain(client: DcClient, initialChat?: string) {
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
         void send();
+      } else if (ev.key === 'Escape' && quoted) {
+        ev.preventDefault();
+        setReply();
       }
     });
     return h('footer', { class: 'composer' },
@@ -689,6 +732,7 @@ const ICONS = {
   qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z',
   addContact: 'M15 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 8v6M22 11h-6',
   edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
+  reply: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   react: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01',
   star: 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',

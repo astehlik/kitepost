@@ -72,6 +72,8 @@ pub struct ParsedMessage {
     pub autocrypt: Option<KeyInfo>,
     pub gossip: Vec<KeyInfo>,
     pub text: String,
+    /// Text quoted at the top, as Delta Chat puts it before a reply.
+    pub quote: Option<String>,
     pub is_reaction: bool,
     pub attachments: Vec<AttachmentOut>,
     pub mdn_for: Vec<String>,
@@ -283,6 +285,25 @@ fn collect_content(part: &ParsedMail, out: &mut Content, budget: &mut usize) -> 
 }
 
 /// Delta Chat inserts a "-- " footer with the sender's status; strip it like core does.
+/// Leading `>` lines are the quote, like core's `remove_top_quote()` for chat messages.
+pub(crate) fn split_top_quote(text: &str) -> (Option<String>, String) {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let quoted = lines.iter().take_while(|line| line.starts_with('>')).count();
+    let rest = lines[quoted..].join("\n").trim_start_matches(['\r', '\n']).to_string();
+    if quoted == 0 {
+        return (None, rest);
+    }
+    let quote = lines[..quoted]
+        .iter()
+        .map(|line| {
+            let line = line.trim_end_matches('\r')[1..].to_string();
+            line.strip_prefix(' ').map(str::to_string).unwrap_or(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    (Some(quote), rest)
+}
+
 fn strip_footer(text: &str) -> String {
     if text.starts_with("-- \n") {
         return String::new();
@@ -438,6 +459,7 @@ pub fn parse(raw: &[u8], ctx: ParseContext) -> Result<ParsedMessage> {
         collect_content(&mail, &mut content, &mut budget)?;
     }
 
+    let (quote, text) = split_top_quote(&strip_footer(&content.text.unwrap_or_default()));
     Ok(ParsedMessage {
         encrypted,
         decryption_error,
@@ -450,7 +472,8 @@ pub fn parse(raw: &[u8], ctx: ParseContext) -> Result<ParsedMessage> {
         headers,
         autocrypt: autocrypt.map(|h| key_info(&h.addr, &h.public_key)),
         gossip,
-        text: strip_footer(&content.text.unwrap_or_default()),
+        text,
+        quote,
         is_reaction: content.is_reaction,
         attachments: content.attachments,
         mdn_for: content.mdn_for,
