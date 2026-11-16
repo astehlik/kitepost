@@ -106,3 +106,17 @@ def test_saved_messages(imported, rpc):
     expect(page.locator(".messages .msg", has_text="reply from bob")).to_be_visible()
     web_send(page, "note from the browser")
     assert wait_own_msg(phone, "note from the browser").chat_id == imported.phone_saved.id
+
+
+def test_read_receipts_with_the_phone_online(imported):
+    page, bob = imported.page, imported.bob
+    open_chat(page, "Bob")
+    web_send(page, "read me, bob")
+    snap = wait_text(bob, "read me, bob")
+    bob.mark_seen_messages([bob.get_message_by_id(snap.id)])
+    expect(page.locator(".msg.out", has_text="read me, bob").locator(".meta")).to_contain_text("✓✓")
+
+    imported.phone_bob.send_text("sent on the phone, read by bob")
+    snap = wait_text(bob, "sent on the phone, read by bob")
+    bob.mark_seen_messages([bob.get_message_by_id(snap.id)])
+    expect(page.locator(".msg.out", has_text="sent on the phone, read by bob").locator(".meta")).to_contain_text("✓✓")
