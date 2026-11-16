@@ -99,7 +99,7 @@ export class DcClient extends EventTarget {
     const config: Config = {
       addr: b.addr, password: b.password, imapHost: b.host, smtpHost: b.host, displayName: cleanName(b.displayName),
       secretKey: b.secretKey, publicKey: b.publicKey, fingerprint: b.fingerprint,
-      inviteNumber: b.inviteNumber ?? createId(), uidValidity: b.uidValidity, lastUid: b.lastUid, bridgeUrl, bccSelf: true,
+      inviteNumber: b.inviteNumber ?? createId(), uidValidity: b.uidValidity, lastUid: b.lastUid, bridgeUrl, bccSelf: true, secured: true,
     };
     for (const c of b.contacts) await store.put(`contact/${c.fingerprint}`, c);
     for (const c of b.chats) await store.put(`chat/${c.id}`, c);
@@ -387,6 +387,13 @@ export class DcClient extends EventTarget {
       await this.saveConfig();
     }
     return { blob, filename: backupFileName(this.config.fingerprint) };
+  }
+
+  async markSecured() {
+    if (this.config.secured) return;
+    this.config.secured = true;
+    await this.saveConfig();
+    this.changed('config');
   }
 
   async setDisplayName(name: string) {
@@ -768,6 +775,7 @@ export class DcClient extends EventTarget {
       this.config.bccSelf = true;
       await this.saveConfig();
     }
+    await this.markSecured();
     if (p.mdn_for.length) return this.readElsewhere(p.mdn_for);
     if (p.is_sync) return this.applySync(p.sync_json);
     if (p.headers['secure-join'] || p.headers['secure-join-invitenumber']) return;

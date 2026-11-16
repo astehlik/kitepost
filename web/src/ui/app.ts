@@ -343,7 +343,10 @@ function phoneSetup(client: DcClient, signal: AbortSignal): HTMLElement {
         await new Promise(r => setTimeout(r, 2000));
         if (signal.aborted) return;
         const state = await handoffState(handoff).catch(() => 'waiting');
-        if (state === 'fetched') return box.replaceChildren(h('p', { class: 'ok' }, t('phone.fetched')));
+        if (state === 'fetched') {
+          void client.markSecured();
+          return box.replaceChildren(h('p', { class: 'ok' }, t('phone.fetched')));
+        }
         if (state === 'expired') return box.replaceChildren(h('p', {}, t('phone.expired')), newCode());
       }
     } catch (e) {
@@ -362,8 +365,17 @@ function renderPhoneSetup(client: DcClient) {
   const render = () => screen(t('phone.title'), render,
     h('p', {}, t('phone.text')),
     setup,
-    h('button', { class: 'primary', onclick: leave(() => startMain(client)) }, t('continue')),
+    h('button', { class: 'primary', onclick: leave(() => client.config.secured ? startMain(client) : renderBackupReminder(client)) }, t('continue')),
     h('p', {}, h('button', { type: 'button', class: 'link', onclick: busyClick(() => { polling.abort(); return renderConnectPhone(client); }) }, t('phone.otherProfile'))));
+  render();
+}
+
+/** Offered after setup without a phone: the profile only lives in this browser. */
+function renderBackupReminder(client: DcClient) {
+  const render = () => screen(t('backup.title'), render,
+    h('p', {}, t('backup.text')),
+    h('button', { class: 'primary', onclick: () => exportDialog(client, () => startMain(client)) }, t('profile.export')),
+    h('p', {}, h('button', { type: 'button', class: 'link', onclick: () => startMain(client) }, t('backup.later'))));
   render();
 }
 
@@ -411,6 +423,11 @@ function startMain(client: DcClient, initialChat?: string) {
     chatList);
 
   function renderProfile() {
+    const unsecured = !client.config.secured;
+    edit.classList.toggle('attention', unsecured);
+    const label = unsecured ? `${t('nav.editProfile')} – ${t('backup.attention')}` : t('nav.editProfile');
+    edit.title = label;
+    edit.setAttribute('aria-label', label);
     const name = client.config.displayName || t('me');
     me.replaceChildren(avatar(name, client.config.addr),
       h('span', { class: 'who' }, h('strong', {}, name), h('small', {}, client.config.addr)));
@@ -944,7 +961,7 @@ function fingerprintDialog(client: DcClient, fp: string) {
     h('h3', {}, client.contactName(fp)), h('code', {}, formatFingerprint(fp))), [{ label: t('close'), primary: true }]);
 }
 
-function exportDialog(client: DcClient) {
+function exportDialog(client: DcClient, done?: () => void) {
   dialog(t('export.title'), h('div', {},
     h('p', {}, t('export.text')),
     h('p', { class: 'warning' }, t('export.warning'))), [
@@ -955,6 +972,8 @@ function exportDialog(client: DcClient) {
         const url = URL.createObjectURL(blob);
         h('a', { href: url, download: filename }).click();
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        await client.markSecured();
+        done?.();
       },
     },
   ]);
@@ -975,6 +994,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
     profileDialog(client, rebuild);
   });
   dialog(t('profile.title'), h('div', {},
+    client.config.secured ? null : h('p', { class: 'warning' }, t('backup.unsecured')),
     field(t('setup.displayName'), name),
     field(t('language'), lang),
     receiptsField,

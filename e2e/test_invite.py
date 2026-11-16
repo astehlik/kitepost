@@ -123,6 +123,7 @@ def test_web_client_logs_in_from_invite(admin, context):
     expect(web.get_by_role("heading", name="Use it on your phone too")).to_be_visible()
     expect(web.locator(".phone-setup svg")).to_be_visible()
     web.get_by_role("button", name="Continue").click()
+    web.get_by_role("button", name="Later").click()
     expect(web.locator(".status.ok")).to_be_visible()
     assert web.locator(".profile small").inner_text() == addr
 

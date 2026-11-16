@@ -17,6 +17,8 @@ export interface Config {
   bccSelf?: boolean;
   /** Request and send read receipts, on unless turned off, like core's mdns_enabled. */
   readReceipts?: boolean;
+  /** A backup was downloaded or another device has the profile, so losing the browser loses nothing. */
+  secured?: boolean;
 }
 
 export interface Contact {

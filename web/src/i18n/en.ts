@@ -47,6 +47,11 @@ export const en = {
 
   'import.file': 'Import backup file…',
   'way.legend': 'How do you want to start?',
+  'backup.title': 'Back up your profile',
+  'backup.text': 'Your profile is only stored in this browser so far. If the browser data is lost, your keys and chats are gone. Export a backup now, or set up your phone later under “Edit profile → Set up phone”.',
+  'backup.later': 'Later',
+  'backup.attention': 'no backup yet',
+  'backup.unsecured': 'This profile exists only in this browser so far. Export a backup or set up your phone, so that a lost browser does not take your keys and chats with it.',
   'way.new': 'New profile',
   'way.deltaChat': 'I already use Delta Chat',
   'way.otherBrowser': 'I already use Kitepost in another browser',

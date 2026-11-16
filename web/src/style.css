@@ -162,6 +162,9 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .info-list ul { margin: 0; padding: 0; list-style: none; }
 .info-list .message-id { font-family: ui-monospace, monospace; font-size: .85rem; user-select: all; }
 
+.icon-button.attention { position: relative; }
+.icon-button.attention::after { content: ''; position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+
 .dialog { border: none; border-radius: 14px; padding: 1.3rem; width: min(480px, calc(100% - 2rem)); background: var(--panel); color: var(--text); }
 .dialog::backdrop { background: rgba(0,0,0,.4); }
 .dialog h2 { margin-top: 0; font-size: 1.2rem; }

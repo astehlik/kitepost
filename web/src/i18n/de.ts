@@ -49,6 +49,11 @@ export const de: Record<keyof typeof en, string> = {
 
   'import.file': 'Backup-Datei importieren…',
   'way.legend': 'Wie möchtest du beginnen?',
+  'backup.title': 'Profil sichern',
+  'backup.text': 'Dein Profil liegt bisher nur in diesem Browser. Gehen die Browserdaten verloren, sind deine Schlüssel und Chats weg. Exportiere jetzt ein Backup oder richte später unter „Profil bearbeiten → Handy einrichten“ dein Handy ein.',
+  'backup.later': 'Später',
+  'backup.attention': 'noch kein Backup',
+  'backup.unsecured': 'Dieses Profil gibt es bisher nur in diesem Browser. Exportiere ein Backup oder richte dein Handy ein, damit ein verlorener Browser nicht deine Schlüssel und Chats mitnimmt.',
   'way.new': 'Neues Profil',
   'way.deltaChat': 'Ich nutze Delta Chat schon',
   'way.otherBrowser': 'Ich nutze Kitepost schon in einem anderen Browser',

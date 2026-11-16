@@ -29,12 +29,16 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     web_send(page, "group from web")
     dora_group = dora.acc.get_chat_by_id(wait_text(dora.acc, "group from web").chat_id)
 
+    unsecured = page.locator(".profile .icon-button.attention")
+    expect(unsecured).to_be_visible()
     page.get_by_role("button", name="Edit profile").click()
+    expect(page.locator("dialog")).to_contain_text("only in this browser")
     page.get_by_role("button", name="Export backup").click()
     with page.expect_download() as download:
         page.get_by_role("button", name="Download").click()
     backup = tmp_path / download.value.suggested_filename
     download.value.save_as(backup)
+    expect(unsecured).to_have_count(0)
     assert backup.name.startswith("delta-chat-backup-") and backup.suffix == ".tar", backup.name
 
     restored = DeltaChat(rpc).add_account()

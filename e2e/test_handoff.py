@@ -55,6 +55,8 @@ def test_handoff_at_signup(page, context, rpc, tmp_path):
     assert backup.name.startswith("delta-chat-backup-") and backup.suffix == ".tar", backup.name
     expect(page.locator(".phone-setup .ok")).to_contain_text("Your phone has the profile")
     page.get_by_role("button", name="Continue").click()
+    expect(page.locator(".chatlist")).to_be_visible()
+    expect(page.locator(".profile .icon-button.attention")).to_have_count(0)
 
     restored = restore(rpc, backup, page.locator(".profile small").inner_text())
     try:
@@ -72,6 +74,10 @@ def test_handoff_at_signup(page, context, rpc, tmp_path):
 def test_handoff_from_profile_keeps_contacts(page, context, rpc, make_account, tmp_path):
     create_web_profile(page)
     page.get_by_role("button", name="Continue").click()
+    expect(page.get_by_role("heading", name="Back up your profile")).to_be_visible()
+    page.get_by_role("button", name="Later").click()
+    unsecured = page.locator(".profile .icon-button.attention")
+    expect(unsecured).to_be_visible()
     dora = make_account("Dora")
     page.get_by_role("button", name="Add contact").click()
     page.locator("dialog textarea").fill(dora.get_qr_code())
@@ -85,6 +91,7 @@ def test_handoff_from_profile_keeps_contacts(page, context, rpc, make_account, t
     _, backup = save_on_phone(context, url, tmp_path)
     expect(page.locator("dialog .phone-setup .ok")).to_be_visible()
     page.get_by_role("button", name="Close").click()
+    expect(unsecured).to_have_count(0)
 
     restored = restore(rpc, backup, page.locator(".profile small").inner_text())
     try:
