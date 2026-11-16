@@ -1,17 +1,18 @@
-"""The invite service against the local relay with registration closed."""
+"""The invite service against the local relay."""
 
 import re
+import secrets
 
 import pytest
 from deltachat_rpc_client import DeltaChat
 from playwright.sync_api import expect
 
-from helpers import ADMIN_TOKEN, INVITE, RELAY, URL, relay_exec, set_passphrase, transport
+from helpers import ADMIN_TOKEN, INVITE, INVITE_APP_URL, RELAY, URL, relay_exec, set_passphrase, transport
 
 pytestmark = pytest.mark.local_relay
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture
 def registration_closed():
     relay_exec("touch", "/etc/chatmail-nocreate")
     yield
@@ -45,7 +46,8 @@ def redeem(page, link):
     return addr, page.locator('a[href^="dclogin:"]').get_attribute("href")
 
 
-def test_open_registration_is_closed(page):
+@pytest.mark.exclusive
+def test_open_registration_is_closed(page, registration_closed):
     set_passphrase(page)
     page.locator(".field", has_text="Chatmail relay").locator("input").fill(RELAY)
     page.get_by_role("button", name="Create profile").click()
@@ -83,8 +85,7 @@ def test_invite_works_once(admin, context):
     expect(again.locator("h1")).to_contain_text("no longer valid")
     assert again.request.post(link).status == 410
     admin.reload()
-    expect(admin.locator("tbody tr").first).to_contain_text("used")
-    expect(admin.locator("tbody tr").first).to_contain_text(addr)
+    expect(admin.locator("tbody tr", has_text=addr)).to_contain_text("used")
 
 
 def test_result_page_offers_the_phone_only_path(admin, context):
@@ -106,7 +107,8 @@ def test_web_client_logs_in_from_invite(admin, context):
     friend = context.new_page()
     addr, _ = redeem(friend, create_invite(admin))
     web_link = friend.get_by_role("link", name="Continue in the browser").get_attribute("href")
-    assert web_link.startswith(URL + "#login=dclogin"), web_link
+    assert web_link.startswith(INVITE_APP_URL + "#login=dclogin"), web_link
+    web_link = URL + web_link.removeprefix(INVITE_APP_URL)
 
     web = context.new_page()
     web.route("**/config.json", lambda route: route.fulfill(json={"handoffUrl": INVITE}))
@@ -145,16 +147,19 @@ def test_create_button_is_disabled_while_submitting(admin, context):
 
 
 def test_revoked_invite_stops_working(admin, context):
-    link = create_invite(admin)
+    # Other xdist workers add invites to the same table.
+    note = f"revoke {secrets.token_hex(4)}"
+    link = create_invite(admin, note)
+    row = admin.locator("tbody tr", has_text=note)
     release = []
     admin.route("**/api/invites/*", lambda route: release.append(route))
-    revoke = admin.get_by_role("button", name="Revoke").first
+    revoke = row.get_by_role("button", name="Revoke")
     revoke.click()
     expect(revoke).to_be_disabled()
     expect(revoke).to_have_attribute("aria-busy", "true")
     release[0].continue_()
     admin.unroute("**/api/invites/*")
-    expect(admin.locator("tbody tr").first).to_contain_text("revoked")
+    expect(row).to_contain_text("revoked")
     assert context.new_page().goto(link).status == 410
 
 

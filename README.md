@@ -190,9 +190,17 @@ work/venv/bin/playwright install chromium   # or set CHROMIUM_PATH
 e2e/run-local.sh                            # builds everything, then runs pytest
 work/venv/bin/pytest e2e -k reactions       # a single test, once the app is built
 work/venv/bin/pytest e2e --browser firefox  # in Firefox (playwright install firefox)
+work/venv/bin/pytest e2e -n 4               # in parallel, without the exclusive tests
+work/venv/bin/pytest e2e -m exclusive       # tests that change the whole relay, alone
 ```
 
-Each test aborts after five minutes. Failed tests leave a Playwright trace (`playwright show-trace`)
+Each pytest-xdist worker starts its own bridge on port 8099 plus its number. Tests marked
+`exclusive` change the whole relay, e.g. close the registration, so `-n` leaves them out and they
+run in a second, sequential pass; `e2e/run-local.sh` and CI do both. More workers than CPU cores or
+memory allow make chatmail refuse registrations (`min_available_memory`); `E2E_WORKERS` sets the
+number for `e2e/run-local.sh`.
+
+Each test aborts after 90 seconds. Failed tests leave a Playwright trace (`playwright show-trace`)
 and a screenshot in `work/test-results`; CI uploads them as the `e2e-results` artifact.
 
 `e2e/test_transfer.py` is skipped while the transfer has no button. It needs a

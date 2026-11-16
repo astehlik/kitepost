@@ -15,8 +15,11 @@ ROOT = Path(__file__).resolve().parent.parent
 # The local relay from e2e/relay by default; RELAY=nine.testrun.org RELAY_IP= for a public one.
 RELAY = os.environ.get("RELAY", "_chatmail.test")
 RELAY_IP = os.environ.get("RELAY_IP", "172.30.99.10")
-PORT = 8099
+# Each pytest-xdist worker (gw0, gw1, ...) serves the web client through its own bridge.
+PORT = 8099 + int(os.environ.get("PYTEST_XDIST_WORKER", "gw0")[2:])
 URL = f"http://127.0.0.1:{PORT}/"
+# APP_URL of the invite service in e2e/relay/compose.yaml.
+INVITE_APP_URL = "http://127.0.0.1:8099/"
 INVITE = "http://127.0.0.1:8084/"
 ADMIN_TOKEN = "test-admin-token-0123456789abcdef"
 PASSPHRASE = "correct horse battery"

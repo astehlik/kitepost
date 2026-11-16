@@ -22,13 +22,27 @@ from helpers import INVITE, PORT, RELAY, RELAY_IP, ROOT, TIMEOUT, configure, cre
 expect.set_options(timeout=TIMEOUT)
 
 
+def parallel(config):
+    # Workers collect the tests themselves and do not see -n.
+    return (config.getoption("numprocesses", None) or "PYTEST_XDIST_WORKER" in os.environ) and not config.getoption("markexpr")
+
+
 def pytest_collection_modifyitems(config, items):
-    if RELAY_IP:
-        return
-    skip = pytest.mark.skip(reason="needs the local relay (RELAY_IP)")
-    for item in items:
-        if "local_relay" in item.keywords:
-            item.add_marker(skip)
+    if not RELAY_IP:
+        skip = pytest.mark.skip(reason="needs the local relay (RELAY_IP)")
+        for item in items:
+            if "local_relay" in item.keywords:
+                item.add_marker(skip)
+    if parallel(config):
+        exclusive = [item for item in items if "exclusive" in item.keywords]
+        if exclusive:
+            config.hook.pytest_deselected(items=exclusive)
+            items[:] = [item for item in items if "exclusive" not in item.keywords]
+
+
+def pytest_report_header(config):
+    if parallel(config):
+        return "exclusive tests are deselected with -n; run them alone: pytest e2e -m exclusive"
 
 
 @pytest.fixture(scope="session")

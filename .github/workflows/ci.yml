@@ -202,7 +202,9 @@ jobs:
 
       - name: End-to-end tests
         # Firefox too: it renders some things differently, e.g. ships an older emoji font.
-        run: work/venv/bin/pytest e2e --browser chromium --browser firefox --junitxml=work/test-results/junit.xml
+        run: |
+          work/venv/bin/pytest e2e -n 4 --browser chromium --browser firefox --junitxml=work/test-results/junit.xml
+          work/venv/bin/pytest e2e -m exclusive --browser chromium --browser firefox --junitxml=work/test-results/junit-exclusive.xml
 
       - name: Traces and screenshots
         if: failure()
