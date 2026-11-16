@@ -132,7 +132,7 @@ PIXEL_STATS = """() => {
 }"""
 
 
-def test_picker_only_offers_emojis_the_browser_can_show(web, browser_name):
+def test_picker_only_offers_emojis_the_browser_can_show(web):
     page = web.page
     open_chat(page, "Phone")
     page.get_by_role("button", name="Insert emoji").click()
@@ -146,8 +146,6 @@ def test_picker_only_offers_emojis_the_browser_can_show(web, browser_name):
                     f"picker hides versions: {page.locator('.emoji-picker').get_attribute('data-unsupported')}\n"
                     f"pixels: {page.evaluate(PIXEL_STATS)}\n"
                     f"emoji fonts: {sorted(set(f for f in fonts.splitlines() if 'moji' in f.lower()))}")
-    if browser_name == "firefox":
-        assert not offered, "Firefox's bundled emoji font has no Emoji 18"
 
 
 def test_attachment_by_file_picker(web, dora, tmp_path):

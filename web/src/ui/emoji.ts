@@ -47,7 +47,7 @@ async function unsupportedVersions(): Promise<Set<string> | undefined> {
   ctx.canvas.width = ctx.canvas.height = 40;
   ctx.font = `32px ${getComputedStyle(document.body).fontFamily}`;
   ctx.textBaseline = 'top';
-  await document.fonts.ready;
+  await document.fonts.load(ctx.font, '😀');
   // A fresh browser may still be loading its emoji font, which would look like missing support.
   for (let attempt = 0; attempt < 10; attempt++) {
     // Text fonts such as DejaVu Sans draw some emojis like 😀 in black, so one colored reference suffices.
