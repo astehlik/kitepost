@@ -31,6 +31,7 @@ def imported(page, make_account, tmp_path):
         assert time.monotonic() < deadline, "the phone got no read receipt from Bob"
         time.sleep(0.2)
     phone._rpc.set_pinned_message_state(phone.id, reply.id, True)
+    phone._rpc.save_msgs(phone.id, [hello_sent.id])
     png = tmp_path / "pic.png"
     png.write_bytes(PNG)
     phone_bob.send_file(str(png))
@@ -149,6 +150,41 @@ def test_deleting_for_me_syncs_between_devices(imported):
     expect(page.locator(".msg.in", has_text="delete me on the phone")).to_have_count(0)
 
 
+def saved_on_phone(phone, msg_id, saved):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while (phone.get_message_by_id(msg_id).get_snapshot().saved_message_id is not None) != saved:
+        assert time.monotonic() < deadline, f"the phone did not see saved={saved}"
+        time.sleep(0.2)
+
+
+def test_saving_syncs_between_devices(imported, rpc):
+    page, phone = imported.page, imported.phone
+    bob = page.locator(".chatlist li").filter(has=page.get_by_text("Bob", exact=True))
+    bob.click()
+    reply = page.locator(".msg.in", has_text="reply from bob")
+    message_action(page, reply, "Save")
+    expect(reply.get_by_role("img", name="Saved")).to_be_visible()
+    saved_on_phone(phone, imported.reply.id, True)
+    copy = phone.get_message_by_id(phone.get_message_by_id(imported.reply.id).get_snapshot().saved_message_id).get_snapshot()
+    assert copy.chat_id == imported.phone_saved.id and copy.text == "reply from bob", copy
+    open_chat(page, "Saved messages")
+    expect(page.locator(".messages .msg", has_text="reply from bob")).to_be_visible()
+
+    bob.click()
+    message_action(page, reply, "Remove from saved")
+    expect(reply.get_by_role("img", name="Saved")).to_have_count(0)
+    saved_on_phone(phone, imported.reply.id, False)
+
+    imported.bob_chat.send_text("saved on the phone")
+    on_phone = wait_text(phone, "saved on the phone")
+    incoming = page.locator(".msg.in", has_text="saved on the phone")
+    expect(incoming).to_be_visible()
+    rpc.save_msgs(phone.id, [on_phone.id])
+    expect(incoming.get_by_role("img", name="Saved")).to_be_visible()
+    message_action(page, incoming, "Remove from saved")
+    saved_on_phone(phone, on_phone.id, False)
+
+
 def test_receive_times_and_read_receipts_are_imported(imported):
     page = imported.page
     open_chat(page, "Bob")
@@ -169,7 +205,17 @@ def test_pins_are_imported(imported):
     page = imported.page
     open_chat(page, "Bob")
     reply = page.locator(".msg.in", has_text="reply from bob")
-    expect(reply.locator(".meta .pin")).to_be_visible()
+    expect(reply.get_by_role("img", name="Pinned")).to_be_visible()
     expect(page.locator(".pinbar")).to_contain_text("reply from bob")
     page.locator(".messages .info", has_text="You pinned a message.").click()
     expect(reply).to_have_class(re.compile("flash"))
+
+
+def test_saved_copies_are_imported(imported):
+    page = imported.page
+    open_chat(page, "Bob")
+    own = page.locator(".msg.out", has_text="hello from alice")
+    expect(own.get_by_role("img", name="Saved")).to_be_visible()
+    message_action(page, own, "Remove from saved")
+    open_chat(page, "Saved messages")
+    expect(page.locator(".messages .msg", has_text="hello from alice")).to_have_count(0)

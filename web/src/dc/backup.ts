@@ -261,7 +261,8 @@ export async function readBackup(
     const pinned = rows(db, "SELECT 1 FROM pragma_table_info('msgs') WHERE name = 'pinned'").length ? 'pinned' : '0 AS pinned';
     for (const [dcId, chatId] of chatIdMap) {
       const chat = chatById.get(chatId)!;
-      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, timestamp_rcvd, state, txt, param, mime_in_reply_to, ${pinned} FROM msgs
+      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, timestamp_rcvd, state, txt, param, mime_in_reply_to, ${pinned},
+        (SELECT o.rfc724_mid FROM msgs o WHERE o.id = msgs.starred AND msgs.starred > 0) AS saved_from FROM msgs
         WHERE chat_id = ? AND hidden = 0 AND state != ? ORDER BY timestamp DESC, id DESC LIMIT ?`, [dcId, STATE_OUT_DRAFT, MAX_MESSAGES_PER_CHAT]);
       for (const r of msgRows.reverse()) {
         const fromId = num(r.from_id);
@@ -292,6 +293,7 @@ export async function readBackup(
           addedAt: incoming && num(r.timestamp_rcvd) ? num(r.timestamp_rcvd) * 1000 : undefined,
           readBy: readBy.get(num(r.id)),
           pinned: num(r.pinned) === 1 || undefined,
+          savedFrom: chatId === SELF_CHAT ? str(r.saved_from) || undefined : undefined,
         });
         chat.lastActivity = Math.max(chat.lastActivity, timestamp);
         if (incoming && !info && num(r.state) === STATE_IN_FRESH) chat.unread += 1;

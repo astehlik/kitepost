@@ -155,7 +155,7 @@ def test_hover_offers_react_reply_and_the_menu(web, dora):
 
     incoming.locator(".text").click(button="right")
     menu = page.locator(".menu")
-    expect(menu.get_by_role("menuitem")).to_have_text(["React", "Reply", "Message info", "Pin", "Copy text", "Delete message", "Select"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["React", "Reply", "Message info", "Pin", "Save", "Copy text", "Delete message", "Select"])
     page.keyboard.press("Escape")
     expect(menu).to_have_count(0)
 
@@ -519,13 +519,13 @@ def test_pinning_both_ways(web, dora):
 
     message_action(page, msg, "Pin")
     expect(page.locator(".messages .info", has_text="You pinned a message.")).to_be_visible()
-    expect(msg.locator(".meta .pin")).to_be_visible()
+    expect(msg.get_by_role("img", name="Pinned")).to_be_visible()
     expect(bar).to_contain_text("Pinned message")
     expect(bar).to_contain_text("pin me first")
     wait_pinned(dora.acc, dora.chat.id, [first.id])
 
     dora.acc._rpc.set_pinned_message_state(dora.acc.id, second.id, True)
-    expect(page.locator(".msg.in", has_text="pin me second").locator(".meta .pin")).to_be_visible()
+    expect(page.locator(".msg.in", has_text="pin me second").get_by_role("img", name="Pinned")).to_be_visible()
     expect(bar).to_contain_text("Pinned message 2 of 2")
     expect(bar).to_contain_text("pin me second")
     bar.click()
@@ -537,7 +537,7 @@ def test_pinning_both_ways(web, dora):
 
     message_action(page, msg, "Unpin")
     expect(page.locator(".messages .info", has_text="You unpinned a message.")).to_be_visible()
-    expect(msg.locator(".meta .pin")).to_have_count(0)
+    expect(msg.get_by_role("img", name="Pinned")).to_have_count(0)
     expect(bar).to_have_text(re.compile("^Pinned messagepin me second$"))
     wait_pinned(dora.acc, dora.chat.id, [second.id])
 

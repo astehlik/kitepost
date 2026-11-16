@@ -142,8 +142,8 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .msg .meta .state svg { width: 1.35em; height: 1.35em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .msg .meta .state[data-state="read"] { color: var(--accent); }
 .msg .meta .state[data-state="failed"] { color: var(--danger); }
-.msg .meta .pin { display: inline-flex; margin-right: .3rem; vertical-align: -.2em; }
-.msg .meta .pin svg { width: 1.2em; height: 1.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.msg .meta .mark { display: inline-flex; margin-right: .3rem; vertical-align: -.2em; }
+.msg .meta .mark svg { width: 1.2em; height: 1.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .pinbar { display: flex; align-items: center; gap: .7rem; padding: .4rem 1rem; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: var(--panel); color: var(--text); text-align: left; }
 .pinbar[hidden] { display: none; }
 .pinbar svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

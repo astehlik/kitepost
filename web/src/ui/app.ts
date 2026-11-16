@@ -1,5 +1,5 @@
 import { fileReader, readBackup } from '../dc/backup';
-import { DcClient, pinnable } from '../dc/client';
+import { DcClient, pinnable, savable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
 import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
@@ -488,7 +488,7 @@ function startMain(client: DcClient, initialChat?: string) {
   /** Everything `messageView` shows, so that unchanged messages keep their nodes. */
   function messageKey(chat: Chat, m: Message): string {
     const parent = m.quote !== undefined ? repliedTo(chat, m) : undefined;
-    return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.pinned, m.reactions, formatTime(m.timestamp),
+    return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.pinned, !!client.savedCopy(m), m.reactions, formatTime(m.timestamp),
       m.attachments.map(a => [a.filename, a.mime, a.data_b64.length]), m.quote, parent && authorName(parent.from),
       chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
   }
@@ -563,7 +563,7 @@ function startMain(client: DcClient, initialChat?: string) {
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, m.text) : null,
-      h('div', { class: 'meta' }, m.pinned ? pinMark() : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
+      h('div', { class: 'meta' }, client.savedCopy(m) ? metaMark(ICONS.star, 'mark.saved') : null, m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
@@ -591,10 +591,21 @@ function startMain(client: DcClient, initialChat?: string) {
       one && pinnable(one) && !chat.left && !chat.isRequest && {
         label: t(one.pinned ? 'chat.unpin' : 'chat.pin'), icon: ICONS.pin, run: done(() => client.setPinned(chat.id, one.id, !one.pinned).catch(errorDialog)),
       },
+      one && savable(one) && saveAction(one),
       !!text && { label: t('chat.copy'), icon: ICONS.copy, run: done(() => navigator.clipboard.writeText(text).catch(errorDialog)) },
       { label: t('chat.deleteMessage'), icon: ICONS.trash, run: () => deleteDialog(chat, msgs) },
     ];
     return actions.filter((a): a is MsgAction => !!a);
+  }
+
+  function saveAction(m: Message): MsgAction {
+    const copy = client.savedCopy(m);
+    const run = () => {
+      clearSelection();
+      const job = copy ? client.deleteMessages(copy.chatId, [copy.id], false) : client.saveToSelf(m.chatId, m.id);
+      return job.catch(errorDialog);
+    };
+    return { label: t(copy ? 'chat.unsave' : 'chat.save'), icon: ICONS.star, run };
   }
 
   /** Like Android's handleCopyMessage(): several messages get the sender's name whenever it changes. */
@@ -1039,10 +1050,10 @@ function stateMark(state: Exclude<Message['state'], 'received'>): Element {
   return mark;
 }
 
-function pinMark(): Element {
-  const label = t('mark.pinned');
-  const mark = h('span', { class: 'pin', role: 'img', 'aria-label': label, title: label });
-  mark.append(icon(ICONS.pin));
+function metaMark(d: string, key: 'mark.pinned' | 'mark.saved'): Element {
+  const label = t(key);
+  const mark = h('span', { class: 'mark', role: 'img', 'aria-label': label, title: label });
+  mark.append(icon(d));
   return mark;
 }
 

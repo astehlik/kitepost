@@ -31,6 +31,11 @@ function cleanName(name: string): string {
   return name.replace(/[\p{Cc}\p{Cf}]/gu, '').trim().slice(0, 100);
 }
 
+/** Like core's save_copy_in_self_talk(), which refuses copies; notes to self already are in "Saved messages". */
+export function savable(m: Message): boolean {
+  return !m.info && !m.savedFrom && m.chatId !== SELF_CHAT && m.id.includes('@');
+}
+
 /** Like core's is_pinnable(): a failed message did not reach everyone, pinning it raises wrong expectations. */
 export function pinnable(m: Message): boolean {
   return !m.info && m.state !== 'failed' && m.state !== 'pending' && m.id.includes('@');
@@ -671,6 +676,34 @@ export class DcClient extends EventTarget {
     for (const id of msgIds) await this.deleteLocally(id);
   }
 
+  /** The copy of `m` in "Saved messages", like core's get_saved_msg_id(). */
+  savedCopy(m: Message): Message | undefined {
+    return this.messages.get(SELF_CHAT)?.find(x => x.savedFrom === m.id);
+  }
+
+  /** Copies a message to "Saved messages" and tells the own other devices, like core's save_msgs(). */
+  async saveToSelf(chatId: string, msgId: string) {
+    const orig = this.messages.get(chatId)?.find(m => m.id === msgId);
+    if (!orig || !savable(orig) || this.savedCopy(orig)) throw new Error('unknown message');
+    const dest = createMid();
+    await this.copyToSelf(orig, dest);
+    if (this.config.bccSelf) await this.sendSync({ SaveMessage: { src: orig.id, dest } });
+  }
+
+  /** Like core's save_copy_in_self_talk(): sorted by the time of saving. */
+  private async copyToSelf(orig: Message, id: string) {
+    const chat = await this.selfChat();
+    const now = Date.now();
+    await this.saveMessage({
+      ...orig, id, chatId: chat.id, savedFrom: orig.id, timestamp: now, addedAt: now,
+      state: orig.from === 'self' ? 'sent' : 'received', reactions: {},
+      unseenUid: undefined, wantsMdn: undefined, edited: undefined, pinned: undefined, readBy: undefined, error: undefined,
+    });
+    chat.lastActivity = now;
+    await this.saveChat(chat);
+    this.changed(`messages:${orig.chatId}`);
+  }
+
   /** Sends sync items to the own other devices, like core's send_sync_msg(). */
   private async sendSync(...data: Record<string, unknown>[]) {
     const timestamp = Math.floor(Date.now() / 1000);
@@ -683,7 +716,6 @@ export class DcClient extends EventTarget {
     }, [], true);
   }
 
-  /** Sets or, with an empty string, removes the own reaction, like core's send_reaction(). */
   /** Pins or unpins a message for everyone in the chat, like core's set_pinned_state(). */
   async setPinned(chatId: string, msgId: string, pinned: boolean) {
     const chat = this.chats.get(chatId);
@@ -709,6 +741,7 @@ export class DcClient extends EventTarget {
     await this.saveMessage({ ...target, pinned: pinned || undefined });
   }
 
+  /** Sets or, with an empty string, removes the own reaction, like core's send_reaction(). */
   async sendReaction(chatId: string, msgId: string, reaction: string) {
     const chat = this.chats.get(chatId);
     const target = this.messages.get(chatId)?.find(m => m.id === msgId);
@@ -875,11 +908,7 @@ export class DcClient extends EventTarget {
       const del = data?.DeleteMessages as { msgs?: string[] } | undefined;
       if (save?.src && save.dest && !this.messageById(save.dest)) {
         const orig = this.messageById(save.src);
-        if (!orig || orig.info) continue;
-        const chat = await this.selfChat();
-        await this.saveMessage({ ...orig, id: save.dest, chatId: chat.id, reactions: {}, unseenUid: undefined, edited: undefined });
-        chat.lastActivity = Date.now();
-        await this.saveChat(chat);
+        if (orig && savable(orig) && !this.savedCopy(orig)) await this.copyToSelf(orig, save.dest);
       }
       for (const id of del?.msgs ?? []) await this.deleteLocally(id);
     }
@@ -891,6 +920,8 @@ export class DcClient extends EventTarget {
     this.messages.set(m.chatId, (this.messages.get(m.chatId) ?? []).filter(x => x.id !== id));
     await this.store.delete(`msg/${m.chatId}/${id}`);
     this.changed(`messages:${m.chatId}`);
+    const orig = m.savedFrom && this.messageById(m.savedFrom);
+    if (orig) this.changed(`messages:${orig.chatId}`);
   }
 
   private async senderContact(p: ParsedMessage): Promise<Contact | undefined> {

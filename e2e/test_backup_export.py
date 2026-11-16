@@ -16,6 +16,8 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     expect(page.locator(".msg.in", has_text="hello web").locator(".quote")).to_be_visible()
     message_action(page, page.locator(".msg.in", has_text="hello web"), "Pin")
     expect(page.locator(".pinbar")).to_contain_text("hello web")
+    message_action(page, page.locator(".msg.in", has_text="hello web"), "Save")
+    expect(page.locator(".msg.in", has_text="hello web").get_by_role("img", name="Saved")).to_be_visible()
     png = tmp_path / "dot.png"
     png.write_bytes(PNG)
     page.locator('.composer input[type="file"]').set_input_files(str(png))
@@ -53,13 +55,15 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         restored.start_io()
         assert restored.get_config("displayname") == "Webby"
         chats = {c.get_basic_snapshot().name: c for c in restored.get_chatlist()}
-        assert {"Dora", "Export group", "Phone"} <= set(chats), list(chats)
+        assert {"Dora", "Export group", "Phone", "Saved messages"} <= set(chats), list(chats)
         snaps = [m.get_snapshot() for m in chats["Dora"].get_messages()]
         assert {"hello web", "hello dora"} <= {s.text for s in snaps}
         quoted = next(s for s in snaps if s.text == "hello web")
         assert quoted.quote.text == "question\nin two lines", quoted.quote
         assert restored.get_message_by_id(quoted.quote.message_id).get_snapshot().text == "question\nin two lines"
         assert rpc.get_pinned_messages(restored.id, chats["Dora"].id) == [quoted.id]
+        copy = restored.get_message_by_id(quoted.saved_message_id).get_snapshot()
+        assert copy.chat_id == chats["Saved messages"].id and copy.original_msg_id == quoted.id, copy
         pic = next(s for s in snaps if s.text == "hello dora")
         assert pic.file_name == "dot.png" and Path(pic.file).read_bytes() == PNG, pic
         receipts = rpc.get_message_read_receipts(restored.id, pic.id)

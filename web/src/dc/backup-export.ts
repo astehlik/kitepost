@@ -214,6 +214,10 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
         }
       }
     }
+    // Core links a saved copy to the row of its original.
+    for (const m of src.messages) {
+      if (m.savedFrom) run('UPDATE msgs SET starred = (SELECT id FROM msgs WHERE rfc724_mid = ?) WHERE rfc724_mid = ?', [m.savedFrom, m.id]);
+    }
 
     return tar([{ name: DB_NAME, data: db.export() }, ...files]);
   } finally {
