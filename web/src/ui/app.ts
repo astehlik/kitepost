@@ -1070,12 +1070,33 @@ function startMain(client: DcClient, initialChat?: string) {
   const tick = setInterval(() => { renderList(); renderPane(); }, 60_000);
   signal.addEventListener('abort', () => clearInterval(tick));
   client.addEventListener('incoming', ev => {
-    const { chatId } = (ev as CustomEvent<{ chatId: string }>).detail;
-    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-      const chat = client.chats.get(chatId);
-      if (chat && !chat.isRequest) new Notification(client.chatTitle(chat), { body: t('chat.newMessage') });
-    }
+    const d = (ev as CustomEvent<Incoming>).detail;
+    const chat = client.chats.get(d.chatId);
+    if (document.hidden && chat && !chat.isRequest && 'Notification' in window && Notification.permission === 'granted') notify(chat, d);
   }, { signal });
+
+  /** Like Delta Chat's notifications: one per chat, replaced by the next one. */
+  function notify(chat: Chat, d: Incoming) {
+    const details = client.notifyDetails;
+    const sender = client.contactName(d.from);
+    const m = client.messages.get(chat.id)?.find(x => x.id === d.msgId);
+    const group = chat.type === 'group';
+    let body = t('chat.newMessage');
+    if (details === 'all' && d.reaction) body = t('notify.reacted', { name: sender, reaction: d.reaction });
+    else if (details === 'all' && m) body = `${group ? `${sender}: ` : ''}${m.text || attachmentKind(m.attachments[0]?.mime ?? '')}`;
+    else if (details === 'sender' && group) body = `${sender}: ${body}`;
+    const title = details === 'none' ? 'Kitepost' : client.chatTitle(chat);
+    const n = new Notification(title, {
+      body: body.length > 200 ? `${body.slice(0, 199)}…` : body, tag: chat.id,
+      icon: details === 'none' ? undefined : avatarImage(client.chatTitle(chat), chatAvatarKey(client, chat)),
+      renotify: true,
+    } as NotificationOptions);
+    n.onclick = () => {
+      window.focus();
+      open(chat.id);
+      n.close();
+    };
+  }
   if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
@@ -1165,17 +1186,46 @@ function action(d: string, label: string, onclick: (ev: Event) => void) {
 
 /** Letter avatar with a stable color per address, like Delta Chat's. */
 function avatar(name: string, key: string, content?: Node) {
+  const el = h('span', { class: 'avatar', 'aria-hidden': 'true' }, content ?? h('span', {}, ([...name.trim()][0] ?? '?').toUpperCase()));
+  el.style.background = `hsl(${avatarHue(key)} 42% 42%)`;
+  return el;
+}
+
+type Incoming = { chatId: string; from: string; msgId: string; reaction?: string };
+
+const chatAvatarKey = (client: DcClient, chat: Chat) =>
+  chat.type === 'self' ? 'self' : (chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.addr : chat.grpid) ?? chat.id;
+
+const avatarHue = (key: string) => {
   let hash = 0;
   for (const c of key) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
-  const el = h('span', { class: 'avatar', 'aria-hidden': 'true' }, content ?? h('span', {}, ([...name.trim()][0] ?? '?').toUpperCase()));
-  el.style.background = `hsl(${hash % 360} 42% 42%)`;
-  return el;
+  return hash % 360;
+};
+
+/** The letter avatar as an image, for notifications. */
+function avatarImage(name: string, key: string): string {
+  const canvas = h('canvas', { width: '96', height: '96' });
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = `hsl(${avatarHue(key)} 42% 42%)`;
+  ctx.arc(48, 48, 48, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '600 48px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(([...name.trim()][0] ?? '?').toUpperCase(), 48, 51);
+  return canvas.toDataURL();
+}
+
+function attachmentKind(mime: string): string {
+  const kind = mime.split('/')[0];
+  return t(kind === 'image' ? 'notify.image' : kind === 'video' ? 'notify.video' : kind === 'audio' ? 'notify.audio' : 'notify.file');
 }
 
 function chatAvatar(client: DcClient, chat: Chat) {
   if (chat.type === 'self') return avatar('', 'self', icon(ICONS.star));
   const contact = chat.type === 'single' ? client.contacts.get(chat.contact ?? '') : undefined;
-  const el = avatar(client.chatTitle(chat), contact?.addr ?? chat.grpid ?? chat.id);
+  const el = avatar(client.chatTitle(chat), chatAvatarKey(client, chat));
   if (contact && client.freshness(contact) === 'recent') el.classList.add('seen');
   return el;
 }
@@ -1272,6 +1322,10 @@ function profileDialog(client: DcClient, rebuild: () => void) {
   const receiptsField = h('div', { class: 'remember' },
     h('label', { class: 'check' }, receipts, t('profile.readReceipts')),
     h('small', { class: 'hint' }, t('profile.readReceiptsHint')));
+  const notifyDetails = h('select', {},
+    ...(['all', 'sender', 'none'] as const).map(v => h('option', { value: v, selected: client.notifyDetails === v },
+      t(v === 'all' ? 'profile.notifyAll' : v === 'sender' ? 'profile.notifySender' : 'profile.notifyNone'))));
+  const notifyField = h('div', {}, field(t('profile.notify'), notifyDetails), h('small', { class: 'hint' }, t('profile.notifyHint')));
   const lang = languageSelect(() => {
     document.querySelector('dialog')?.close();
     rebuild();
@@ -1282,6 +1336,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
     field(t('setup.displayName'), name),
     field(t('language'), lang),
     receiptsField,
+    notifyField,
     remember.el,
     h('div', { class: 'profile-info' },
       h('small', {}, t('profile.address', { addr: client.config.addr })),
@@ -1294,6 +1349,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
         await client.setDisplayName(name.value);
         await client.setRemembered(remember.box.checked);
         await client.setReadReceipts(receipts.checked);
+        await client.setNotifyDetails(notifyDetails.value as 'all' | 'sender' | 'none');
       },
     },
   ]);

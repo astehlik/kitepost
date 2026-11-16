@@ -521,6 +521,64 @@ def test_core_group_with_web_member(web, dora):
     assert wait_text(dora.acc, "Group reply from web").chat_id == group.id
 
 
+NOTIFICATIONS = """() => {
+  window.notes = [];
+  window.Notification = class {
+    static permission = 'granted';
+    constructor(title, options) { Object.assign(this, options, { title }); window.notes.push(this); }
+    close() {}
+  };
+  Object.defineProperty(document, 'hidden', { get: () => true, configurable: true });
+}"""
+
+
+def next_note(page, count):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while page.evaluate("window.notes.length") < count:
+        assert time.monotonic() < deadline, page.evaluate("window.notes.map(n => n.body)")
+        time.sleep(0.1)
+    return page.evaluate(f"(({{ title, body, tag, icon, renotify }}) => ({{ title, body, tag, icon: !!icon, renotify }}))(window.notes[{count - 1}])")
+
+
+def test_notifications_show_sender_and_content(web, dora, tmp_path):
+    page = web.page
+    page.evaluate(NOTIFICATIONS)
+    dora.chat.send_text("hello from dora")
+    note = next_note(page, 1)
+    assert note == {"title": "Dora", "body": "hello from dora", "tag": note["tag"], "icon": True, "renotify": True}, note
+    png = tmp_path / "dot.png"
+    png.write_bytes(PNG)
+    dora.chat.send_file(str(png))
+    assert next_note(page, 2)["body"] == "Image"
+
+    web_send(page, "react to me")
+    dora.acc.get_message_by_id(wait_text(dora.acc, "react to me").id).send_reaction("👍")
+    assert next_note(page, 3)["body"] == "Dora reacted 👍 to your message"
+
+    group = dora.acc.create_group("Notify group")
+    group.add_contact(dora.acc.get_contact_by_id(dora.contact_id))
+    group.send_text("hello group")
+    note = next_note(page, 4)
+    assert (note["title"], note["body"]) == ("Notify group", "Dora: hello group"), note
+
+    page.get_by_role("button", name="Edit profile").click()
+    page.locator("dialog select").nth(1).select_option(label="Sender only")
+    page.get_by_role("button", name="Save").click()
+    group.send_text("secret in the group")
+    note = next_note(page, 5)
+    assert (note["title"], note["body"]) == ("Notify group", "Dora: New message"), note
+
+    page.get_by_role("button", name="Edit profile").click()
+    page.locator("dialog select").nth(1).select_option(label="No details")
+    page.get_by_role("button", name="Save").click()
+    dora.chat.send_text("secret")
+    note = next_note(page, 6)
+    assert note == {"title": "Kitepost", "body": "New message", "tag": note["tag"], "icon": False, "renotify": True}, note
+
+    page.evaluate("window.notes[5].onclick()")
+    expect(page.locator(".chathead strong")).to_have_text("Dora")
+
+
 def test_pinning_in_core_shows_info_messages(web, dora):
     page = web.page
     msg = dora.chat.send_text("pin me")

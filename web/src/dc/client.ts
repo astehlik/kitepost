@@ -389,6 +389,15 @@ export class DcClient extends EventTarget {
     return this.config.readReceipts !== false;
   }
 
+  get notifyDetails(): 'all' | 'sender' | 'none' {
+    return this.config.notifyDetails ?? 'all';
+  }
+
+  async setNotifyDetails(v: 'all' | 'sender' | 'none') {
+    this.config.notifyDetails = v === 'all' ? undefined : v;
+    await this.saveConfig();
+  }
+
   async setReadReceipts(on: boolean) {
     this.config.readReceipts = on;
     await this.saveConfig();
@@ -1048,6 +1057,10 @@ export class DcClient extends EventTarget {
         if (r) reactions[from] = r;
         else delete reactions[from];
         await this.saveMessage({ ...target, reactions });
+        // Like core's IncomingReaction: only reactions to own messages notify.
+        if (r && target.from === 'self' && from !== 'self') {
+          this.dispatchEvent(new CustomEvent('incoming', { detail: { chatId: target.chatId, from, msgId: target.id, reaction: r } }));
+        }
       }
       return;
     }
@@ -1086,7 +1099,7 @@ export class DcClient extends EventTarget {
     if (!own) chat.unread += 1;
     this.unarchive(chat);
     await this.saveChat(chat);
-    if (!own) this.dispatchEvent(new CustomEvent('incoming', { detail: { chatId: chat.id, from } }));
+    if (!own) this.dispatchEvent(new CustomEvent('incoming', { detail: { chatId: chat.id, from, msgId: mid } }));
   }
 
   /** Like core's parse_system_message_headers(); undefined: not a system message, null: nothing to show. */

@@ -17,6 +17,8 @@ export interface Config {
   bccSelf?: boolean;
   /** Request and send read receipts, on unless turned off, like core's mdns_enabled. */
   readReceipts?: boolean;
+  /** What notifications show, like Delta Chat's setting; everything when unset. */
+  notifyDetails?: 'sender' | 'none';
   /** A backup was downloaded or another device has the profile, so losing the browser loses nothing. */
   secured?: boolean;
   /** Last time a message from the own address came with another key, and when the warning was hidden. */
