@@ -156,3 +156,21 @@ def test_revoked_invite_stops_working(admin, context):
     admin.unroute("**/api/invites/*")
     expect(admin.locator("tbody tr").first).to_contain_text("revoked")
     assert context.new_page().goto(link).status == 410
+
+
+def test_deleted_account_is_gone_from_the_relay(admin, context):
+    addr, _ = redeem(context.new_page(), create_invite(admin))
+    mailbox = f"/home/vmail/mail/{RELAY}/{addr}"
+    relay_exec("test", "-f", f"{mailbox}/password")
+    admin.reload()
+    row = admin.locator(".account", has_text=addr)
+
+    admin.once("dialog", lambda dialog: dialog.dismiss())
+    row.get_by_role("button", name="Delete").click()
+    relay_exec("test", "-f", f"{mailbox}/password")
+
+    admin.once("dialog", lambda dialog: dialog.accept())
+    row.get_by_role("button", name="Delete").click()
+    expect(row.locator("del")).to_have_text(addr)
+    expect(row.get_by_role("button")).to_have_count(0)
+    relay_exec("test", "!", "-e", mailbox)

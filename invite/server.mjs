@@ -3,7 +3,7 @@
 
 import { createServer } from 'node:http';
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import QRCode from 'qrcode';
 import { LANGUAGES, requestLanguage, translator } from './i18n.mjs';
@@ -84,6 +84,14 @@ async function createAccount() {
     return { addr, password };
   }
   throw new Error('could not find a free address');
+}
+
+// Removing the password first stops logins and deliveries even if Dovecot still writes into the Maildir.
+async function deleteAccount(addr) {
+  const dir = join(MAILBOXES_DIR, addr);
+  await rm(join(dir, 'password'), { force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+  handoff.forget(addr);
 }
 
 function dclogin(addr, password) {
@@ -269,6 +277,18 @@ async function admin(req, res, path) {
     inv.revoked = true;
     await persist();
     return send(res, 200, JSON.stringify(publicInvite(inv)), 'application/json');
+  }
+  // Only addresses from `redeemed` reach the file system, which rules out path traversal.
+  const a = /^api\/accounts\/([^/]+)$/.exec(path);
+  if (req.method === 'DELETE' && a) {
+    const addr = decodeURIComponent(a[1]);
+    const account = invites.flatMap(i => i.redeemed).find(r => r.addr === addr && !r.deleted);
+    if (!account) return send(res, 404, '{}', 'application/json');
+    await deleteAccount(account.addr);
+    account.deleted = Date.now();
+    await persist();
+    console.log(`account deleted: ${account.addr}`);
+    return send(res, 200, JSON.stringify(account), 'application/json');
   }
   return send(res, 404, '{}', 'application/json');
 }

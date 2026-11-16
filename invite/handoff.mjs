@@ -110,5 +110,9 @@ export function handoffs({ mailDomain, mailboxesDir }) {
     return data;
   }
 
-  return { api, peek, take };
+  const forget = addr => {
+    for (const [id, h] of store) if (h.addr === addr) store.delete(id);
+  };
+
+  return { api, peek, take, forget };
 }

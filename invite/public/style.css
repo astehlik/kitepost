@@ -35,6 +35,8 @@ th, td { text-align: left; padding: .45rem .3rem; border-bottom: 1px solid var(-
 .linkrow code { flex: 1 1 16rem; overflow-wrap: anywhere; }
 td.status, td.dates span, td.action { white-space: nowrap; }
 td.action { text-align: right; padding-block: .25rem; }
+td.accounts .account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .2rem .5rem; padding-block: .1rem; }
+td.accounts del { color: var(--muted); }
 button.compact { padding: .15rem .8rem; font-size: .85rem; border-width: 1.5px; }
 @media (max-width: 560px) {
   body { padding: 1rem 16px; }

@@ -128,7 +128,8 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
 ```
 
 - `/join/admin`: create, list and revoke invites (admin token, ≥ 24 characters). A link is shown only
-  once; storage keeps only its SHA-256.
+  once; storage keeps only its SHA-256. Accounts created through an invite can be deleted there, which
+  removes their mailbox directory. Sessions that are already open stay connected until they reconnect.
 - `/join/<token>`: the friend presses *Create my account* (a POST, so link previews in messengers
   don't use up the invite). The result page leads to the web client, already logged in; the
   credentials travel in the URL fragment, so no server sees them. A collapsed alternative is for

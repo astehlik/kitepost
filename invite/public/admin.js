@@ -8,6 +8,7 @@ const MESSAGES = {
     uses: 'Number of accounts', create: 'Create invite link', created: 'New invite link (shown only once):', copy: 'Copy', copied: 'Copied ✓', copyFailed: 'Link selected, copy it with Ctrl+C',
     revoke: 'Revoke', status: 'Status', accounts: 'Accounts', valid: 'Valid', signOut: 'Sign out', never: 'never',
     revoked: 'revoked', open: 'open · {n} left', expired: 'expired', used: 'used',
+    delete: 'Delete', deleted: 'deleted {date}', confirmDelete: 'Delete {addr} and all its messages on the server? This cannot be undone.',
   },
   de: {
     wrongToken: 'Falsches Admin-Token', failed: 'Anfrage fehlgeschlagen ({status})', token: 'Admin-Token', title: 'Einladungen', signIn: 'Anmelden',
@@ -15,6 +16,7 @@ const MESSAGES = {
     uses: 'Anzahl Konten', create: 'Einladungslink erstellen', created: 'Neuer Einladungslink (wird nur einmal angezeigt):', copy: 'Kopieren', copied: 'Kopiert ✓', copyFailed: 'Link markiert, mit Strg+C kopieren',
     revoke: 'Widerrufen', status: 'Status', accounts: 'Konten', valid: 'Gültig', signOut: 'Abmelden', never: 'nie',
     revoked: 'widerrufen', open: 'offen · noch {n}', expired: 'abgelaufen', used: 'benutzt',
+    delete: 'Löschen', deleted: 'gelöscht am {date}', confirmDelete: '{addr} und alle Nachrichten auf dem Server löschen? Das lässt sich nicht rückgängig machen.',
   },
 };
 const lang = document.documentElement.lang in MESSAGES ? document.documentElement.lang : 'en';
@@ -130,10 +132,21 @@ async function render(created) {
     h('div', { class: 'linkrow' }, h('code', { id: 'link' }, created),
       h('button', { onclick: e => copyLink(e.currentTarget, created) }, T('copy')))) : null;
 
+  const account = r => h('div', { class: 'account' }, r.deleted
+    ? h('del', { title: T('deleted', { date: fmt(r.deleted) }) }, ...addrParts(r.addr))
+    : h('span', {}, ...addrParts(r.addr)),
+  r.deleted ? null : h('button', {
+    class: 'compact',
+    onclick: e => {
+      if (!confirm(T('confirmDelete', { addr: r.addr }))) return;
+      whileBusy(e.currentTarget, async () => { await api('DELETE', `api/accounts/${encodeURIComponent(r.addr)}`); await render(); }, error);
+    },
+  }, T('delete')));
+
   const rows = list.map(inv => h('tr', {},
     h('td', {}, inv.note || h('span', { class: 'muted' }, '—')),
     h('td', { class: 'status' }, T(inv.revoked ? 'revoked' : inv.active ? 'open' : inv.usesLeft ? 'expired' : 'used', { n: inv.usesLeft })),
-    h('td', { class: 'accounts' }, ...inv.redeemed.flatMap(r => [...addrParts(r.addr), h('br')])),
+    h('td', { class: 'accounts' }, ...inv.redeemed.map(account)),
     h('td', { class: 'muted dates' }, h('span', {}, `${fmt(inv.created)} –`), ' ', h('span', {}, fmt(inv.expires))),
     h('td', { class: 'action' }, inv.active ? h('button', {
       class: 'compact',
