@@ -26,6 +26,8 @@ const VERSION_SAMPLES: Record<string, string> = {
   '12.1': '🧑‍🦰', '13': '🥲', '13.1': '😶‍🌫️', '14': '🫠', '15': '🫨', '15.1': '🙂‍↔️', '16': '🫩', '17': '🫪', '18': '🫫',
 };
 
+const REFERENCES = ['😀', '🦊', '🍕', '🚀'];
+
 /** Whether `emoji` renders as one colored glyph; fonts without it show a box or split a sequence. */
 function rendersAsEmoji(ctx: CanvasRenderingContext2D, emoji: string, width: number): boolean {
   if (ctx.measureText(emoji).width > width * 1.5) return false;
@@ -48,8 +50,10 @@ async function unsupportedVersions(): Promise<Set<string> | undefined> {
   await document.fonts.ready;
   // A fresh browser may still be loading its emoji font, which would look like missing support.
   for (let attempt = 0; attempt < 10; attempt++) {
-    const width = ctx.measureText('😀').width;
-    if (rendersAsEmoji(ctx, '😀', width)) {
+    // Text fonts such as DejaVu Sans draw some emojis like 😀 in black, so one colored reference suffices.
+    const reference = REFERENCES.find(e => rendersAsEmoji(ctx, e, Infinity));
+    if (reference) {
+      const width = ctx.measureText(reference).width;
       return new Set(Object.entries(VERSION_SAMPLES).filter(([, e]) => !rendersAsEmoji(ctx, e, width)).map(([v]) => v));
     }
     await new Promise(r => setTimeout(r, 100));
