@@ -259,6 +259,30 @@ def test_delete_for_me_and_for_everyone(web, dora):
     wait_event(dora.acc, EventType.MSG_DELETED, lambda e: deleted.add(e.msg_id) or {one.id, two.id} <= deleted)
 
 
+def test_delete_for_everyone_only_where_it_makes_sense(web, dora):
+    page = web.page
+    dora.chat.send_text("theirs")
+    web_send(page, "mine")
+    message_action(page, page.locator(".msg.in", has_text="theirs"), "Select")
+    page.locator(".msg.out", has_text="mine").click()
+    page.locator(".selbar").get_by_role("button", name="Delete message").click()
+    dialog = page.locator("dialog")
+    expect(dialog.get_by_role("button", name="Delete for me")).to_be_visible()
+    expect(dialog.get_by_role("button", name="Delete for everyone")).to_have_count(0)
+    dialog.get_by_role("button", name="Cancel").click()
+    page.keyboard.press("Escape")
+    expect(page.locator(".selbar")).to_be_hidden()
+
+    message_action(page, page.locator(".msg.out", has_text="mine"), "Save")
+    page.locator(".chatlist li", has_text="Saved messages").click()
+    copy = page.locator(".msg.out", has_text="mine")
+    message_action(page, copy, "Delete message")
+    expect(dialog).to_contain_text("Removes it here and on your other devices.")
+    expect(dialog.get_by_role("button", name="Delete for everyone")).to_have_count(0)
+    dialog.get_by_role("button", name="Delete", exact=True).click()
+    expect(copy).to_have_count(0)
+
+
 def open_info(page, msg):
     message_action(page, msg, "Message info")
     return page.locator("dialog")

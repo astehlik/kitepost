@@ -36,6 +36,11 @@ export function savable(m: Message): boolean {
   return !m.info && !m.savedFrom && m.chatId !== SELF_CHAT && m.id.includes('@');
 }
 
+/** Like Android's handleDeleteMessages(): own sent messages in a chat that can send, but not in "Saved messages". */
+export function canDeleteForAll(chat: Chat, msgs: Message[]): boolean {
+  return !chat.left && !chat.isRequest && chat.type !== 'self' && msgs.every(m => m.from === 'self' && !m.info && m.id.includes('@'));
+}
+
 /** Like core's is_pinnable(): a failed message did not reach everyone, pinning it raises wrong expectations. */
 export function pinnable(m: Message): boolean {
   return !m.info && m.state !== 'failed' && m.state !== 'pending' && m.id.includes('@');
@@ -659,8 +664,8 @@ export class DcClient extends EventTarget {
     if (!chat || !msgs.length || msgs.some(m => !m)) throw new Error('unknown message');
     const wire = msgIds.filter(id => id.includes('@'));
     if (forAll) {
-      if (msgs.some(m => m!.from !== 'self' || m!.info) || wire.length !== msgIds.length) throw new Error('unknown message');
       if (chat.left) throw new Error(t('error.notMember'));
+      if (!canDeleteForAll(chat, msgs as Message[])) throw new Error('unknown message');
       const self = chat.type === 'self';
       const members = self ? [] : this.memberContacts(chat);
       if (!self && !members.length) throw new Error(t('error.noKey'));

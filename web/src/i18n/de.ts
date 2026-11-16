@@ -126,6 +126,8 @@ export const de: Record<keyof typeof en, string> = {
   'chat.deleteMessageTextOwn': '„Für mich löschen“ entfernt sie hier und auf deinen anderen Geräten. „Für alle löschen“ bittet auch die Apps der anderen, sie zu entfernen.',
   'chat.deleteForMe': 'Für mich löschen',
   'chat.deleteForAll': 'Für alle löschen',
+  'chat.delete': 'Löschen',
+  'chat.deleteMessageTextSelf': 'Entfernt sie hier und auf deinen anderen Geräten.',
   'chat.messageInfo': 'Nachrichteninfo',
   'chat.more': 'Mehr',
   'chat.copy': 'Text kopieren',

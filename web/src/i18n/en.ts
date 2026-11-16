@@ -124,6 +124,8 @@ export const en = {
   'chat.deleteMessageTextOwn': '“Delete for me” removes it here and on your other devices. “Delete for everyone” also asks the other members’ apps to remove it.',
   'chat.deleteForMe': 'Delete for me',
   'chat.deleteForAll': 'Delete for everyone',
+  'chat.delete': 'Delete',
+  'chat.deleteMessageTextSelf': 'Removes it here and on your other devices.',
   'chat.messageInfo': 'Message info',
   'chat.more': 'More',
   'chat.copy': 'Copy text',

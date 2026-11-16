@@ -1,5 +1,5 @@
 import { fileReader, readBackup } from '../dc/backup';
-import { DcClient, pinnable, savable } from '../dc/client';
+import { canDeleteForAll, DcClient, pinnable, savable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
 import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
@@ -498,11 +498,12 @@ function startMain(client: DcClient, initialChat?: string) {
       await client.deleteMessages(chat.id, msgs.map(m => m.id), forAll);
       clearSelection();
     };
-    const forAll = !chat.left && msgs.every(m => m.from === 'self' && m.id.includes('@'));
+    const self = chat.type === 'self';
+    const forAll = canDeleteForAll(chat, msgs);
     const title = msgs.length > 1 ? t('chat.deleteMessagesTitle', { n: msgs.length }) : t('chat.deleteMessageTitle');
-    dialog(title, h('p', {}, t(forAll ? 'chat.deleteMessageTextOwn' : 'chat.deleteMessageText')), [
+    dialog(title, h('p', {}, t(self ? 'chat.deleteMessageTextSelf' : forAll ? 'chat.deleteMessageTextOwn' : 'chat.deleteMessageText')), [
       { label: t('cancel') },
-      { label: t('chat.deleteForMe'), primary: !forAll, onClick: remove(false) },
+      { label: t(self ? 'chat.delete' : 'chat.deleteForMe'), primary: !forAll, onClick: remove(false) },
       ...forAll ? [{ label: t('chat.deleteForAll'), primary: true, onClick: remove(true) }] : [],
     ]);
   }
