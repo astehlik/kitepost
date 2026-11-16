@@ -1,6 +1,7 @@
 """Messaging between the web client and Delta Chat core."""
 
 import re
+import subprocess
 import time
 
 import pytest
@@ -106,6 +107,31 @@ RENDERS_AS_EMOJI = """emoji => {
 }"""
 
 
+PIXEL_STATS = """() => {
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    ctx.canvas.width = ctx.canvas.height = 40;
+    ctx.font = `32px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.textBaseline = 'top';
+    return ['😀', '🫩', '🫪', '🫫'].map(e => {
+        ctx.clearRect(0, 0, 40, 40);
+        ctx.fillText(e, 0, 0);
+        const d = ctx.getImageData(0, 0, 40, 40).data;
+        let ink = 0, rg = 0, rb = 0;
+        const colors = new Map();
+        for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] <= 128) continue;
+            ink++;
+            if (Math.max(Math.abs(d[i] - d[i + 1]), Math.abs(d[i + 1] - d[i + 2])) > 40) rg++;
+            if (Math.abs(d[i] - d[i + 2]) > 40) rb++;
+            const c = `${d[i] >> 5},${d[i + 1] >> 5},${d[i + 2] >> 5}`;
+            colors.set(c, (colors.get(c) ?? 0) + 1);
+        }
+        const top = [...colors].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, n]) => `${c}:${n}`).join(' ');
+        return `${e} width=${ctx.measureText(e).width.toFixed(1)} ink=${ink} rg/gb=${rg} rb=${rb} top=${top}`;
+    }).join('; ');
+}"""
+
+
 def test_picker_only_offers_emojis_the_browser_can_show(web, browser_name):
     page = web.page
     open_chat(page, "Phone")
@@ -113,7 +139,13 @@ def test_picker_only_offers_emojis_the_browser_can_show(web, browser_name):
     page.get_by_placeholder("Search emojis").fill("cracking face")
     expect(page.locator(".emoji-picker .hint", has_text="Loading")).to_have_count(0)
     offered = page.locator(".emoji-picker button.emoji", has_text="🫫").count() == 1
-    assert offered == page.evaluate(RENDERS_AS_EMOJI, "🫫")
+    renders = page.evaluate(RENDERS_AS_EMOJI, "🫫")
+    if offered != renders:
+        fonts = subprocess.run(["fc-list", ":", "family"], capture_output=True, text=True).stdout
+        pytest.fail(f"offered={offered} renders={renders} "
+                    f"picker hides versions: {page.locator('.emoji-picker').get_attribute('data-unsupported')}\n"
+                    f"pixels: {page.evaluate(PIXEL_STATS)}\n"
+                    f"emoji fonts: {sorted(set(f for f in fonts.splitlines() if 'moji' in f.lower()))}")
     if browser_name == "firefox":
         assert not offered, "Firefox's bundled emoji font has no Emoji 18"
 

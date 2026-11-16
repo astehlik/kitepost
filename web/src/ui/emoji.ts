@@ -15,6 +15,8 @@ export interface Emoji {
 export interface EmojiData {
   emojis: Emoji[];
   groups: { id: number; name: string }[];
+  /** Hidden Emoji versions, undefined if support could not be detected. */
+  unsupported?: string[];
 }
 
 const COMPONENT_GROUP = 2;
@@ -37,9 +39,9 @@ function rendersAsEmoji(ctx: CanvasRenderingContext2D, emoji: string, width: num
 }
 
 /** Emoji versions this browser cannot display, e.g. Firefox's bundled font lags behind the system's. */
-async function unsupportedVersions(): Promise<Set<string>> {
+async function unsupportedVersions(): Promise<Set<string> | undefined> {
   const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
-  if (!ctx) return new Set();
+  if (!ctx) return undefined;
   ctx.canvas.width = ctx.canvas.height = 40;
   ctx.font = `32px ${getComputedStyle(document.body).fontFamily}`;
   ctx.textBaseline = 'top';
@@ -53,7 +55,7 @@ async function unsupportedVersions(): Promise<Set<string>> {
     await new Promise(r => setTimeout(r, 100));
   }
   // Without a reliable reference, e.g. with canvas fingerprinting protection, hide nothing.
-  return new Set();
+  return undefined;
 }
 
 const baseHexcode = (hex: string) => hex.replace(/-FE0F/g, '');
@@ -67,11 +69,12 @@ async function fetchData(lang: Lang) {
     import('emojibase-data/versions/emoji.json'),
     unsupportedVersions(),
   ]);
-  const hidden = new Set([...unsupported].flatMap(v => (versions.default as Record<string, string[]>)[v] ?? []).map(baseHexcode));
+  const hidden = new Set([...unsupported ?? []].flatMap(v => (versions.default as Record<string, string[]>)[v] ?? []).map(baseHexcode));
   return {
     compact: compact.default.filter(e => !hidden.has(baseHexcode(e.hexcode))),
     messages: messages.default,
     shortcodes: shortcodes.default as Record<string, string | string[]>,
+    unsupported: unsupported && [...unsupported],
   };
 }
 
@@ -79,7 +82,7 @@ export function loadEmojis(): Promise<EmojiData> {
   const lang = getLanguage();
   let data = cache.get(lang);
   if (!data) {
-    data = fetchData(lang).then(({ compact, messages, shortcodes }) => {
+    data = fetchData(lang).then(({ compact, messages, shortcodes, unsupported }) => {
       const emojis = compact
         .filter(e => e.group !== undefined && e.group !== COMPONENT_GROUP)
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -94,7 +97,7 @@ export function loadEmojis(): Promise<EmojiData> {
       const groups = messages.groups
         .filter(g => g.order !== COMPONENT_GROUP && emojis.some(e => e.group === g.order))
         .map(g => ({ id: g.order, name: g.message }));
-      return { emojis, groups };
+      return { emojis, groups, unsupported };
     });
     cache.set(lang, data);
   }
@@ -127,7 +130,8 @@ export function emojiPicker(onPick: (emoji: string) => void): HTMLElement {
   const search = h('input', { type: 'search', placeholder: t('emoji.search'), 'aria-label': t('emoji.search') });
   const grid = h('div', { class: 'emoji-grid' }, h('p', { class: 'hint' }, t('emoji.loading')));
   const picker = h('div', { class: 'emoji-picker', role: 'dialog', 'aria-label': t('emoji.title') }, search, grid);
-  void loadEmojis().then(({ emojis, groups }) => {
+  void loadEmojis().then(({ emojis, groups, unsupported }) => {
+    picker.dataset.unsupported = unsupported ? unsupported.join(' ') || 'none' : 'unknown';
     const render = () => {
       const q = search.value;
       if (q.trim()) {
