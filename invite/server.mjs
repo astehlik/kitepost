@@ -173,7 +173,8 @@ async function successPage(lang, account, req) {
     <li><h3>${T('readyAppHeading')}</h3>
       <p>${T('readyAppText')}</p>
       <img class="qr" src="${loginQr}" alt="${T('readyQrAlt')}" width="320" height="320">
-      <p><a class="button" href="${esc(login)}">${T('readyAppButton')}</a></p></li>
+      <p><a class="button" href="${esc(login)}">${T('readyAppButton')}</a></p>
+      <p class="warn">${T('readyAppOnce')}</p></li>
   </ol>
   <p class="small">${T('readyPhoneOnlyLater')}</p></section>`);
 }

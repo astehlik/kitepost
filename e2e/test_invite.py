@@ -95,6 +95,7 @@ def test_result_page_offers_the_phone_only_path(admin, context):
     expect(friend.get_by_role("heading", name="Only use Delta Chat on the phone")).to_be_visible()
     expect(friend.locator("details")).to_have_count(0)
     expect(friend.locator(".way").last).to_contain_text("I already use Delta Chat")
+    expect(friend.locator("ol.steps > li").last.locator(".warn")).to_contain_text("For one device only")
     expect(friend.locator("ol.steps > li h3")).to_have_text(["Install Delta Chat on your phone", "Log in on your phone"])
     expect(friend.locator("img.qr")).to_have_count(2)
 
