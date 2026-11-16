@@ -221,11 +221,12 @@ export async function readBackup(
     for (const r of rows(db, 'SELECT chat_id, contact_id FROM chats_contacts WHERE add_timestamp >= remove_timestamp')) {
       members.set(num(r.chat_id), [...(members.get(num(r.chat_id)) ?? []), num(r.contact_id)]);
     }
-    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked, param FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
+    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked, param, archived FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
     for (const r of chatRows) {
       const ids = members.get(num(r.id)) ?? [];
       const fps = ids.map(id => fpById.get(id)).filter((fp): fp is string => !!fp && fp !== 'self');
-      const base = { name: str(r.name), isRequest: num(r.blocked) === BLOCKED_REQUEST, lastActivity: 0, unread: 0 };
+      const visibility = num(r.archived) === 1 ? 'archived' as const : num(r.archived) === 2 ? 'pinned' as const : undefined;
+      const base = { name: str(r.name), isRequest: num(r.blocked) === BLOCKED_REQUEST, lastActivity: 0, unread: 0, visibility };
       if (num(r.type) === CHAT_SINGLE && params(r.param).get('K') === '1') {
         chats.push({ ...base, id: SELF_CHAT, type: 'self', name: '', members: [], left: false });
         chatIdMap.set(num(r.id), SELF_CHAT);

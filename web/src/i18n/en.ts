@@ -94,6 +94,13 @@ export const en = {
 
   'list.request': 'Contact request',
   'list.mePrefix': 'Me: ',
+  'list.archived': 'Archived chats',
+  'list.back': 'Back to all chats',
+  'chat.pinChat': 'Pin chat',
+  'chat.unpinChat': 'Unpin chat',
+  'chat.archive': 'Archive',
+  'chat.unarchive': 'Unarchive',
+  'mark.pinnedChat': 'Pinned chat',
   'list.empty': 'No chats yet. Share your invite link or add a contact.',
   'pane.select': 'Select a chat.',
   'pane.e2e': 'Everything is end-to-end encrypted and decrypted only in this browser.',

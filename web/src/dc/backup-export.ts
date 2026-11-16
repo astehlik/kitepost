@@ -160,10 +160,10 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       const name = chat.type === 'self' ? 'Saved messages'
         : single ? (src.contacts.find(c => c.fingerprint === chat.contact)?.name || src.contacts.find(c => c.fingerprint === chat.contact)?.addr || '')
         : chat.name;
-      run(`INSERT INTO chats (id, type, name, blocked, grpid, param, created_timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      run(`INSERT INTO chats (id, type, name, blocked, grpid, param, created_timestamp, archived)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [chatId, chat.type === 'group' ? CHAT_GROUP : CHAT_SINGLE, name, chat.isRequest ? BLOCKED_REQUEST : 0,
-        chat.grpid ?? '', chat.id === SELF_CHAT ? 'K=1' : '', created]);
+        chat.grpid ?? '', chat.id === SELF_CHAT ? 'K=1' : '', created, chat.visibility === 'archived' ? 1 : chat.visibility === 'pinned' ? 2 : 0]);
       const members: [number, number, number][] = chat.type === 'self' ? [[CONTACT_SELF, created, 0]]
         : single ? [[single, created, 0]]
         : [

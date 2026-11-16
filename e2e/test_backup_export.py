@@ -31,6 +31,9 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     page.get_by_role("button", name="Create", exact=True).click()
     expect(page.locator(".info", has_text="Group created")).to_be_visible()
     web_send(page, "group from web")
+    page.locator(".chatlist li[data-chat]", has_text="Export group").click(button="right")
+    page.locator(".menu").get_by_role("menuitem", name="Pin chat").click()
+    expect(page.locator(".chatlist li", has_text="Export group").get_by_role("img", name="Pinned chat")).to_be_visible()
     dora_group = dora.acc.get_chat_by_id(wait_text(dora.acc, "group from web").chat_id)
 
     unsecured = page.locator(".profile .icon-button.attention")
@@ -56,6 +59,7 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         assert restored.get_config("displayname") == "Webby"
         chats = {c.get_basic_snapshot().name: c for c in restored.get_chatlist()}
         assert {"Dora", "Export group", "Phone", "Saved messages"} <= set(chats), list(chats)
+        assert chats["Export group"].get_basic_snapshot().pinned
         snaps = [m.get_snapshot() for m in chats["Dora"].get_messages()]
         assert {"hello web", "hello dora"} <= {s.text for s in snaps}
         quoted = next(s for s in snaps if s.text == "hello web")

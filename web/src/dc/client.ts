@@ -270,8 +270,47 @@ export class DcClient extends EventTarget {
     return chat.type === 'single' && chat.contact ? this.contactName(chat.contact) : chat.name;
   }
 
+  /** Pinned chats first, like core's chatlist. */
   sortedChats(): Chat[] {
-    return [...this.chats.values()].sort((a, b) => b.lastActivity - a.lastActivity);
+    const pinned = (c: Chat) => c.visibility === 'pinned' ? 1 : 0;
+    return [...this.chats.values()].sort((a, b) => pinned(b) - pinned(a) || b.lastActivity - a.lastActivity);
+  }
+
+  /** Archives, pins or resets a chat and tells the own other devices, like core's set_visibility(). */
+  async setVisibility(chatId: string, visibility: Chat['visibility']) {
+    const chat = this.chats.get(chatId);
+    if (!chat) throw new Error('unknown chat');
+    await this.applyVisibility(chat, visibility);
+    const id = this.syncId(chat);
+    if (this.config.bccSelf && id) {
+      await this.sendSync({ AlterChat: { id, action: { SetVisibility: visibility === 'archived' ? 'Archived' : visibility === 'pinned' ? 'Pinned' : 'Normal' } } });
+    }
+  }
+
+  private async applyVisibility(chat: Chat, visibility: Chat['visibility']) {
+    chat.visibility = visibility;
+    // Like core, archiving marks fresh messages as noticed, without read receipts.
+    if (visibility === 'archived') chat.unread = 0;
+    await this.saveChat(chat);
+  }
+
+  /** Like core's Chat::get_sync_id(). */
+  private syncId(chat: Chat): Record<string, string> | undefined {
+    if (chat.type === 'self') return { ContactFingerprint: this.config.fingerprint };
+    if (chat.type === 'single' && chat.contact) return { ContactFingerprint: chat.contact };
+    if (chat.grpid) return { Grpid: chat.grpid };
+    return undefined;
+  }
+
+  private chatBySyncId(id: Record<string, unknown> | undefined): Chat | undefined {
+    const fp = typeof id?.ContactFingerprint === 'string' ? id.ContactFingerprint.toUpperCase() : undefined;
+    if (fp) return fp === this.config.fingerprint.toUpperCase() ? this.chats.get(SELF_CHAT) : [...this.chats.values()].find(c => c.type === 'single' && c.contact?.toUpperCase() === fp);
+    return typeof id?.Grpid === 'string' ? this.groupByGrpid(id.Grpid) : undefined;
+  }
+
+  /** Like core's unarchive_if_not_muted(); Kitepost has no muting. */
+  private unarchive(chat: Chat) {
+    if (chat.visibility === 'archived') chat.visibility = undefined;
   }
 
   async acceptChat(chatId: string) {
@@ -617,6 +656,7 @@ export class DcClient extends EventTarget {
       throw e;
     }
     chat.lastActivity = Date.now();
+    this.unarchive(chat);
     await this.saveChat(chat);
   }
 
@@ -909,6 +949,10 @@ export class DcClient extends EventTarget {
       return;
     }
     for (const { data } of items) {
+      const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: { SetVisibility?: string } } | undefined;
+      const visibility = alter?.action?.SetVisibility;
+      const target = visibility && this.chatBySyncId(alter.id);
+      if (target) await this.applyVisibility(target, visibility === 'Archived' ? 'archived' : visibility === 'Pinned' ? 'pinned' : undefined);
       const save = data?.SaveMessage as { src?: string; dest?: string } | undefined;
       const del = data?.DeleteMessages as { msgs?: string[] } | undefined;
       if (save?.src && save.dest && !this.messageById(save.dest)) {
@@ -1006,6 +1050,7 @@ export class DcClient extends EventTarget {
       });
       if (p.headers['chat-content'] !== 'message-unpinned') {
         chat.lastActivity = Date.now();
+        this.unarchive(chat);
         await this.saveChat(chat);
       }
       return;
@@ -1021,6 +1066,7 @@ export class DcClient extends EventTarget {
     });
     chat.lastActivity = Date.now();
     if (!own) chat.unread += 1;
+    this.unarchive(chat);
     await this.saveChat(chat);
     if (!own) this.dispatchEvent(new CustomEvent('incoming', { detail: { chatId: chat.id, from } }));
   }

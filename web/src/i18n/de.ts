@@ -96,6 +96,13 @@ export const de: Record<keyof typeof en, string> = {
 
   'list.request': 'Kontaktanfrage',
   'list.mePrefix': 'Ich: ',
+  'list.archived': 'Archivierte Chats',
+  'list.back': 'Zurück zu allen Chats',
+  'chat.pinChat': 'Chat anheften',
+  'chat.unpinChat': 'Chat loslösen',
+  'chat.archive': 'Archivieren',
+  'chat.unarchive': 'Aus dem Archiv holen',
+  'mark.pinnedChat': 'Angehefteter Chat',
   'list.empty': 'Noch keine Chats. Teile deinen Einladungslink oder füge einen Kontakt hinzu.',
   'pane.select': 'Wähle einen Chat.',
   'pane.e2e': 'Alles ist Ende-zu-Ende-verschlüsselt und wird nur in diesem Browser entschlüsselt.',

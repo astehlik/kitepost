@@ -37,6 +37,7 @@ def imported(page, make_account, tmp_path):
     phone_bob.send_file(str(png))
     phone_saved = phone.get_contact_by_id(1).create_chat()
     phone_saved.send_text("note before export")
+    phone_saved.pin()
     group = phone.create_group("Backup group")
     group.add_contact(phone.get_contact_by_addr(addr_of(bob)))
     group.send_text("group hello")
@@ -148,6 +149,30 @@ def test_deleting_for_me_syncs_between_devices(imported):
     expect(page.locator(".msg.in", has_text="delete me on the phone")).to_be_visible()
     phone.delete_messages([phone.get_message_by_id(wait_text(phone, "delete me on the phone").id)])
     expect(page.locator(".msg.in", has_text="delete me on the phone")).to_have_count(0)
+
+
+def wait_visibility(chat, archived, pinned):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while (snap := chat.get_basic_snapshot()).archived != archived or snap.pinned != pinned:
+        assert time.monotonic() < deadline, f"phone chat: {snap}"
+        time.sleep(0.2)
+
+
+def test_chat_visibility_syncs_between_devices(imported):
+    page, phone = imported.page, imported.phone
+    entry = page.locator(".chatlist li[data-chat]", has_text="Backup group")
+    entry.click(button="right")
+    page.locator(".menu").get_by_role("menuitem", name="Archive").click()
+    expect(entry).to_have_count(0)
+    phone_group = phone.get_chat_by_id(next(c.id for c in phone.get_chatlist() if c.get_basic_snapshot().name == "Backup group"))
+    wait_visibility(phone_group, True, False)
+
+    saved = page.locator(".chatlist li[data-chat]", has_text="Saved messages")
+    expect(saved.get_by_role("img", name="Pinned chat")).to_be_visible()
+
+    phone_group.unarchive()
+    phone_group.pin()
+    expect(entry.get_by_role("img", name="Pinned chat")).to_be_visible()
 
 
 def saved_on_phone(phone, msg_id, saved):

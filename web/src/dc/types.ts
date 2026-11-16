@@ -53,6 +53,8 @@ export interface Chat {
   left: boolean;
   lastActivity: number;
   unread: number;
+  /** Like core's ChatVisibility; normal when unset. */
+  visibility?: 'archived' | 'pinned';
 }
 
 export type MessageState = 'pending' | 'sent' | 'failed' | 'received' | 'read';

@@ -122,6 +122,11 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .chatlist .item { flex: 1; min-width: 0; }
 .chatlist li.active, .chatlist li:hover { background: var(--bg); }
 .chatlist li.empty { color: var(--muted); cursor: default; }
+.chatlist .row .mark { display: inline-flex; margin-left: auto; color: var(--muted); }
+.chatlist .row .mark svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chatlist li.archive-link { gap: .6rem; color: var(--muted); }
+.chatlist li.archive-link strong { flex: 1; font-weight: 600; }
+.chatlist li.archive-link svg { width: 20px; height: 20px; margin: 0 10px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .chatlist small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row { display: flex; justify-content: space-between; gap: .5rem; }
 .badge { background: var(--accent); color: var(--accent-text); border-radius: 10px; padding: 0 .45rem; font-size: .8rem; }

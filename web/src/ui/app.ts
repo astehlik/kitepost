@@ -411,6 +411,8 @@ function startMain(client: DcClient, initialChat?: string) {
 
   const status = h('span', { class: 'status' });
   const chatList = h('ul', { class: 'chatlist' });
+  let showArchived = false;
+  listenForChatMenu();
   const pane = h('section', { class: 'pane' });
   const me = h('div', { class: 'me' });
   const keyWarning = h('div', { class: 'key-warning', role: 'alert', hidden: true });
@@ -457,18 +459,32 @@ function startMain(client: DcClient, initialChat?: string) {
 
   function renderList() {
     clear(chatList);
-    let unread = 0;
-    for (const chat of client.sortedChats()) {
-      unread += chat.unread;
+    const chats = client.sortedChats();
+    const archived = chats.filter(c => c.visibility === 'archived');
+    if (!archived.length) showArchived = false;
+    const unread = chats.reduce((n, c) => n + c.unread, 0);
+    if (showArchived) {
+      chatList.append(h('li', { class: 'archive-link', title: t('list.back'), onclick: () => { showArchived = false; renderList(); } },
+        icon(ICONS.back), h('strong', {}, t('list.archived'))));
+    }
+    for (const chat of showArchived ? archived : chats.filter(c => c.visibility !== 'archived')) {
       const msgs = client.messages.get(chat.id) ?? [];
       const last = msgs[msgs.length - 1];
-      chatList.append(h('li', { class: chat.id === current ? 'active' : '', onclick: () => open(chat.id) },
+      chatList.append(h('li', { class: chat.id === current ? 'active' : '', 'data-chat': chat.id, onclick: () => open(chat.id) },
         chatAvatar(client, chat),
         h('div', { class: 'item' },
           h('div', { class: 'row' },
             h('strong', {}, client.chatTitle(chat) || '…'),
+            chat.visibility === 'pinned' ? metaMark(ICONS.pin, 'mark.pinnedChat') : null,
             chat.unread ? h('span', { class: 'badge' }, String(chat.unread)) : null),
           h('small', {}, chat.isRequest ? t('list.request') : last ? `${last.from === 'self' && !last.info ? t('list.mePrefix') : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : ''))));
+    }
+    if (!showArchived && archived.length) {
+      const archivedUnread = archived.reduce((n, c) => n + c.unread, 0);
+      chatList.append(h('li', { class: 'archive-link', onclick: () => { showArchived = true; renderList(); } },
+        icon(ICONS.archive), h('strong', {}, t('list.archived')),
+        h('span', { class: 'count' }, String(archived.length)),
+        archivedUnread ? h('span', { class: 'badge' }, String(archivedUnread)) : null));
     }
     if (!chatList.children.length) chatList.append(h('li', { class: 'empty' }, t('list.empty')));
     document.title = unread ? `(${unread}) Kitepost` : 'Kitepost';
@@ -648,6 +664,59 @@ function startMain(client: DcClient, initialChat?: string) {
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Escape' && selected.size && !document.querySelector('dialog[open], .popover')) clearSelection();
   }, { signal });
+
+  /** Pin and archive like Delta Chat's chatlist menu: right click, or a long press on touch screens. */
+  function listenForChatMenu() {
+    const chatOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>('li[data-chat]');
+    let press: { timer: number; x: number; y: number } | undefined;
+    let longPressed = false;
+    const cancel = () => {
+      if (press) clearTimeout(press.timer);
+      press = undefined;
+    };
+    const show = (li: HTMLElement, at: DOMRect) => {
+      const chat = client.chats.get(li.dataset.chat!);
+      if (!chat) return;
+      const set = (v: Chat['visibility']) => () => void client.setVisibility(chat.id, v).catch(errorDialog);
+      const item = (label: string, d: string, run: () => void) => {
+        const b = h('button', { type: 'button', role: 'menuitem', onclick: () => { close(); run(); } }, h('span', {}, label));
+        b.prepend(icon(d));
+        return b;
+      };
+      const box = h('div', { class: 'menu', role: 'menu' },
+        chat.visibility === 'pinned' ? item(t('chat.unpinChat'), ICONS.pin, set(undefined)) : item(t('chat.pinChat'), ICONS.pin, set('pinned')),
+        chat.visibility === 'archived' ? item(t('chat.unarchive'), ICONS.archive, set(undefined)) : item(t('chat.archive'), ICONS.archive, set('archived')));
+      const close = popover(li, box, at);
+    };
+    chatList.addEventListener('contextmenu', ev => {
+      const li = chatOf(ev.target);
+      if (!li) return;
+      ev.preventDefault();
+      if (!press && !longPressed) show(li, new DOMRect(ev.clientX, ev.clientY, 0, 0));
+    });
+    chatList.addEventListener('pointerdown', ev => {
+      longPressed = false;
+      const li = chatOf(ev.target);
+      if (ev.pointerType !== 'touch' || !li) return;
+      const timer = window.setTimeout(() => {
+        press = undefined;
+        longPressed = true;
+        show(li, new DOMRect(ev.clientX, ev.clientY, 0, 0));
+      }, 500);
+      press = { timer, x: ev.clientX, y: ev.clientY };
+    });
+    chatList.addEventListener('pointermove', ev => {
+      if (press && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > 10) cancel();
+    });
+    chatList.addEventListener('pointerup', cancel);
+    chatList.addEventListener('pointercancel', cancel);
+    chatList.addEventListener('click', ev => {
+      if (!longPressed) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      longPressed = false;
+    }, true);
+  }
 
   function listenForSelection(list: HTMLElement) {
     const msgOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>('.msg[data-id]');
@@ -1040,6 +1109,8 @@ const ICONS = {
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
   select: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6',
   pin: 'M12 17v5M9 4h6M10 4v6l-3.5 4v3h11v-3L14 10V4',
+  archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
+  back: 'M15 18l-6-6 6-6',
   close: 'M6 6l12 12M18 6 6 18',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
@@ -1052,7 +1123,7 @@ function stateMark(state: Exclude<Message['state'], 'received'>): Element {
   return mark;
 }
 
-function metaMark(d: string, key: 'mark.pinned' | 'mark.saved'): Element {
+function metaMark(d: string, key: 'mark.pinned' | 'mark.saved' | 'mark.pinnedChat'): Element {
   const label = t(key);
   const mark = h('span', { class: 'mark', role: 'img', 'aria-label': label, title: label });
   mark.append(icon(d));
