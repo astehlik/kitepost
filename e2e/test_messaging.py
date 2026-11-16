@@ -579,6 +579,38 @@ def test_notifications_show_sender_and_content(web, dora, tmp_path):
     expect(page.locator(".chathead strong")).to_have_text("Dora")
 
 
+PERMISSION = """state => {
+  let permission = state;
+  Object.defineProperty(Notification, 'permission', { get: () => permission, configurable: true });
+  Notification.requestPermission = async () => { permission = 'granted'; return permission; };
+}"""
+
+
+def test_notification_permission_is_asked_on_request(web):
+    page = web.page
+    bar = page.locator(".notify-bar")
+    expect(bar).to_be_visible()
+    bar.get_by_role("button", name="Later").click()
+    expect(bar).to_be_hidden()
+    reload_and_unlock(page)
+    expect(page.locator(".chatlist")).to_be_visible()
+    expect(bar).to_be_hidden()
+
+    page.evaluate(PERMISSION, "denied")
+    page.get_by_role("button", name="Edit profile").click()
+    expect(page.locator("dialog")).to_contain_text("Blocked in this browser")
+    page.keyboard.press("Escape")
+
+    page.evaluate("localStorage.removeItem('kitepost-notify-later')")
+    reload_and_unlock(page)
+    page.evaluate(PERMISSION, "default")
+    expect(bar).to_be_visible()
+    page.get_by_role("button", name="Edit profile").click()
+    page.locator("dialog").get_by_role("button", name="Turn on notifications").click()
+    expect(page.locator("dialog")).to_contain_text("Allowed in this browser.")
+    expect(bar).to_be_hidden()
+
+
 def test_pinning_in_core_shows_info_messages(web, dora):
     page = web.page
     msg = dora.chat.send_text("pin me")

@@ -416,6 +416,7 @@ function startMain(client: DcClient, initialChat?: string) {
   const pane = h('section', { class: 'pane' });
   const me = h('div', { class: 'me' });
   const keyWarning = h('div', { class: 'key-warning', role: 'alert', hidden: true });
+  const notifyBar = h('div', { class: 'notify-bar', hidden: true });
   const edit = h('button', {
     class: 'icon-button', title: t('nav.editProfile'), 'aria-label': t('nav.editProfile'),
     onclick: () => profileDialog(client, () => startMain(client, current)),
@@ -424,13 +425,26 @@ function startMain(client: DcClient, initialChat?: string) {
   const sidebar = h('aside', { class: 'sidebar' },
     h('header', { class: 'profile' }, me, status, edit),
     keyWarning,
+    notifyBar,
     h('nav', { class: 'nav-actions' },
       action(ICONS.qr, t('nav.myInvite'), busyClick(() => showInvite(client))),
       action(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
       action(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))),
     chatList);
 
+  function renderNotifyBar() {
+    notifyBar.hidden = notificationState() !== 'default' || notifyLater();
+    notifyBar.replaceChildren(...notifyBar.hidden ? [] : [
+      h('p', {}, t('notify.ask')),
+      h('div', { class: 'row' },
+        h('button', { class: 'primary', onclick: busyClick(askNotifications) }, t('notify.enable')),
+        h('button', { onclick: () => { setNotifyLater(); renderNotifyBar(); } }, t('notify.later')))]);
+  }
+
+  window.addEventListener('notify-permission', renderNotifyBar, { signal });
+
   function renderProfile() {
+    renderNotifyBar();
     keyWarning.hidden = !client.foreignKeyWarning;
     keyWarning.replaceChildren(...keyWarning.hidden ? [] : [
       h('p', {}, `${t('key.warning')} ${t(canHandoff ? 'key.replacePhone' : 'key.replaceBackup')}`),
@@ -1097,7 +1111,6 @@ function startMain(client: DcClient, initialChat?: string) {
       n.close();
     };
   }
-  if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     if (current) void client.markRead(current);
@@ -1189,6 +1202,33 @@ function avatar(name: string, key: string, content?: Node) {
   const el = h('span', { class: 'avatar', 'aria-hidden': 'true' }, content ?? h('span', {}, ([...name.trim()][0] ?? '?').toUpperCase()));
   el.style.background = `hsl(${avatarHue(key)} 42% 42%)`;
   return el;
+}
+
+const NOTIFY_LATER = 'kitepost-notify-later';
+
+function notificationState(): NotificationPermission | 'unsupported' {
+  return 'Notification' in window ? Notification.permission : 'unsupported';
+}
+
+async function askNotifications() {
+  await Notification.requestPermission();
+  window.dispatchEvent(new Event('notify-permission'));
+}
+
+function notifyLater(): boolean {
+  try {
+    return localStorage.getItem(NOTIFY_LATER) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setNotifyLater() {
+  try {
+    localStorage.setItem(NOTIFY_LATER, '1');
+  } catch {
+    // Storage can be blocked; the bar then returns on the next load.
+  }
 }
 
 type Incoming = { chatId: string; from: string; msgId: string; reaction?: string };
@@ -1325,7 +1365,15 @@ function profileDialog(client: DcClient, rebuild: () => void) {
   const notifyDetails = h('select', {},
     ...(['all', 'sender', 'none'] as const).map(v => h('option', { value: v, selected: client.notifyDetails === v },
       t(v === 'all' ? 'profile.notifyAll' : v === 'sender' ? 'profile.notifySender' : 'profile.notifyNone'))));
-  const notifyField = h('div', {}, field(t('profile.notify'), notifyDetails), h('small', { class: 'hint' }, t('profile.notifyHint')));
+  const permission = h('div', { class: 'notify-permission' });
+  const renderPermission = () => {
+    const state = notificationState();
+    permission.replaceChildren(
+      state === 'default' ? h('button', { onclick: busyClick(() => askNotifications().then(renderPermission)) }, t('notify.enable'))
+        : state === 'unsupported' ? '' : h('small', { class: 'hint' }, t(state === 'denied' ? 'notify.denied' : 'notify.granted')));
+  };
+  renderPermission();
+  const notifyField = h('div', {}, field(t('profile.notify'), notifyDetails), permission, h('small', { class: 'hint' }, t('profile.notifyHint')));
   const lang = languageSelect(() => {
     document.querySelector('dialog')?.close();
     rebuild();

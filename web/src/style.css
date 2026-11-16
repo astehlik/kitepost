@@ -182,6 +182,11 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .key-warning { margin: 0 .8rem .8rem; padding: .7rem .8rem; border: 1px solid var(--danger); border-radius: 10px; font-size: .85rem; }
 .key-warning p { margin: 0 0 .6rem; }
 .key-warning .row { display: flex; gap: .4rem; flex-wrap: wrap; }
+.notify-bar { margin: 0 .8rem .8rem; padding: .7rem .8rem; border: 1px solid var(--border); border-radius: 10px; font-size: .85rem; }
+.notify-bar[hidden] { display: none; }
+.notify-bar p { margin: 0 0 .6rem; }
+.notify-bar .row { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-start; }
+.notify-permission { margin: .4rem 0; }
 .icon-button.attention { position: relative; }
 .icon-button.attention::after { content: ''; position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 
