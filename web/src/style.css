@@ -162,6 +162,9 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .info-list ul { margin: 0; padding: 0; list-style: none; }
 .info-list .message-id { font-family: ui-monospace, monospace; font-size: .85rem; user-select: all; }
 
+.key-warning { margin: 0 .8rem .8rem; padding: .7rem .8rem; border: 1px solid var(--danger); border-radius: 10px; font-size: .85rem; }
+.key-warning p { margin: 0 0 .6rem; }
+.key-warning .row { display: flex; gap: .4rem; flex-wrap: wrap; }
 .icon-button.attention { position: relative; }
 .icon-button.attention::after { content: ''; position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 

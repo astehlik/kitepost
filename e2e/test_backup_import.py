@@ -84,6 +84,7 @@ def test_both_devices_send_and_receive(imported):
     open_chat(page, "Backup group")
     web_send(page, "group from web")
     assert wait_text(bob, "group from web").chat_id == imported.bob_group.id
+    expect(page.locator(".key-warning")).to_be_hidden()
 
 
 def test_read_state_syncs_both_ways(imported):

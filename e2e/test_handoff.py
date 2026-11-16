@@ -66,6 +66,7 @@ def test_handoff_at_signup(page, context, rpc, tmp_path):
         expect(page.locator(".msg", has_text="note from the phone")).to_be_visible()
         web_send(page, "note from the browser")
         assert wait_own_msg(restored, "note from the browser").chat_id == saved.id
+        expect(page.locator(".key-warning")).to_be_hidden()
     finally:
         restored.stop_io()
         restored.remove()

@@ -19,6 +19,9 @@ export interface Config {
   readReceipts?: boolean;
   /** A backup was downloaded or another device has the profile, so losing the browser loses nothing. */
   secured?: boolean;
+  /** Last time a message from the own address came with another key, and when the warning was hidden. */
+  foreignKeyAt?: number;
+  foreignKeyHiddenAt?: number;
 }
 
 export interface Contact {

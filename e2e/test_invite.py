@@ -185,3 +185,30 @@ def test_deleted_account_is_gone_from_the_relay(admin, context):
     expect(row.locator("del")).to_have_text(addr)
     expect(row.get_by_role("button")).to_have_count(0)
     relay_exec("test", "!", "-e", mailbox)
+
+
+def test_second_key_on_the_same_address_is_reported(admin, context, rpc):
+    friend = context.new_page()
+    addr, dclogin = redeem(friend, create_invite(admin))
+    web_link = friend.get_by_role("link", name="Continue in the browser").get_attribute("href")
+    web = context.new_page()
+    set_passphrase(web, URL + web_link.removeprefix(INVITE_APP_URL))
+    web.get_by_role("button", name="Create profile").click()
+    web.get_by_role("button", name="Continue").click()
+    expect(web.locator(".status.ok")).to_be_visible()
+    warning = web.locator(".key-warning")
+    expect(warning).to_be_hidden()
+
+    password = dclogin.split("?p=", 1)[1].split("&", 1)[0]
+    other = DeltaChat(rpc).add_account()
+    try:
+        other.add_or_update_transport(transport(addr, password))
+        other.set_config("bcc_self", "1")
+        other.start_io()
+        other.get_contact_by_id(1).create_chat().send_text("from a second key")
+        expect(warning).to_contain_text("its own key")
+        warning.get_by_role("button", name="Hide").click()
+        expect(warning).to_be_hidden()
+    finally:
+        other.stop_io()
+        other.remove()

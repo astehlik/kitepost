@@ -389,6 +389,16 @@ export class DcClient extends EventTarget {
     return { blob, filename: backupFileName(this.config.fingerprint) };
   }
 
+  get foreignKeyWarning(): boolean {
+    return (this.config.foreignKeyAt ?? 0) > (this.config.foreignKeyHiddenAt ?? 0);
+  }
+
+  async hideForeignKeyWarning() {
+    this.config.foreignKeyHiddenAt = Date.now();
+    await this.saveConfig();
+    this.changed('config');
+  }
+
   async markSecured() {
     if (this.config.secured) return;
     this.config.secured = true;
@@ -770,6 +780,13 @@ export class DcClient extends EventTarget {
 
   /** Messages sent by another device of this profile, like core's receive_imf for outgoing messages. */
   private async receiveOwn(p: ParsedMessage, mid: string) {
+    // A device that logged in with the same credentials made its own key and encrypts its copies to it.
+    if (p.decryption_error || (p.signature && p.signature !== this.config.fingerprint)) {
+      this.config.foreignKeyAt = Date.now();
+      await this.saveConfig();
+      this.changed('config');
+      return;
+    }
     if (!p.encrypted || p.signature !== this.config.fingerprint) return;
     if (!this.config.bccSelf) {
       this.config.bccSelf = true;

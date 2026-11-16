@@ -409,6 +409,7 @@ function startMain(client: DcClient, initialChat?: string) {
   const chatList = h('ul', { class: 'chatlist' });
   const pane = h('section', { class: 'pane' });
   const me = h('div', { class: 'me' });
+  const keyWarning = h('div', { class: 'key-warning', role: 'alert', hidden: true });
   const edit = h('button', {
     class: 'icon-button', title: t('nav.editProfile'), 'aria-label': t('nav.editProfile'),
     onclick: () => profileDialog(client, () => startMain(client, current)),
@@ -416,6 +417,7 @@ function startMain(client: DcClient, initialChat?: string) {
   edit.append(icon(ICONS.edit));
   const sidebar = h('aside', { class: 'sidebar' },
     h('header', { class: 'profile' }, me, status, edit),
+    keyWarning,
     h('nav', { class: 'nav-actions' },
       action(ICONS.qr, t('nav.myInvite'), busyClick(() => showInvite(client))),
       action(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
@@ -423,6 +425,14 @@ function startMain(client: DcClient, initialChat?: string) {
     chatList);
 
   function renderProfile() {
+    keyWarning.hidden = !client.foreignKeyWarning;
+    keyWarning.replaceChildren(...keyWarning.hidden ? [] : [
+      h('p', {}, `${t('key.warning')} ${t(canHandoff ? 'key.replacePhone' : 'key.replaceBackup')}`),
+      h('div', { class: 'row' },
+        canHandoff
+          ? h('button', { class: 'primary', onclick: () => phoneDialog(client) }, t('profile.phone'))
+          : h('button', { class: 'primary', onclick: () => exportDialog(client) }, t('profile.export')),
+        h('button', { onclick: busyClick(() => client.hideForeignKeyWarning()) }, t('key.hide')))]);
     const unsecured = !client.config.secured;
     edit.classList.toggle('attention', unsecured);
     const label = unsecured ? `${t('nav.editProfile')} – ${t('backup.attention')}` : t('nav.editProfile');
