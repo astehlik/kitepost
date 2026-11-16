@@ -966,8 +966,9 @@ function startMain(client: DcClient, initialChat?: string) {
       }
     });
     return h('footer', { class: 'composer' },
+      emojiButton, grow,
       h('button', { class: 'icon', title: t('chat.attach'), 'aria-label': t('chat.attach'), disabled: chat.left, onclick: () => file.click() }, '📎'),
-      emojiButton, grow, file,
+      file,
       h('button', { class: 'primary', disabled: chat.left, onclick: send }, t('chat.send')));
   }
 

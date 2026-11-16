@@ -389,6 +389,12 @@ def test_new_messages_leave_the_chat_in_place(web, dora):
     expect(page.locator("[data-probe=kept]")).to_have_count(1)
 
 
+def test_composer_order_like_android(web, dora):
+    order = web.page.locator(".composer").evaluate(
+        "c => [...c.children].filter(e => e.checkVisibility()).map(e => e.getAttribute('aria-label') || (e.querySelector('textarea') ? 'input' : e.textContent))")
+    assert order == ["Insert emoji", "input", "Attach file", "Send"], order
+
+
 def test_composer_grows_up_to_a_limit(web, dora):
     page = web.page
     for i in range(8):
