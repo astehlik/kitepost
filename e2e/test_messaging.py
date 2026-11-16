@@ -181,6 +181,37 @@ def test_delete_for_me_and_for_everyone(web, dora):
     wait_event(dora.acc, EventType.MSG_DELETED, lambda e: e.msg_id == sent.id)
 
 
+def open_info(page, msg):
+    msg.hover()
+    msg.get_by_role("button", name="Message info").click()
+    return page.locator("dialog")
+
+
+def test_message_info(web, dora):
+    page = web.page
+    web_send(page, "info about me")
+    sent = wait_text(dora.acc, "info about me")
+    dora.acc.mark_seen_messages([dora.acc.get_message_by_id(sent.id)])
+    own = page.locator(".msg.out", has_text="info about me")
+    expect(own.locator(".meta")).to_contain_text("✓✓")
+    info = open_info(page, own)
+    expect(info).to_contain_text("Sent")
+    expect(info.locator("dd", has_text="Dora")).to_contain_text("Dora")
+    expect(info).to_contain_text("Read by")
+    expect(info).to_contain_text("End-to-end encrypted")
+    expect(info.locator(".message-id")).to_contain_text("@")
+    info.get_by_role("button", name="Close").click()
+
+    msg = dora.chat.send_text("info about dora")
+    msg.send_reaction("👍")
+    incoming = page.locator(".msg.in", has_text="info about dora")
+    expect(incoming.locator(".reactions")).to_contain_text("👍")
+    info = open_info(page, incoming)
+    expect(info).to_contain_text("Received")
+    expect(info).to_contain_text("👍")
+    expect(info).not_to_contain_text("Read by")
+
+
 def test_quotes_both_ways(web, dora):
     page = web.page
     web_send(page, "question from the browser")

@@ -68,6 +68,8 @@ export interface Message {
   replyTo?: string;
   /** Local time the message was first stored, the tie-breaker like core's row id. */
   addedAt?: number;
+  /** Read receipts of own messages: contact fingerprint to time, like core's msgs_mdns. */
+  readBy?: Record<string, number>;
   attachments: AttachmentData[];
   reactions: Record<string, string>;
   /** INBOX UID while `\Seen` still has to be set on the server. */

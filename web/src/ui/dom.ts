@@ -85,6 +85,10 @@ export function trustedSvg(svg: string): Element {
   return document.importNode(root, true);
 }
 
+export function formatDateTime(ts: number): string {
+  return new Date(ts).toLocaleString(getLanguage(), { dateStyle: 'medium', timeStyle: 'medium' });
+}
+
 export function formatTime(ts: number): string {
   const d = new Date(ts);
   const now = new Date();

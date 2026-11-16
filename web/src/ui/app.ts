@@ -5,7 +5,7 @@ import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
-import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatTime, h, trustedSvg, whileBusy } from './dom';
+import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatDateTime, formatTime, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { checkForUpdate } from './update';
 
@@ -456,6 +456,26 @@ function startMain(client: DcClient, initialChat?: string) {
     ]);
   }
 
+  /** Like core's MsgId::get_info(), as far as Kitepost keeps the data. */
+  function infoDialog(m: Message) {
+    const rows: [string, Node | string][] = [[t('info.sent'), `${formatDateTime(m.timestamp)} · ${authorName(m.from)}`]];
+    if (m.from !== 'self' && m.addedAt) rows.push([t('info.received'), formatDateTime(m.addedAt)]);
+    const readBy = Object.entries(m.readBy ?? {});
+    if (readBy.length) {
+      rows.push([t('info.readBy'), h('ul', {}, ...readBy.map(([fp, ts]) => h('li', {}, `${client.contactName(fp)} · ${formatDateTime(ts)}`)))]);
+    }
+    rows.push([t('info.state'), t(`state.${m.state}`) + (m.edited ? ` · ${t('chat.edited')}` : '')]);
+    rows.push([t('info.encryption'), t('info.e2ee')]);
+    const reactions = Object.entries(m.reactions);
+    if (reactions.length) rows.push([t('info.reactions'), h('ul', {}, ...reactions.map(([from, r]) => h('li', {}, `${r} ${authorName(from)}`)))]);
+    for (const a of m.attachments) {
+      rows.push([t('info.attachment'), `${a.filename} · ${a.mime} · ${Math.ceil((a.size ?? a.data_b64.length * 3 / 4) / 1024)} KB`]);
+    }
+    if (m.error) rows.push([t('info.error'), m.error]);
+    if (m.id.includes('@')) rows.push([t('info.messageId'), h('span', { class: 'message-id' }, m.id)]);
+    dialog(t('chat.messageInfo'), h('dl', { class: 'info-list' }, ...rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])), [{ label: t('close') }]);
+  }
+
   function jumpTo(id: string) {
     const node = rendered.get(id)?.node;
     if (!node) return;
@@ -491,6 +511,8 @@ function startMain(client: DcClient, initialChat?: string) {
     editButton?.append(icon(ICONS.edit));
     const deleteButton = h('button', { type: 'button', class: 'delete', title: t('chat.deleteMessage'), 'aria-label': t('chat.deleteMessage'), onclick: () => deleteDialog(chat, m) });
     deleteButton.append(icon(ICONS.trash));
+    const infoButton = h('button', { type: 'button', class: 'info-button', title: t('chat.messageInfo'), 'aria-label': t('chat.messageInfo'), onclick: () => infoDialog(m) });
+    infoButton.append(icon(ICONS.info));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       quoteView(chat, m),
@@ -500,7 +522,7 @@ function startMain(client: DcClient, initialChat?: string) {
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
-      h('div', { class: 'actions' }, deleteButton, editButton, replyButton, reactButton));
+      h('div', { class: 'actions' }, infoButton, deleteButton, editButton, replyButton, reactButton));
   }
 
   function forgetMessages() {
@@ -788,6 +810,7 @@ const ICONS = {
   edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
   reply: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01',
   react: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01',
   star: 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',

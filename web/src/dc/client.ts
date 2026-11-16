@@ -750,7 +750,10 @@ export class DcClient extends EventTarget {
     if (p.mdn_for.length) {
       for (const id of p.mdn_for) {
         const m = this.messageById(id);
-        if (m && m.from === 'self' && m.state === 'sent') await this.saveMessage({ ...m, state: 'read' });
+        if (m && m.from === 'self' && !m.readBy?.[sender.fingerprint]) {
+          const readBy = { ...m.readBy, [sender.fingerprint]: this.timestamp(p) };
+          await this.saveMessage({ ...m, state: m.state === 'sent' ? 'read' : m.state, readBy });
+        }
       }
       return false;
     }
