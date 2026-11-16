@@ -373,6 +373,9 @@ function startMain(client: DcClient, initialChat?: string) {
   let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement } | undefined;
   const rendered = new Map<string, { node: Element; key: string; urls: string[] }>();
   let startReply: ((m: Message) => void) | undefined;
+  let startEdit: ((m: Message) => void) | undefined;
+  // Like core's send_edit_request(): own text messages only.
+  const canEdit = (chat: Chat, m: Message) => m.from === 'self' && !m.info && !!m.text && m.id.includes('@') && !chat.left;
 
   const status = h('span', { class: 'status' });
   const chatList = h('ul', { class: 'chatlist' });
@@ -474,6 +477,8 @@ function startMain(client: DcClient, initialChat?: string) {
     reactButton?.addEventListener('click', () => openReactions(reactButton, e => void whileBusy(reactButton, () => react(e)).catch(errorDialog)));
     const replyButton = canReact ? h('button', { type: 'button', class: 'reply', title: t('chat.reply'), 'aria-label': t('chat.reply'), onclick: () => startReply?.(m) }) : null;
     replyButton?.append(icon(ICONS.reply));
+    const editButton = canEdit(chat, m) ? h('button', { type: 'button', class: 'edit', title: t('chat.edit'), 'aria-label': t('chat.edit'), onclick: () => startEdit?.(m) }) : null;
+    editButton?.append(icon(ICONS.edit));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       quoteView(chat, m),
@@ -483,7 +488,7 @@ function startMain(client: DcClient, initialChat?: string) {
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
-      canReact ? h('div', { class: 'actions' }, replyButton, reactButton) : null);
+      canReact ? h('div', { class: 'actions' }, editButton, replyButton, reactButton) : null);
   }
 
   function forgetMessages() {
@@ -596,23 +601,45 @@ function startMain(client: DcClient, initialChat?: string) {
   function composer(chat: Chat): Element {
     let attachment: AttachmentData | undefined;
     let quoted: Message | undefined;
+    let editing: Message | undefined;
     const input = h('textarea', { rows: '1', placeholder: chat.left ? t('chat.notMember') : t('chat.message'), disabled: chat.left });
     const file = h('input', { type: 'file', hidden: true });
     const chip = h('span', { class: 'chip', hidden: true });
     const replyBox = h('div', { class: 'reply', hidden: true });
-    const setReply = (m?: Message) => {
-      quoted = m;
+    /** Shows what the next message replies to or which message it edits; without `kind` neither. */
+    const setContext = (kind?: 'reply' | 'edit', m?: Message) => {
+      if (editing && kind !== 'edit') input.value = '';
+      quoted = kind === 'reply' ? m : undefined;
+      editing = kind === 'edit' ? m : undefined;
       replyBox.hidden = !m;
       replyBox.replaceChildren();
       if (!m) return;
+      const cancel = t(kind === 'edit' ? 'chat.editCancel' : 'chat.replyCancel');
       replyBox.append(
-        h('div', {}, h('strong', {}, authorName(m.from)), h('span', {}, m.text || m.attachments[0]?.filename || '')),
-        h('button', { type: 'button', class: 'icon', title: t('chat.replyCancel'), 'aria-label': t('chat.replyCancel'), onclick: () => { setReply(); input.focus(); } }, '✕'));
+        h('div', {}, h('strong', {}, kind === 'edit' ? t('chat.editing') : authorName(m.from)), h('span', {}, m.text || m.attachments[0]?.filename || '')),
+        h('button', { type: 'button', class: 'icon', title: cancel, 'aria-label': cancel, onclick: () => { setContext(); input.focus(); } }, '✕'));
+      if (kind === 'edit') {
+        attachment = undefined;
+        chip.hidden = true;
+        input.value = m.text;
+      }
       input.focus();
     };
-    startReply = setReply;
+    startReply = m => setContext('reply', m);
+    startEdit = m => setContext('edit', m);
+    const sendEdit = async (m: Message, text: string) => {
+      setContext();
+      try {
+        await client.sendEdit(chat.id, m.id, text);
+      } catch (e) {
+        setContext('edit', m);
+        input.value = text;
+        errorDialog(e);
+      }
+    };
     const send = async () => {
       const text = input.value.trim();
+      if (editing) return text ? sendEdit(editing, text) : undefined;
       if (!text && !attachment) return;
       const att = attachment;
       const q = quoted;
@@ -620,7 +647,7 @@ function startMain(client: DcClient, initialChat?: string) {
       input.value = '';
       attachment = undefined;
       chip.hidden = true;
-      setReply();
+      setContext();
       try {
         await client.sendText(chat.id, text, att, q);
       } catch (e) {
@@ -628,11 +655,12 @@ function startMain(client: DcClient, initialChat?: string) {
         if ((client.messages.get(chat.id)?.length ?? 0) > before) return console.warn(e);
         const ta = pane.querySelector('textarea');
         if (ta && !ta.value) ta.value = text;
-        if (q && !quoted) setReply(q);
+        if (q && !quoted) setContext('reply', q);
         errorDialog(e);
       }
     };
     const attach = async (f: File) => {
+      if (editing) setContext();
       if (f.size > MAX_UPLOAD) return void dialog(t('chat.tooLargeTitle'), h('p', {}, t('chat.tooLargeText')), [{ label: t('ok') }]);
       attachment = { filename: f.name.replace(/[\\/\p{Cc}]/gu, '_') || 'file', mime: f.type || 'application/octet-stream', data_b64: await blobToBase64(f) };
       chip.textContent = `📎 ${attachment.filename} ✕`;
@@ -662,9 +690,15 @@ function startMain(client: DcClient, initialChat?: string) {
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
         void send();
-      } else if (ev.key === 'Escape' && quoted) {
+      } else if (ev.key === 'Escape' && (quoted || editing)) {
         ev.preventDefault();
-        setReply();
+        setContext();
+      } else if (ev.key === 'ArrowUp' && !input.value && !editing) {
+        const last = [...client.messages.get(chat.id) ?? []].reverse().find(m => m.from === 'self' && !m.info);
+        if (last && canEdit(chat, last)) {
+          ev.preventDefault();
+          setContext('edit', last);
+        }
       }
     });
     return h('footer', { class: 'composer' },

@@ -20,6 +20,9 @@ function createMid(): string {
   return `${crypto.randomUUID()}@localhost`;
 }
 
+// Core puts this before edited text for other mail clients and removes it on receipt.
+const EDITED_PREFIX = '✏️';
+
 function stripMid(v: string | undefined): string {
   return (v ?? '').trim().replace(/^<|>$/g, '');
 }
@@ -570,15 +573,10 @@ export class DcClient extends EventTarget {
     await this.saveMessage(local);
     if (chat.isRequest) await this.acceptChat(chatId);
     try {
-      // Like core, notes to self only go to the server when another device needs them.
-      const mid = self && !this.config.bccSelf ? createMid() : await this.send({
-        to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
-        subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,
+      const mid = await this.sendToChat(chat, members, {
         text, quote, headers, attachment,
         gossip: members.length > 1 ? members.map(m => ({ addr: m.addr, key: m.publicKey })) : [],
-        encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
-        attach_pubkey: true, sign: true, compress: true,
-      }, members.flatMap(m => m.relays), true);
+      });
       await this.store.delete(`msg/${chatId}/${local.id}`);
       this.messages.set(chatId, (this.messages.get(chatId) ?? []).filter(m => m.id !== local.id));
       await this.saveMessage({ ...local, id: mid, state: 'sent' });
@@ -588,6 +586,40 @@ export class DcClient extends EventTarget {
     }
     chat.lastActivity = Date.now();
     await this.saveChat(chat);
+  }
+
+  /** Sends to the chat's members and returns the Message-ID. */
+  private async sendToChat(chat: Chat, members: Contact[], msg: Partial<OutgoingMessage> & Pick<OutgoingMessage, 'text' | 'headers'>): Promise<string> {
+    const self = chat.type === 'self';
+    // Like core, notes to self only go to the server when another device needs them.
+    if (self && !this.config.bccSelf) return createMid();
+    return this.send({
+      to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
+      subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,
+      encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
+      attach_pubkey: true, sign: true, compress: true,
+      ...msg,
+    }, members.flatMap(m => m.relays), true);
+  }
+
+  /** Replaces the text of an own message, like core's send_edit_request(). */
+  async sendEdit(chatId: string, msgId: string, text: string) {
+    const chat = this.chats.get(chatId);
+    const original = this.messages.get(chatId)?.find(m => m.id === msgId);
+    if (!chat || !original || original.from !== 'self' || original.info || !original.text || !msgId.includes('@')) throw new Error('unknown message');
+    if (!text.trim() || text === original.text) return;
+    if (chat.left) throw new Error(t('error.notMember'));
+    const self = chat.type === 'self';
+    const members = self ? [] : this.memberContacts(chat);
+    if (!self && !members.length) throw new Error(t('error.noKey'));
+    const headers: OutgoingMessage['headers'] = [
+      { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+      { name: 'In-Reply-To', value: msgId, kind: 'messageid' },
+      { name: 'Chat-Edit', value: msgId, kind: 'messageid' },
+    ];
+    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
+    await this.sendToChat(chat, members, { text: EDITED_PREFIX + text, quote: original.text, headers });
+    await this.saveMessage({ ...original, text, edited: true });
   }
 
   /** Sets or, with an empty string, removes the own reaction, like core's send_reaction(). */
@@ -603,15 +635,7 @@ export class DcClient extends EventTarget {
       { name: 'In-Reply-To', value: msgId, kind: 'messageid' },
     ];
     if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
-    if (!self || this.config.bccSelf) {
-      await this.send({
-        to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
-        subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,
-        text: reaction, content_disposition: 'reaction', headers,
-        encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
-        attach_pubkey: true, sign: true, compress: true,
-      }, members.flatMap(m => m.relays), true);
-    }
+    await this.sendToChat(chat, members, { text: reaction, content_disposition: 'reaction', headers });
     const reactions = { ...target.reactions };
     if (reaction) reactions.self = reaction;
     else delete reactions.self;
@@ -807,7 +831,7 @@ export class DcClient extends EventTarget {
     const del = p.headers['chat-delete'];
     if (edit) {
       const orig = this.messageById(edit);
-      if (orig && orig.from === from) await this.saveMessage({ ...orig, text: p.text, edited: true });
+      if (orig && orig.from === from) await this.saveMessage({ ...orig, text: p.text.startsWith(EDITED_PREFIX) ? p.text.slice(EDITED_PREFIX.length) : p.text, edited: true });
       return;
     }
     if (del) {

@@ -100,6 +100,44 @@ def test_messages_of_the_same_second_keep_their_order(web, dora):
     assert texts.index("first, from the browser") < texts.index("second, from core"), texts
 
 
+def wait_core_text(acc, msg_id, text):
+    wait_event(acc, EventType.MSGS_CHANGED, lambda e: acc.get_message_by_id(msg_id).get_snapshot().text == text)
+    return acc.get_message_by_id(msg_id).get_snapshot()
+
+
+def test_edits_both_ways(web, dora):
+    page = web.page
+    web_send(page, "typo heer")
+    original = wait_text(dora.acc, "typo heer")
+    own = page.locator(".msg.out", has_text="typo heer")
+    own.hover()
+    own.get_by_role("button", name="Edit").click()
+    box = page.locator(".composer textarea")
+    expect(page.locator(".composer .reply")).to_contain_text("typo heer")
+    expect(box).to_have_value("typo heer")
+    box.fill("typo here")
+    box.press("Enter")
+    expect(page.locator(".msg.out .text", has_text="typo here")).to_be_visible()
+    expect(page.locator(".msg.out", has_text="typo here").locator(".meta")).to_contain_text("edited")
+    snap = wait_core_text(dora.acc, original.id, "typo here")
+    assert snap.is_edited
+
+    expect(box).to_have_value("")
+    box.press("ArrowUp")
+    expect(box).to_have_value("typo here")
+    box.fill("final wording")
+    box.press("Enter")
+    wait_core_text(dora.acc, original.id, "final wording")
+    expect(page.locator(".messages .msg")).to_have_count(1)
+
+    incoming = dora.chat.send_text("from core")
+    expect(page.locator(".msg.in", has_text="from core")).to_be_visible()
+    dora.acc._rpc.send_edit_request(dora.acc.id, incoming.id, "from core, edited")
+    edited = page.locator(".msg.in", has_text="from core, edited")
+    expect(edited.locator(".text")).to_have_text("from core, edited")
+    expect(edited.locator(".meta")).to_contain_text("edited")
+
+
 def test_quotes_both_ways(web, dora):
     page = web.page
     web_send(page, "question from the browser")
