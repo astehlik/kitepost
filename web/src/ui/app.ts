@@ -495,7 +495,7 @@ function startMain(client: DcClient, initialChat?: string) {
   function messageView(chat: Chat, m: Message, urls: string[]): Element {
     if (m.info) return h('div', { class: 'info' }, m.text);
     const out = m.from === 'self';
-    const state = out ? { pending: '⏳', sent: '✓', read: '✓✓', failed: '⚠', received: '' }[m.state] : '';
+    const state = out && m.state !== 'received' ? stateMark(m.state) : null;
     const canReact = !chat.left && !chat.isRequest && m.id.includes('@');
     const mine = m.reactions.self;
     // One reaction per person: choosing the own one again removes it.
@@ -518,7 +518,7 @@ function startMain(client: DcClient, initialChat?: string) {
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, m.text) : null,
-      h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state ? ` ${state}` : '', m.error ? ` ${m.error}` : ''),
+      h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${m.error}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
@@ -814,6 +814,21 @@ const ICONS = {
   react: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01',
   star: 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
+};
+
+/** The state of an own message as an icon whose label says what it means. */
+function stateMark(state: Exclude<Message['state'], 'received'>): Element {
+  const label = t(`mark.${state}`);
+  const mark = h('span', { class: 'state', 'data-state': state, role: 'img', 'aria-label': label, title: label });
+  mark.append(icon(STATE_ICONS[state]));
+  return mark;
+}
+
+const STATE_ICONS = {
+  pending: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  sent: 'M4 12.5 9 17.5 20 6.5',
+  read: 'M1.5 12.5 6.5 17.5 17.5 6.5M11.5 16.5l1 1 11-11',
+  failed: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5v5.5M12 16.5h.01',
 };
 
 function icon(d: string): SVGSVGElement {

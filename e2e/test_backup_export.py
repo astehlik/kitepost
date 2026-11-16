@@ -5,7 +5,7 @@ from pathlib import Path
 from deltachat_rpc_client import DeltaChat
 from playwright.sync_api import expect
 
-from helpers import PNG, RELAY_IP, addr_of, open_chat, transport, wait_own_msg, wait_text, web_send
+from helpers import PNG, RELAY_IP, addr_of, open_chat, own_state, transport, wait_own_msg, wait_text, web_send
 
 
 def test_export_restores_in_core(web, dora, rpc, tmp_path):
@@ -20,7 +20,7 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     web_send(page, "hello dora")
     read = wait_text(dora.acc, "hello dora")
     dora.acc.mark_seen_messages([dora.acc.get_message_by_id(read.id)])
-    expect(page.locator(".msg.out", has_text="hello dora").locator(".meta")).to_contain_text("✓✓")
+    expect(own_state(page, "hello dora")).to_have_attribute("data-state", "read")
     page.get_by_role("button", name="New group").click()
     page.locator("dialog .field input").fill("Export group")
     page.locator("dialog .members label", has_text="Dora").locator("input").check()

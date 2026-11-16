@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import secrets
 import subprocess
 import time
@@ -125,7 +126,12 @@ def open_chat(page: Page, title):
     page.locator(".chatlist li", has_text=title).first.click()
 
 
+def own_state(page: Page, text):
+    """The state mark of the own message with `text`; its data-state is pending, sent, read or failed."""
+    return page.locator(".msg.out", has_text=text).locator(".meta .state")
+
+
 def web_send(page: Page, text):
     page.locator(".composer textarea").fill(text)
     page.locator(".composer textarea").press("Enter")
-    expect(page.locator(".msg.out", has_text=text).locator(".meta")).to_contain_text("✓")
+    expect(own_state(page, text)).to_have_attribute("data-state", re.compile("sent|read"))

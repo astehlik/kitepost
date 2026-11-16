@@ -9,7 +9,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, reload_and_unlock, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -41,7 +41,8 @@ def test_read_receipts_both_ways(web, dora):
     web_send(web.page, "please read me")
     snap = wait_text(dora.acc, "please read me")
     dora.acc.mark_seen_messages([dora.acc.get_message_by_id(snap.id)])
-    expect(web.page.locator(".msg.out", has_text="please read me").locator(".meta")).to_contain_text("✓✓")
+    expect(own_state(web.page, "please read me")).to_have_attribute("data-state", "read")
+    expect(own_state(web.page, "please read me")).to_have_attribute("aria-label", "Read")
 
     msg = dora.chat.send_text("read by the browser")
     expect(web.page.locator(".msg.in", has_text="read by the browser")).to_be_visible()
@@ -60,7 +61,7 @@ def test_read_receipts_can_be_turned_off(web, dora):
     dora.acc.mark_seen_messages([dora.acc.get_message_by_id(snap.id)])
     time.sleep(5)
     assert dora.acc.get_message_by_id(msg.id).get_snapshot().state == MessageState.OUT_DELIVERED
-    expect(web.page.locator(".msg.out", has_text="no receipt wanted").locator(".meta")).not_to_contain_text("✓✓")
+    expect(own_state(web.page, "no receipt wanted")).not_to_have_attribute("data-state", "read")
 
 
 def test_reactions(web, dora):
@@ -193,7 +194,7 @@ def test_message_info(web, dora):
     sent = wait_text(dora.acc, "info about me")
     dora.acc.mark_seen_messages([dora.acc.get_message_by_id(sent.id)])
     own = page.locator(".msg.out", has_text="info about me")
-    expect(own.locator(".meta")).to_contain_text("✓✓")
+    expect(own.locator(".meta .state")).to_have_attribute("data-state", "read")
     info = open_info(page, own)
     expect(info).to_contain_text("Sent")
     expect(info.locator("dd", has_text="Dora")).to_contain_text("Dora")
@@ -260,7 +261,7 @@ def test_new_messages_leave_the_chat_in_place(web, dora):
 
     box.fill("sent now")
     box.press("Enter")
-    expect(page.locator(".msg.out", has_text="sent now").locator(".meta")).to_contain_text("✓")
+    expect(own_state(page, "sent now")).to_have_attribute("data-state", "sent")
     expect(box).to_be_focused()
     expect(page.locator(".msg.out", has_text="sent now")).to_be_in_viewport()
     expect(page.locator("[data-probe=kept]")).to_have_count(1)

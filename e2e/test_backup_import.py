@@ -8,7 +8,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, own_state, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -123,12 +123,12 @@ def test_read_receipts_with_the_phone_online(imported):
     web_send(page, "read me, bob")
     snap = wait_text(bob, "read me, bob")
     bob.mark_seen_messages([bob.get_message_by_id(snap.id)])
-    expect(page.locator(".msg.out", has_text="read me, bob").locator(".meta")).to_contain_text("✓✓")
+    expect(own_state(page, "read me, bob")).to_have_attribute("data-state", "read")
 
     imported.phone_bob.send_text("sent on the phone, read by bob")
     snap = wait_text(bob, "sent on the phone, read by bob")
     bob.mark_seen_messages([bob.get_message_by_id(snap.id)])
-    expect(page.locator(".msg.out", has_text="sent on the phone, read by bob").locator(".meta")).to_contain_text("✓✓")
+    expect(own_state(page, "sent on the phone, read by bob")).to_have_attribute("data-state", "read")
 
 
 def test_deleting_for_me_syncs_between_devices(imported):
