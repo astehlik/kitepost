@@ -393,6 +393,29 @@ def test_core_group_with_web_member(web, dora):
     assert wait_text(dora.acc, "Group reply from web").chat_id == group.id
 
 
+def test_pinning_in_core_shows_info_messages(web, dora):
+    page = web.page
+    msg = dora.chat.send_text("pin me")
+    expect(page.locator(".msg.in", has_text="pin me")).to_be_visible()
+    dora.acc._rpc.set_pinned_message_state(dora.acc.id, msg.id, True)
+    expect(page.locator(".messages .info", has_text="Message pinned by Dora.")).to_be_visible()
+    dora.acc._rpc.set_pinned_message_state(dora.acc.id, msg.id, False)
+    expect(page.locator(".messages .info", has_text="Message unpinned by Dora.")).to_be_visible()
+    expect(page.locator(".messages .msg")).to_have_count(1)
+
+
+def test_group_changes_in_core_show_info_messages(web, dora):
+    page = web.page
+    group = dora.acc.create_group("Before")
+    group.send_text("only me so far")
+    group.add_contact(dora.acc.get_contact_by_id(dora.contact_id))
+    open_chat(page, "Before")
+    expect(page.locator(".messages .info", has_text="Dora added you to the group.")).to_be_visible()
+    group.set_name("After")
+    expect(page.locator(".messages .info", has_text='Group name changed from "Before" to "After" by Dora.')).to_be_visible()
+    expect(page.locator(".messages .msg")).to_have_count(0)
+
+
 def test_core_joins_web_invite(web, make_account):
     erin = make_account("Erin")
     web.page.get_by_role("button", name="My invite").click()

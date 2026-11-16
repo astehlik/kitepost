@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { t, type Key } from '../i18n';
 import { ImapClient } from '../net/imap';
 import { SmtpClient, SmtpError } from '../net/smtp';
 import type { Store } from '../store';
@@ -922,9 +922,22 @@ export class DcClient extends EventTarget {
       }
       return;
     }
+    const own = from === 'self';
+    const info = this.systemInfo(p, from);
+    if (info !== undefined) {
+      if (info === null) return;
+      await this.saveMessage({
+        id: mid, chatId: chat.id, from, text: info, timestamp: this.timestamp(p),
+        state: 'received', info: true, attachments: [], reactions: {},
+      });
+      if (p.headers['chat-content'] !== 'message-unpinned') {
+        chat.lastActivity = Date.now();
+        await this.saveChat(chat);
+      }
+      return;
+    }
     if (!p.text && !p.attachments.length) return;
 
-    const own = from === 'self';
     await this.saveMessage({
       id: mid, chatId: chat.id, from, text: p.text, timestamp: this.timestamp(p),
       quote: p.quote ?? undefined, replyTo: p.quote !== null ? stripMid(p.headers['in-reply-to']) || undefined : undefined,
@@ -936,6 +949,34 @@ export class DcClient extends EventTarget {
     if (!own) chat.unread += 1;
     await this.saveChat(chat);
     if (!own) this.dispatchEvent(new CustomEvent('incoming', { detail: { chatId: chat.id, from } }));
+  }
+
+  /** Like core's parse_system_message_headers(); undefined: not a system message, null: nothing to show. */
+  private systemInfo(p: ParsedMessage, from: string): string | null | undefined {
+    const own = from === 'self';
+    const name = this.contactName(from);
+    const say = (other: Key, mine: Key, vars: Record<string, string> = {}) => t(own ? mine : other, { name, ...vars });
+    const content = p.headers['chat-content'];
+    if (content) {
+      switch (content) {
+        case 'message-pinned': return say('info.pinned', 'info.youPinned');
+        case 'message-unpinned': return say('info.unpinned', 'info.youUnpinned');
+        case 'group-avatar-changed': return say('info.groupImage', 'info.youGroupImage');
+        case 'ephemeral-timer-changed': return say('info.timer', 'info.youTimer');
+        case 'location-streaming-enabled': return say('info.location', 'info.youLocation');
+        case 'protection-enabled': case 'protection-disabled': case 'call-accepted': case 'call-ended': return null;
+        default: return undefined;
+      }
+    }
+    const removed = p.headers['chat-group-member-removed'];
+    const added = p.headers['chat-group-member-added'];
+    // groupChat() reports changes made by others.
+    if (removed) return own ? t(addrEq(removed, this.config.addr) ? 'info.youLeft' : 'info.youRemoved', { addr: removed }) : null;
+    if (added) return own ? t('info.youAdded', { addr: added }) : null;
+    const oldName = p.headers['chat-group-name-changed'];
+    if (oldName !== undefined) return say('info.groupName', 'info.youGroupName', { old: cleanName(oldName), new: cleanName(p.headers['chat-group-name'] ?? '') });
+    if (p.headers['chat-group-description-changed'] !== undefined) return say('info.groupDescription', 'info.youGroupDescription');
+    return undefined;
   }
 
   /** Resolves recipients to member fingerprints like core's receive_imf does. */
@@ -974,8 +1015,10 @@ export class DcClient extends EventTarget {
         }
       }
       if (added) {
-        if (addrEq(added, this.config.addr)) chat.left = false;
-        else await this.addInfo(chat.id, t('info.added', { addr: added, name: this.contactName(sender.fingerprint) }));
+        if (addrEq(added, this.config.addr)) {
+          chat.left = false;
+          if (!p.headers['secure-join']) await this.addInfo(chat.id, t('info.addedYou', { name: this.contactName(sender.fingerprint) }));
+        } else await this.addInfo(chat.id, t('info.added', { addr: added, name: this.contactName(sender.fingerprint) }));
       }
       chat.members = [...members];
       const name = cleanName(p.headers['chat-group-name'] ?? '');
