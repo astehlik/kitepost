@@ -57,7 +57,7 @@ def test_invite_pages_in_german(german, context):
 
     friend = german.new_page()
     friend.goto(link)
-    expect(friend.get_by_role("button", name="Mein Konto erstellen")).to_be_visible()
+    expect(friend.get_by_role("button", name="Meine Adresse erstellen")).to_be_visible()
     friend.get_by_role("link", name="English").click()
-    expect(friend.get_by_role("button", name="Create my account")).to_be_visible()
+    expect(friend.get_by_role("button", name="Create my address")).to_be_visible()
     assert {c["name"]: c["value"] for c in german.cookies()}["kitepost_lang"] == "en"

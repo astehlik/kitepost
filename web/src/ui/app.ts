@@ -352,7 +352,7 @@ function renderPhoneSetup(client: DcClient) {
 
 function phoneDialog(client: DcClient) {
   const polling = new AbortController();
-  const dlg = dialog(t('phone.title'), h('div', { class: 'invite' }, h('p', {}, t('phone.text')), phoneSetup(client, polling.signal)),
+  const dlg = dialog(t('profile.phone'), h('div', { class: 'invite' }, h('p', {}, t('phone.text')), phoneSetup(client, polling.signal)),
     [{ label: t('close'), primary: true }]);
   dlg.addEventListener('close', () => polling.abort());
 }

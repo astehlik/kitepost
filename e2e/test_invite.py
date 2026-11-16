@@ -39,8 +39,8 @@ def create_invite(admin, note=""):
 def redeem(page, link):
     """Creates the account and returns its address and dclogin link."""
     page.goto(link)
-    page.get_by_role("button", name="Create my account").click()
-    expect(page.locator("h1")).to_have_text("Your account is ready")
+    page.get_by_role("button", name="Create my address").click()
+    expect(page.locator("h1")).to_have_text("Your address is ready")
     addr = page.locator("strong").first.inner_text()
     return addr, page.locator('a[href^="dclogin:"]').get_attribute("href")
 
@@ -138,7 +138,7 @@ def test_create_button_is_disabled_while_submitting(admin, context):
     friend.goto(create_invite(admin))
     # Keeps the page, so the state during the submission can be inspected.
     friend.evaluate("document.querySelector('form').addEventListener('submit', e => e.preventDefault())")
-    button = friend.get_by_role("button", name="Create my account")
+    button = friend.get_by_role("button", name="Create my address")
     button.click()
     expect(button).to_be_disabled()
     expect(button).to_have_attribute("aria-busy", "true")
