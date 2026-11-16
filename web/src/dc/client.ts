@@ -643,26 +643,27 @@ export class DcClient extends EventTarget {
    * Deletes a message like core's delete_msgs_ext(): for everyone only own sent messages, otherwise
    * here and, through a sync message, on the own other devices.
    */
-  async deleteMessage(chatId: string, msgId: string, forAll: boolean) {
+  async deleteMessages(chatId: string, msgIds: string[], forAll: boolean) {
     const chat = this.chats.get(chatId);
-    const m = this.messages.get(chatId)?.find(x => x.id === msgId);
-    if (!chat || !m) throw new Error('unknown message');
+    const msgs = msgIds.map(id => this.messages.get(chatId)?.find(x => x.id === id));
+    if (!chat || !msgs.length || msgs.some(m => !m)) throw new Error('unknown message');
+    const wire = msgIds.filter(id => id.includes('@'));
     if (forAll) {
-      if (m.from !== 'self' || m.info || !msgId.includes('@')) throw new Error('unknown message');
+      if (msgs.some(m => m!.from !== 'self' || m!.info) || wire.length !== msgIds.length) throw new Error('unknown message');
       if (chat.left) throw new Error(t('error.notMember'));
       const self = chat.type === 'self';
       const members = self ? [] : this.memberContacts(chat);
       if (!self && !members.length) throw new Error(t('error.noKey'));
       const headers: OutgoingMessage['headers'] = [
         { name: 'Chat-Version', value: '1.0', kind: 'raw' },
-        { name: 'Chat-Delete', value: msgId, kind: 'messageid' },
+        { name: 'Chat-Delete', value: msgIds.join(' '), kind: 'messageid' },
       ];
       if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
       await this.sendToChat(chat, members, { text: '🚮', headers });
-    } else if (this.config.bccSelf && msgId.includes('@')) {
-      await this.sendSync({ DeleteMessages: { msgs: [msgId] } });
+    } else if (this.config.bccSelf && wire.length) {
+      await this.sendSync({ DeleteMessages: { msgs: wire } });
     }
-    await this.deleteLocally(msgId);
+    for (const id of msgIds) await this.deleteLocally(id);
   }
 
   /** Sends sync items to the own other devices, like core's send_sync_msg(). */

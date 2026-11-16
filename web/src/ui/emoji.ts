@@ -158,10 +158,8 @@ export function emojiPicker(onPick: (emoji: string) => void): HTMLElement {
 }
 
 /** Opens `content` above `anchor` and closes it on Escape, outside clicks or when `close` is called. */
-export function popover(anchor: HTMLElement, content: HTMLElement): () => void {
+export function popover(anchor: HTMLElement, content: HTMLElement, rect = anchor.getBoundingClientRect()): () => void {
   const box = h('div', { class: 'popover' }, content);
-  const rect = anchor.getBoundingClientRect();
-  box.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 340))}px`;
   box.style.bottom = `${window.innerHeight - rect.top + 6}px`;
   const close = () => {
     box.remove();
@@ -173,6 +171,11 @@ export function popover(anchor: HTMLElement, content: HTMLElement): () => void {
   document.addEventListener('pointerdown', outside, true);
   document.addEventListener('keydown', escape, true);
   document.body.append(box);
+  box.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - Math.max(box.offsetWidth + 8, 340)))}px`;
+  if (box.getBoundingClientRect().top < 8) {
+    box.style.bottom = '';
+    box.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - box.offsetHeight - 8)}px`;
+  }
   return close;
 }
 

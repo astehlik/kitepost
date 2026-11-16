@@ -8,7 +8,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, own_state, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, message_action, open_chat, own_state, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -136,8 +136,7 @@ def test_deleting_for_me_syncs_between_devices(imported):
     page, phone = imported.page, imported.phone
     open_chat(page, "Bob")
     reply = page.locator(".msg.in", has_text="reply from bob")
-    reply.hover()
-    reply.get_by_role("button", name="Delete").click()
+    message_action(page, reply, "Delete message")
     page.locator("dialog").get_by_role("button", name="Delete for me").click()
     expect(reply).to_have_count(0)
     wait_event(phone, EventType.MSG_DELETED, lambda e: e.msg_id == imported.reply.id)
@@ -152,8 +151,7 @@ def test_receive_times_and_read_receipts_are_imported(imported):
     page = imported.page
     open_chat(page, "Bob")
     own = page.locator(".msg.out", has_text="hello from alice")
-    own.hover()
-    own.get_by_role("button", name="Message info").click()
+    message_action(page, own, "Message info")
     expect(page.locator("dialog")).to_contain_text("Read by")
     expect(page.locator("dialog")).to_contain_text("Bob")
     page.locator("dialog").get_by_role("button", name="Close").click()
@@ -161,6 +159,5 @@ def test_receive_times_and_read_receipts_are_imported(imported):
     received = imported.phone.get_message_by_id(imported.reply.id).get_snapshot().received_timestamp
     shown = page.evaluate("ts => new Date(ts * 1000).toLocaleString('en', { dateStyle: 'medium', timeStyle: 'medium' })", received)
     reply = page.locator(".msg.in", has_text="reply from bob")
-    reply.hover()
-    reply.get_by_role("button", name="Message info").click()
+    message_action(page, reply, "Message info")
     expect(page.locator("dialog dd").nth(1)).to_have_text(shown)

@@ -135,3 +135,15 @@ def web_send(page: Page, text):
     page.locator(".composer textarea").fill(text)
     page.locator(".composer textarea").press("Enter")
     expect(own_state(page, text)).to_have_attribute("data-state", re.compile("sent|read"))
+
+
+def message_action(page: Page, msg, name):
+    """Runs `name` from the menu of the message `msg`."""
+    msg.hover()
+    msg.get_by_role("button", name="More").click()
+    page.locator(".menu").get_by_role("menuitem", name=name).click()
+
+
+def capture_clipboard(page: Page):
+    """Replaces the clipboard with `window.copied`, so tests need no clipboard permission."""
+    page.evaluate("navigator.clipboard.writeText = async text => { window.copied = text; }")

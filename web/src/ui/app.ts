@@ -489,10 +489,14 @@ function startMain(client: DcClient, initialChat?: string) {
       chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
   }
 
-  function deleteDialog(chat: Chat, m: Message) {
-    const remove = (forAll: boolean) => () => client.deleteMessage(chat.id, m.id, forAll);
-    const forAll = m.from === 'self' && m.id.includes('@') && !chat.left;
-    dialog(t('chat.deleteMessageTitle'), h('p', {}, t(forAll ? 'chat.deleteMessageTextOwn' : 'chat.deleteMessageText')), [
+  function deleteDialog(chat: Chat, msgs: Message[]) {
+    const remove = (forAll: boolean) => async () => {
+      await client.deleteMessages(chat.id, msgs.map(m => m.id), forAll);
+      clearSelection();
+    };
+    const forAll = !chat.left && msgs.every(m => m.from === 'self' && m.id.includes('@'));
+    const title = msgs.length > 1 ? t('chat.deleteMessagesTitle', { n: msgs.length }) : t('chat.deleteMessageTitle');
+    dialog(title, h('p', {}, t(forAll ? 'chat.deleteMessageTextOwn' : 'chat.deleteMessageText')), [
       { label: t('cancel') },
       { label: t('chat.deleteForMe'), primary: !forAll, onClick: remove(false) },
       ...forAll ? [{ label: t('chat.deleteForAll'), primary: true, onClick: remove(true) }] : [],
@@ -545,18 +549,10 @@ function startMain(client: DcClient, initialChat?: string) {
     const react = (emoji: string) => client.sendReaction(chat.id, m.id, emoji === mine ? '' : emoji);
     const counts = new Map<string, number>();
     for (const r of Object.values(m.reactions)) counts.set(r, (counts.get(r) ?? 0) + 1);
-    const reactButton = canReact ? h('button', { type: 'button', class: 'react', title: t('chat.react'), 'aria-label': t('chat.react') }) : null;
-    reactButton?.append(icon(ICONS.react));
-    reactButton?.addEventListener('click', () => openReactions(reactButton, e => void whileBusy(reactButton, () => react(e)).catch(errorDialog)));
-    const replyButton = canReact ? h('button', { type: 'button', class: 'reply', title: t('chat.reply'), 'aria-label': t('chat.reply'), onclick: () => startReply?.(m) }) : null;
-    replyButton?.append(icon(ICONS.reply));
-    const editButton = canEdit(chat, m) ? h('button', { type: 'button', class: 'edit', title: t('chat.edit'), 'aria-label': t('chat.edit'), onclick: () => startEdit?.(m) }) : null;
-    editButton?.append(icon(ICONS.edit));
-    const deleteButton = h('button', { type: 'button', class: 'delete', title: t('chat.deleteMessage'), 'aria-label': t('chat.deleteMessage'), onclick: () => deleteDialog(chat, m) });
-    deleteButton.append(icon(ICONS.trash));
-    const infoButton = h('button', { type: 'button', class: 'info-button', title: t('chat.messageInfo'), 'aria-label': t('chat.messageInfo'), onclick: () => infoDialog(m) });
-    infoButton.append(icon(ICONS.info));
-    return h('div', { class: `msg ${out ? 'out' : 'in'}` },
+    const actions = messageActions(chat, [m]);
+    const hover = actions.filter(a => a.icon === ICONS.react || a.icon === ICONS.reply).map(actionButton);
+    const more = iconButton(ICONS.more, t('chat.more'), ev => openMenu(chat, m, more, undefined, (ev as MouseEvent).detail === 0));
+    return h('div', { class: `msg ${out ? 'out' : 'in'}`, 'data-id': m.id },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
@@ -565,7 +561,142 @@ function startMain(client: DcClient, initialChat?: string) {
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
-      h('div', { class: 'actions' }, infoButton, deleteButton, editButton, replyButton, reactButton));
+      h('div', { class: 'actions' }, ...hover, more));
+  }
+
+  type MsgAction = { label: string; icon: string; run: (anchor: HTMLElement) => unknown };
+
+  /** Android's message actions: all for one message, those that make sense for several. */
+  function messageActions(chat: Chat, msgs: Message[]): MsgAction[] {
+    const one = msgs.length === 1 ? msgs[0] : undefined;
+    const canReact = one && !chat.left && !chat.isRequest && one.id.includes('@');
+    const done = <T>(f: () => T) => () => { clearSelection(); return f(); };
+    const text = copyText(msgs);
+    const actions: (MsgAction | false | undefined)[] = [
+      canReact && { label: t('chat.react'), icon: ICONS.react, run: anchor => openReactions(anchor, e => {
+        clearSelection();
+        // One reaction per person: choosing the own one again removes it.
+        const send = () => client.sendReaction(chat.id, one.id, e === one.reactions.self ? '' : e);
+        void (anchor instanceof HTMLButtonElement ? whileBusy(anchor, send) : send()).catch(errorDialog);
+      }) },
+      canReact && { label: t('chat.reply'), icon: ICONS.reply, run: done(() => startReply?.(one)) },
+      one && canEdit(chat, one) && { label: t('chat.edit'), icon: ICONS.edit, run: done(() => startEdit?.(one)) },
+      one && { label: t('chat.messageInfo'), icon: ICONS.info, run: done(() => infoDialog(one)) },
+      !!text && { label: t('chat.copy'), icon: ICONS.copy, run: done(() => navigator.clipboard.writeText(text).catch(errorDialog)) },
+      { label: t('chat.deleteMessage'), icon: ICONS.trash, run: () => deleteDialog(chat, msgs) },
+    ];
+    return actions.filter((a): a is MsgAction => !!a);
+  }
+
+  /** Like Android's handleCopyMessage(): several messages get the sender's name whenever it changes. */
+  function copyText(msgs: Message[]): string {
+    if (msgs.length === 1) return msgs[0].text;
+    let last: string | undefined;
+    const parts: string[] = [];
+    for (const m of msgs) {
+      const body = m.text || m.attachments.map(a => a.filename).join(', ');
+      if (!body) continue;
+      parts.push(m.from === last ? body : `${client.contactName(m.from)}:\n${body}`);
+      last = m.from;
+    }
+    return parts.join('\n\n');
+  }
+
+  function actionButton(a: MsgAction): HTMLButtonElement {
+    const b: HTMLButtonElement = iconButton(a.icon, a.label, () => a.run(b));
+    return b;
+  }
+
+  function openMenu(chat: Chat, m: Message, anchor: HTMLElement, at?: DOMRect, byKeyboard = false) {
+    const item = (label: string, d: string, run: () => unknown) => {
+      const b = h('button', { type: 'button', role: 'menuitem', onclick: () => { close(); run(); } }, h('span', {}, label));
+      b.prepend(icon(d));
+      return b;
+    };
+    const box = h('div', { class: 'menu', role: 'menu' },
+      ...messageActions(chat, [m]).map(a => item(a.label, a.icon, () => a.run(anchor))),
+      item(t('chat.select'), ICONS.select, () => toggleSelected(m.id)));
+    const close = popover(anchor, box, at);
+    if (byKeyboard) box.querySelector('button')?.focus();
+  }
+
+  // ---------------------------------------------------------------- selection mode, like Android's action mode
+
+  const selected = new Set<string>();
+  const selbar = h('header', { class: 'selbar' });
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' && selected.size && !document.querySelector('dialog[open], .popover')) clearSelection();
+  }, { signal });
+
+  function listenForSelection(list: HTMLElement) {
+    const msgOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>('.msg[data-id]');
+    let press: { timer: number; x: number; y: number } | undefined;
+    let longPressed = false;
+    let touch = false;
+    const cancel = () => {
+      if (press) clearTimeout(press.timer);
+      press = undefined;
+    };
+    list.addEventListener('pointerdown', ev => {
+      touch = ev.pointerType === 'touch';
+      longPressed = false;
+      const msg = msgOf(ev.target);
+      if (!touch || !msg || selected.size) return;
+      const timer = window.setTimeout(() => {
+        press = undefined;
+        longPressed = true;
+        toggleSelected(msg.dataset.id!);
+      }, 500);
+      press = { timer, x: ev.clientX, y: ev.clientY };
+    });
+    list.addEventListener('pointermove', ev => {
+      if (press && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > 10) cancel();
+    });
+    list.addEventListener('pointerup', cancel);
+    list.addEventListener('pointercancel', cancel);
+    list.addEventListener('contextmenu', ev => {
+      const msg = msgOf(ev.target);
+      const chat = current ? client.chats.get(current) : undefined;
+      const m = msg && chat && client.messages.get(chat.id)?.find(x => x.id === msg.dataset.id);
+      if (!m || !chat || window.getSelection()?.toString()) return;
+      ev.preventDefault();
+      if (!touch && !selected.size) openMenu(chat, m, msg, new DOMRect(ev.clientX, ev.clientY, 0, 0));
+    });
+    // Capturing, so that in selection mode a tap on a quote or reaction selects instead.
+    list.addEventListener('click', ev => {
+      const msg = msgOf(ev.target);
+      if (longPressed || (msg && !(ev.target as Element).closest('a') && (selected.size || ev.ctrlKey || ev.metaKey))) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!longPressed && msg) toggleSelected(msg.dataset.id!);
+        longPressed = false;
+      }
+    }, true);
+  }
+
+  function toggleSelected(id: string) {
+    if (!selected.delete(id)) selected.add(id);
+    const chat = current ? client.chats.get(current) : undefined;
+    if (chat && shown) renderMessages(chat, shown.list);
+  }
+
+  function clearSelection() {
+    if (!selected.size) return;
+    selected.clear();
+    const chat = current ? client.chats.get(current) : undefined;
+    if (chat && shown) renderMessages(chat, shown.list);
+  }
+
+  function renderSelection(chat: Chat, list: HTMLElement) {
+    const msgs = (client.messages.get(chat.id) ?? []).filter(m => selected.has(m.id));
+    for (const id of [...selected]) if (!msgs.some(m => m.id === id)) selected.delete(id);
+    pane.classList.toggle('selecting', msgs.length > 0);
+    list.classList.toggle('selecting', msgs.length > 0);
+    if (!msgs.length) return selbar.replaceChildren();
+    selbar.replaceChildren(
+      iconButton(ICONS.close, t('chat.selectCancel'), clearSelection),
+      h('strong', { class: 'count' }, t('chat.selected', { n: msgs.length })),
+      ...messageActions(chat, msgs).map(actionButton));
   }
 
   function forgetMessages() {
@@ -608,6 +739,8 @@ function startMain(client: DcClient, initialChat?: string) {
     const chat = current ? client.chats.get(current) : undefined;
     if (!chat) {
       shown = undefined;
+      selected.clear();
+      pane.classList.remove('selecting');
       forgetMessages();
       pane.replaceChildren(h('div', { class: 'placeholder' }, h('p', {}, t('pane.select')), h('p', {}, t('pane.e2e'))));
       return;
@@ -618,21 +751,15 @@ function startMain(client: DcClient, initialChat?: string) {
       const footer = chatFooter(chat);
       const list = h('div', { class: 'messages' });
       shown = { chatId: chat.id, header, headerKey, footer, footerKey: footerKey(chat), list };
-      // Narrow and touch screens show a message's actions only while it is selected by a tap.
-      list.addEventListener('click', ev => {
-        const target = ev.target as Element;
-        if (target.closest('button, a, .quote')) return;
-        const msg = target.closest('.msg');
-        for (const el of list.querySelectorAll('.msg.selected')) if (el !== msg) el.classList.remove('selected');
-        msg?.classList.toggle('selected');
-      });
+      selected.clear();
+      listenForSelection(list);
       // Scroll anchoring keeps the top in place when the growing composer shrinks the list.
       let height = 0;
       new ResizeObserver(() => {
         if (list.scrollHeight - list.scrollTop - height < 40) list.scrollTop = list.scrollHeight;
         height = list.clientHeight;
       }).observe(list);
-      pane.replaceChildren(header, shown.list, footer);
+      pane.replaceChildren(header, selbar, shown.list, footer);
     } else {
       const [headerKey, header] = chatHeader(chat);
       if (headerKey !== shown.headerKey) {
@@ -678,8 +805,10 @@ function startMain(client: DcClient, initialChat?: string) {
         if (prev) prev.after(r.node);
         else list.prepend(r.node);
       }
+      r.node.classList.toggle('selected', selected.has(m.id));
       prev = r.node;
     }
+    renderSelection(chat, list);
     if (atBottom || ownNew) list.scrollTop = list.scrollHeight;
   }
 
@@ -856,6 +985,10 @@ const ICONS = {
   info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01',
   react: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01',
   star: 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z',
+  more: 'M4 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0M11 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0M18 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  select: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6',
+  close: 'M6 6l12 12M18 6 6 18',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
 
@@ -883,6 +1016,12 @@ function icon(d: string): SVGSVGElement {
   path.setAttribute('d', d);
   svg.append(path);
   return svg;
+}
+
+function iconButton(d: string, label: string, onclick: (ev: Event) => void): HTMLButtonElement {
+  const b = h('button', { type: 'button', title: label, 'aria-label': label, onclick });
+  b.append(icon(d));
+  return b;
 }
 
 function action(d: string, label: string, onclick: (ev: Event) => void) {

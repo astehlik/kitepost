@@ -9,7 +9,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, capture_clipboard, message_action, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -111,8 +111,7 @@ def test_edits_both_ways(web, dora):
     web_send(page, "typo heer")
     original = wait_text(dora.acc, "typo heer")
     own = page.locator(".msg.out", has_text="typo heer")
-    own.hover()
-    own.get_by_role("button", name="Edit").click()
+    message_action(page, own, "Edit")
     box = page.locator(".composer textarea")
     expect(page.locator(".composer .reply")).to_contain_text("typo heer")
     expect(box).to_have_value("typo heer")
@@ -139,29 +138,96 @@ def test_edits_both_ways(web, dora):
     expect(edited.locator(".meta")).to_contain_text("edited")
 
 
-def test_narrow_screens_show_actions_of_the_tapped_message(web, dora):
+def long_press(msg):
+    msg.dispatch_event("pointerdown", {"pointerType": "touch", "clientX": 10, "clientY": 10})
+    msg.page.wait_for_timeout(700)
+    msg.dispatch_event("pointerup", {"pointerType": "touch"})
+
+
+def test_hover_offers_react_reply_and_the_menu(web, dora):
+    page = web.page
+    dora.chat.send_text("hover me")
+    incoming = page.locator(".msg.in", has_text="hover me")
+    incoming.hover()
+    expect(incoming.locator(".actions button")).to_have_count(3)
+    for name in ("React", "Reply", "More"):
+        expect(incoming.get_by_role("button", name=name)).to_be_visible()
+
+    incoming.locator(".text").click(button="right")
+    menu = page.locator(".menu")
+    expect(menu.get_by_role("menuitem")).to_have_text(["React", "Reply", "Message info", "Copy text", "Delete message", "Select"])
+    page.keyboard.press("Escape")
+    expect(menu).to_have_count(0)
+
+    incoming.get_by_role("button", name="More").focus()
+    page.keyboard.press("Enter")
+    expect(menu.get_by_role("menuitem").first).to_be_focused()
+    page.keyboard.press("Escape")
+
+
+def test_select_several_messages(web, dora):
+    page = web.page
+    capture_clipboard(page)
+    dora.chat.send_text("first of two")
+    first = page.locator(".msg.in", has_text="first of two")
+    expect(first).to_be_visible()
+    web_send(page, "second of two")
+    second = page.locator(".msg.out", has_text="second of two")
+
+    message_action(page, first, "Select")
+    bar = page.locator(".selbar")
+    expect(bar).to_contain_text("1 selected")
+    expect(bar.get_by_role("button", name="Reply")).to_be_visible()
+    expect(page.locator(".chathead")).to_be_hidden()
+    second.click(modifiers=["ControlOrMeta"])
+    expect(bar).to_contain_text("2 selected")
+    expect(bar.get_by_role("button")).to_have_count(3)
+    for name in ("End selection", "Copy text", "Delete message"):
+        expect(bar.get_by_role("button", name=name)).to_be_visible()
+
+    bar.get_by_role("button", name="Copy text").click()
+    expect(bar).to_be_hidden()
+    assert page.evaluate("window.copied") == "Dora:\nfirst of two\n\nWebby:\nsecond of two"
+
+    first.click(modifiers=["ControlOrMeta"])
+    second.click()
+    expect(bar).to_contain_text("2 selected")
+    second.click()
+    expect(bar).to_contain_text("1 selected")
+    page.keyboard.press("Escape")
+    expect(bar).to_be_hidden()
+    expect(page.locator(".msg.selected")).to_have_count(0)
+
+
+def test_long_press_selects_on_narrow_screens(web, dora):
     page = web.page
     page.set_viewport_size({"width": 390, "height": 700})
-    dora.chat.send_text("tap me")
-    incoming = page.locator(".msg.in", has_text="tap me")
-    actions = incoming.locator(".actions")
-    expect(actions).to_have_css("opacity", "0")
+    dora.chat.send_text("press me long")
+    dora.chat.send_text("and me too")
+    first = page.locator(".msg.in", has_text="press me long")
+    second = page.locator(".msg.in", has_text="and me too")
+    expect(second).to_be_visible()
 
-    incoming.locator(".text").click()
-    page.mouse.move(0, 0)  # no hover, as on a touch screen
-    expect(actions).to_have_css("opacity", "1")
-    bar, bubble = actions.bounding_box(), incoming.bounding_box()
-    assert bubble["x"] <= bar["x"] and bar["x"] + bar["width"] <= bubble["x"] + bubble["width"], (bar, bubble)
-    incoming.get_by_role("button", name="Reply").click()
-    expect(page.locator(".composer .reply")).to_contain_text("tap me")
+    long_press(first)
+    bar = page.locator(".selbar")
+    expect(bar).to_contain_text("1 selected")
+    expect(first).to_have_class(re.compile("selected"))
+    bar.get_by_role("button", name="Reply").click()
+    expect(page.locator(".composer .reply")).to_contain_text("press me long")
+    expect(bar).to_be_hidden()
 
-    page.locator(".messages").click(position={"x": 5, "y": 5})
-    expect(actions).to_have_css("opacity", "0")
+    long_press(first)
+    second.click()
+    expect(bar).to_contain_text("2 selected")
+    bar.get_by_role("button", name="Delete message").click()
+    expect(page.locator("dialog h2")).to_have_text("Delete 2 messages?")
+    page.locator("dialog").get_by_role("button", name="Delete for me").click()
+    expect(first).to_have_count(0)
+    expect(second).to_have_count(0)
 
 
 def delete_message(page, msg, label):
-    msg.hover()
-    msg.get_by_role("button", name="Delete").click()
+    message_action(page, msg, "Delete message")
     page.locator("dialog").get_by_role("button", name=label).click()
     expect(msg).to_have_count(0)
 
@@ -170,8 +236,7 @@ def test_delete_for_me_and_for_everyone(web, dora):
     page = web.page
     dora.chat.send_text("only gone here")
     incoming = page.locator(".msg.in", has_text="only gone here")
-    incoming.hover()
-    incoming.get_by_role("button", name="Delete").click()
+    message_action(page, incoming, "Delete message")
     expect(page.locator("dialog").get_by_role("button", name="Delete for everyone")).to_have_count(0)
     page.locator("dialog").get_by_role("button", name="Delete for me").click()
     expect(incoming).to_have_count(0)
@@ -181,10 +246,21 @@ def test_delete_for_me_and_for_everyone(web, dora):
     delete_message(page, page.locator(".msg.out", has_text="oops, wrong chat"), "Delete for everyone")
     wait_event(dora.acc, EventType.MSG_DELETED, lambda e: e.msg_id == sent.id)
 
+    web_send(page, "one of two mistakes")
+    web_send(page, "two of two mistakes")
+    one = wait_text(dora.acc, "one of two mistakes")
+    two = wait_text(dora.acc, "two of two mistakes")
+    message_action(page, page.locator(".msg.out", has_text="one of two mistakes"), "Select")
+    page.locator(".msg.out", has_text="two of two mistakes").click()
+    page.locator(".selbar").get_by_role("button", name="Delete message").click()
+    page.locator("dialog").get_by_role("button", name="Delete for everyone").click()
+    expect(page.locator(".msg.out", has_text="of two mistakes")).to_have_count(0)
+    deleted = set()
+    wait_event(dora.acc, EventType.MSG_DELETED, lambda e: deleted.add(e.msg_id) or {one.id, two.id} <= deleted)
+
 
 def open_info(page, msg):
-    msg.hover()
-    msg.get_by_role("button", name="Message info").click()
+    message_action(page, msg, "Message info")
     return page.locator("dialog")
 
 
