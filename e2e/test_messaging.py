@@ -155,7 +155,7 @@ def test_hover_offers_react_reply_and_the_menu(web, dora):
 
     incoming.locator(".text").click(button="right")
     menu = page.locator(".menu")
-    expect(menu.get_by_role("menuitem")).to_have_text(["React", "Reply", "Message info", "Copy text", "Delete message", "Select"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["React", "Reply", "Message info", "Pin", "Copy text", "Delete message", "Select"])
     page.keyboard.press("Escape")
     expect(menu).to_have_count(0)
 
@@ -500,6 +500,49 @@ def test_pinning_in_core_shows_info_messages(web, dora):
     dora.acc._rpc.set_pinned_message_state(dora.acc.id, msg.id, False)
     expect(page.locator(".messages .info", has_text="Message unpinned by Dora.")).to_be_visible()
     expect(page.locator(".messages .msg")).to_have_count(1)
+
+
+def wait_pinned(acc, chat_id, ids):
+    pinned = lambda *_: acc._rpc.get_pinned_messages(acc.id, chat_id) == ids
+    if not pinned():
+        wait_event(acc, EventType.MSGS_CHANGED, pinned)
+
+
+def test_pinning_both_ways(web, dora):
+    page = web.page
+    first = dora.chat.send_text("pin me first")
+    second = dora.chat.send_text("pin me second")
+    msg = page.locator(".msg.in", has_text="pin me first")
+    expect(page.locator(".msg.in", has_text="pin me second")).to_be_visible()
+    bar = page.locator(".pinbar")
+    expect(bar).to_be_hidden()
+
+    message_action(page, msg, "Pin")
+    expect(page.locator(".messages .info", has_text="You pinned a message.")).to_be_visible()
+    expect(msg.locator(".meta .pin")).to_be_visible()
+    expect(bar).to_contain_text("Pinned message")
+    expect(bar).to_contain_text("pin me first")
+    wait_pinned(dora.acc, dora.chat.id, [first.id])
+
+    dora.acc._rpc.set_pinned_message_state(dora.acc.id, second.id, True)
+    expect(page.locator(".msg.in", has_text="pin me second").locator(".meta .pin")).to_be_visible()
+    expect(bar).to_contain_text("Pinned message 2 of 2")
+    expect(bar).to_contain_text("pin me second")
+    bar.click()
+    expect(bar).to_contain_text("Pinned message 1 of 2")
+    expect(bar).to_contain_text("pin me first")
+    bar.click()
+    expect(msg).to_have_class(re.compile("flash"))
+    expect(bar).to_contain_text("pin me second")
+
+    message_action(page, msg, "Unpin")
+    expect(page.locator(".messages .info", has_text="You unpinned a message.")).to_be_visible()
+    expect(msg.locator(".meta .pin")).to_have_count(0)
+    expect(bar).to_have_text(re.compile("^Pinned messagepin me second$"))
+    wait_pinned(dora.acc, dora.chat.id, [second.id])
+
+    page.locator(".messages .info", has_text="Message pinned by Dora.").click()
+    expect(page.locator(".msg.in", has_text="pin me second")).to_have_class(re.compile("flash"))
 
 
 def test_group_changes_in_core_show_info_messages(web, dora):

@@ -5,7 +5,7 @@ from pathlib import Path
 from deltachat_rpc_client import DeltaChat
 from playwright.sync_api import expect
 
-from helpers import PNG, RELAY_IP, addr_of, open_chat, own_state, transport, wait_own_msg, wait_text, web_send
+from helpers import PNG, RELAY_IP, addr_of, message_action, open_chat, own_state, transport, wait_own_msg, wait_text, web_send
 
 
 def test_export_restores_in_core(web, dora, rpc, tmp_path):
@@ -14,6 +14,8 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     question = wait_text(dora.acc, "question\nin two lines")
     dora.chat.send_message(text="hello web", quoted_msg=question.id)
     expect(page.locator(".msg.in", has_text="hello web").locator(".quote")).to_be_visible()
+    message_action(page, page.locator(".msg.in", has_text="hello web"), "Pin")
+    expect(page.locator(".pinbar")).to_contain_text("hello web")
     png = tmp_path / "dot.png"
     png.write_bytes(PNG)
     page.locator('.composer input[type="file"]').set_input_files(str(png))
@@ -57,6 +59,7 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         quoted = next(s for s in snaps if s.text == "hello web")
         assert quoted.quote.text == "question\nin two lines", quoted.quote
         assert restored.get_message_by_id(quoted.quote.message_id).get_snapshot().text == "question\nin two lines"
+        assert rpc.get_pinned_messages(restored.id, chats["Dora"].id) == [quoted.id]
         pic = next(s for s in snaps if s.text == "hello dora")
         assert pic.file_name == "dot.png" and Path(pic.file).read_bytes() == PNG, pic
         receipts = rpc.get_message_read_receipts(restored.id, pic.id)

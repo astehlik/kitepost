@@ -31,6 +31,11 @@ function cleanName(name: string): string {
   return name.replace(/[\p{Cc}\p{Cf}]/gu, '').trim().slice(0, 100);
 }
 
+/** Like core's is_pinnable(): a failed message did not reach everyone, pinning it raises wrong expectations. */
+export function pinnable(m: Message): boolean {
+  return !m.info && m.state !== 'failed' && m.state !== 'pending' && m.id.includes('@');
+}
+
 function addrEq(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
@@ -679,6 +684,31 @@ export class DcClient extends EventTarget {
   }
 
   /** Sets or, with an empty string, removes the own reaction, like core's send_reaction(). */
+  /** Pins or unpins a message for everyone in the chat, like core's set_pinned_state(). */
+  async setPinned(chatId: string, msgId: string, pinned: boolean) {
+    const chat = this.chats.get(chatId);
+    const target = this.messages.get(chatId)?.find(m => m.id === msgId);
+    if (!chat || !target || !pinnable(target)) throw new Error('unknown message');
+    if (!!target.pinned === pinned) return;
+    if (chat.left) throw new Error(t('error.notMember'));
+    const self = chat.type === 'self';
+    const members = self ? [] : this.memberContacts(chat);
+    if (!self && !members.length) throw new Error(t('error.noKey'));
+    const headers: OutgoingMessage['headers'] = [
+      { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+      { name: 'In-Reply-To', value: msgId, kind: 'messageid' },
+      { name: 'Chat-Content', value: pinned ? 'message-pinned' : 'message-unpinned', kind: 'raw' },
+    ];
+    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
+    const text = t(pinned ? 'info.youPinned' : 'info.youUnpinned');
+    const mid = await this.sendToChat(chat, members, { text, headers });
+    await this.saveMessage({
+      id: mid, chatId, from: 'self', text, timestamp: Date.now(), addedAt: Date.now(),
+      state: 'sent', info: true, attachments: [], reactions: {}, replyTo: msgId,
+    });
+    await this.saveMessage({ ...target, pinned: pinned || undefined });
+  }
+
   async sendReaction(chatId: string, msgId: string, reaction: string) {
     const chat = this.chats.get(chatId);
     const target = this.messages.get(chatId)?.find(m => m.id === msgId);
@@ -927,9 +957,16 @@ export class DcClient extends EventTarget {
     const info = this.systemInfo(p, from);
     if (info !== undefined) {
       if (info === null) return;
+      const content = p.headers['chat-content'];
+      const pin = content === 'message-pinned' || content === 'message-unpinned' ? this.messageById(stripMid(p.headers['in-reply-to'])) : undefined;
+      // Like core's receive_imf(): only members change pins; Kitepost also keeps them to their chat.
+      const member = own || chat.left || chat.type !== 'group' || chat.members.includes(from);
+      if (pin && pin.chatId === chat.id && member && pinnable(pin)) {
+        await this.saveMessage({ ...pin, pinned: content === 'message-pinned' || undefined });
+      }
       await this.saveMessage({
         id: mid, chatId: chat.id, from, text: info, timestamp: this.timestamp(p),
-        state: 'received', info: true, attachments: [], reactions: {},
+        state: 'received', info: true, attachments: [], reactions: {}, replyTo: pin?.id,
       });
       if (p.headers['chat-content'] !== 'message-unpinned') {
         chat.lastActivity = Date.now();

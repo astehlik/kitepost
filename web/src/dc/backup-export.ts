@@ -196,14 +196,14 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
         const ts = Math.floor(m.timestamp / 1000);
         const id = msgId++;
         run(`INSERT INTO msgs (id, rfc724_mid, chat_id, from_id, to_id, timestamp, type, state, msgrmsg, bytes, txt, param,
-            timestamp_sent, timestamp_rcvd, hidden, error, mime_headers, mime_in_reply_to, mime_references, subject, hop_info)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 0, ?, '', ?, '', '', '')`,
+            timestamp_sent, timestamp_rcvd, hidden, error, mime_headers, mime_in_reply_to, mime_references, subject, hop_info, pinned)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 0, ?, '', ?, '', '', '', ?)`,
         [id, m.id.includes('@') ? m.id : `${crypto.randomUUID()}@localhost`, chatId, from,
           m.info ? CONTACT_INFO : out ? (single ?? (chat.type === 'self' ? CONTACT_SELF : 0)) : CONTACT_SELF,
           ts, att ? viewtype(att.mime) : 10, state, att ? att.data_b64.length * 3 / 4 : m.text.length, m.text,
           params([['f', file && `$BLOBDIR/${file}`], ['m', att?.mime], ['v', att?.filename], ['c', m.info ? undefined : 1],
             ['q', m.quote]]),
-          ts, !out && m.addedAt ? Math.floor(m.addedAt / 1000) : ts, m.error ?? '', m.replyTo ? `<${m.replyTo}>` : '']);
+          ts, !out && m.addedAt ? Math.floor(m.addedAt / 1000) : ts, m.error ?? '', m.replyTo ? `<${m.replyTo}>` : '', m.pinned ? 1 : 0]);
         for (const [fp, readAt] of Object.entries(m.readBy ?? {})) {
           const contact = contactIds.get(fp);
           if (contact) run('INSERT INTO msgs_mdns (msg_id, contact_id, timestamp_sent) VALUES (?, ?, ?)', [id, contact, Math.floor(readAt / 1000)]);

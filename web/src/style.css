@@ -142,10 +142,19 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .msg .meta .state svg { width: 1.35em; height: 1.35em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .msg .meta .state[data-state="read"] { color: var(--accent); }
 .msg .meta .state[data-state="failed"] { color: var(--danger); }
+.msg .meta .pin { display: inline-flex; margin-right: .3rem; vertical-align: -.2em; }
+.msg .meta .pin svg { width: 1.2em; height: 1.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pinbar { display: flex; align-items: center; gap: .7rem; padding: .4rem 1rem; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: var(--panel); color: var(--text); text-align: left; }
+.pinbar[hidden] { display: none; }
+.pinbar svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pinbar > span { display: grid; min-width: 0; }
+.pinbar strong { font-size: .75rem; color: var(--accent); }
+.pinbar span span { overflow: hidden; font-size: .88rem; white-space: nowrap; text-overflow: ellipsis; }
 .msg .reactions { font-size: .9rem; }
 .attachment img { max-width: 100%; max-height: 320px; border-radius: 8px; display: block; }
 .attachment a { color: inherit; font-size: .9rem; }
 .info { align-self: center; font-size: .82rem; color: var(--muted); background: var(--panel); border-radius: 10px; padding: .25rem .7rem; text-align: center; }
+.info.linked { border: 0; font-size: .82rem; cursor: pointer; }
 .request { display: flex; gap: .6rem; align-items: center; padding: .8rem 1rem; background: var(--panel); border-top: 1px solid var(--border); flex-wrap: wrap; }
 .request span { flex: 1; }
 .composer { display: flex; gap: .5rem; align-items: flex-end; padding: .6rem 1rem; background: var(--panel); border-top: 1px solid var(--border); }

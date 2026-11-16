@@ -77,6 +77,7 @@ export interface Message {
   readBy?: Record<string, number>;
   attachments: AttachmentData[];
   reactions: Record<string, string>;
+  pinned?: boolean;
   /** INBOX UID while `\Seen` still has to be set on the server. */
   unseenUid?: { uid: number; validity: number };
   /** The sender asked for a read receipt (Chat-Disposition-Notification-To). */

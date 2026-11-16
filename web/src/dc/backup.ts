@@ -257,9 +257,11 @@ export async function readBackup(
 
     const messages: Message[] = [];
     const chatById = new Map(chats.map(c => [c.id, c]));
+    // Backups of older core versions have no pinned column.
+    const pinned = rows(db, "SELECT 1 FROM pragma_table_info('msgs') WHERE name = 'pinned'").length ? 'pinned' : '0 AS pinned';
     for (const [dcId, chatId] of chatIdMap) {
       const chat = chatById.get(chatId)!;
-      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, timestamp_rcvd, state, txt, param, mime_in_reply_to FROM msgs
+      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, timestamp_rcvd, state, txt, param, mime_in_reply_to, ${pinned} FROM msgs
         WHERE chat_id = ? AND hidden = 0 AND state != ? ORDER BY timestamp DESC, id DESC LIMIT ?`, [dcId, STATE_OUT_DRAFT, MAX_MESSAGES_PER_CHAT]);
       for (const r of msgRows.reverse()) {
         const fromId = num(r.from_id);
@@ -283,11 +285,13 @@ export async function readBackup(
         const quote = p.get('q');
         messages.push({
           id: str(r.rfc724_mid) || `backup-${num(r.id)}`, chatId, from, text, timestamp,
-          quote, replyTo: quote !== undefined && !p.has('a') ? messageId(r.mime_in_reply_to) : undefined,
+          // Pin info messages (S=71, 72) lead to the pinned message, like quotes.
+          quote, replyTo: (quote !== undefined && !p.has('a')) || p.get('S') === '71' || p.get('S') === '72' ? messageId(r.mime_in_reply_to) : undefined,
           state: info ? 'received' : messageState(num(r.state), incoming),
           info: info || undefined, attachments, reactions: reactions.get(num(r.id)) ?? {},
           addedAt: incoming && num(r.timestamp_rcvd) ? num(r.timestamp_rcvd) * 1000 : undefined,
           readBy: readBy.get(num(r.id)),
+          pinned: num(r.pinned) === 1 || undefined,
         });
         chat.lastActivity = Math.max(chat.lastActivity, timestamp);
         if (incoming && !info && num(r.state) === STATE_IN_FRESH) chat.unread += 1;

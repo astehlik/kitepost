@@ -1,5 +1,6 @@
 """A Delta Chat core profile imported into the web client from a backup, then used on both devices."""
 
+import re
 import time
 from types import SimpleNamespace
 
@@ -29,6 +30,7 @@ def imported(page, make_account, tmp_path):
     while hello_sent.get_snapshot().state != MessageState.OUT_MDN_RCVD:
         assert time.monotonic() < deadline, "the phone got no read receipt from Bob"
         time.sleep(0.2)
+    phone._rpc.set_pinned_message_state(phone.id, reply.id, True)
     png = tmp_path / "pic.png"
     png.write_bytes(PNG)
     phone_bob.send_file(str(png))
@@ -161,3 +163,13 @@ def test_receive_times_and_read_receipts_are_imported(imported):
     reply = page.locator(".msg.in", has_text="reply from bob")
     message_action(page, reply, "Message info")
     expect(page.locator("dialog dd").nth(1)).to_have_text(shown)
+
+
+def test_pins_are_imported(imported):
+    page = imported.page
+    open_chat(page, "Bob")
+    reply = page.locator(".msg.in", has_text="reply from bob")
+    expect(reply.locator(".meta .pin")).to_be_visible()
+    expect(page.locator(".pinbar")).to_contain_text("reply from bob")
+    page.locator(".messages .info", has_text="You pinned a message.").click()
+    expect(reply).to_have_class(re.compile("flash"))

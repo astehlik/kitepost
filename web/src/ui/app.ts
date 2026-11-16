@@ -1,5 +1,5 @@
 import { fileReader, readBackup } from '../dc/backup';
-import { DcClient } from '../dc/client';
+import { DcClient, pinnable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
 import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
@@ -402,7 +402,7 @@ function startMain(client: DcClient, initialChat?: string) {
   mainListeners = new AbortController();
   const { signal } = mainListeners;
   let current = initialChat;
-  let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement } | undefined;
+  let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement; pinbar: HTMLButtonElement; pinnedIds?: string; pinnedAt?: string } | undefined;
   const rendered = new Map<string, { node: Element; key: string; urls: string[] }>();
   let startReply: ((m: Message) => void) | undefined;
   let startEdit: ((m: Message) => void) | undefined;
@@ -488,7 +488,7 @@ function startMain(client: DcClient, initialChat?: string) {
   /** Everything `messageView` shows, so that unchanged messages keep their nodes. */
   function messageKey(chat: Chat, m: Message): string {
     const parent = m.quote !== undefined ? repliedTo(chat, m) : undefined;
-    return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.reactions, formatTime(m.timestamp),
+    return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.pinned, m.reactions, formatTime(m.timestamp),
       m.attachments.map(a => [a.filename, a.mime, a.data_b64.length]), m.quote, parent && authorName(parent.from),
       chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
   }
@@ -544,7 +544,9 @@ function startMain(client: DcClient, initialChat?: string) {
   }
 
   function messageView(chat: Chat, m: Message, urls: string[]): Element {
-    if (m.info) return h('div', { class: 'info' }, m.text);
+    if (m.info) {
+      return m.replyTo ? h('button', { type: 'button', class: 'info linked', onclick: () => jumpTo(m.replyTo!) }, m.text) : h('div', { class: 'info' }, m.text);
+    }
     const out = m.from === 'self';
     const state = out && m.state !== 'received' ? stateMark(m.state) : null;
     const canReact = !chat.left && !chat.isRequest && m.id.includes('@');
@@ -561,7 +563,7 @@ function startMain(client: DcClient, initialChat?: string) {
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, m.text) : null,
-      h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
+      h('div', { class: 'meta' }, m.pinned ? pinMark() : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
@@ -586,6 +588,9 @@ function startMain(client: DcClient, initialChat?: string) {
       canReact && { label: t('chat.reply'), icon: ICONS.reply, run: done(() => startReply?.(one)) },
       one && canEdit(chat, one) && { label: t('chat.edit'), icon: ICONS.edit, run: done(() => startEdit?.(one)) },
       one && { label: t('chat.messageInfo'), icon: ICONS.info, run: done(() => infoDialog(one)) },
+      one && pinnable(one) && !chat.left && !chat.isRequest && {
+        label: t(one.pinned ? 'chat.unpin' : 'chat.pin'), icon: ICONS.pin, run: done(() => client.setPinned(chat.id, one.id, !one.pinned).catch(errorDialog)),
+      },
       !!text && { label: t('chat.copy'), icon: ICONS.copy, run: done(() => navigator.clipboard.writeText(text).catch(errorDialog)) },
       { label: t('chat.deleteMessage'), icon: ICONS.trash, run: () => deleteDialog(chat, msgs) },
     ];
@@ -754,7 +759,8 @@ function startMain(client: DcClient, initialChat?: string) {
       const [headerKey, header] = chatHeader(chat);
       const footer = chatFooter(chat);
       const list = h('div', { class: 'messages' });
-      shown = { chatId: chat.id, header, headerKey, footer, footerKey: footerKey(chat), list };
+      const pinbar = h('button', { type: 'button', class: 'pinbar', hidden: true, onclick: () => showPinned(chat.id) });
+      shown = { chatId: chat.id, header, headerKey, footer, footerKey: footerKey(chat), list, pinbar };
       selected.clear();
       listenForSelection(list);
       // Scroll anchoring keeps the top in place when the growing composer shrinks the list.
@@ -763,7 +769,7 @@ function startMain(client: DcClient, initialChat?: string) {
         if (list.scrollHeight - list.scrollTop - height < 40) list.scrollTop = list.scrollHeight;
         height = list.clientHeight;
       }).observe(list);
-      pane.replaceChildren(header, selbar, shown.list, footer);
+      pane.replaceChildren(header, selbar, pinbar, shown.list, footer);
     } else {
       const [headerKey, header] = chatHeader(chat);
       if (headerKey !== shown.headerKey) {
@@ -777,7 +783,35 @@ function startMain(client: DcClient, initialChat?: string) {
       }
     }
     renderMessages(chat, shown.list);
+    renderPinned(chat);
     if (!document.hidden) void client.markRead(chat.id);
+  }
+
+  /** Like core's get_pinned_messages(): the bar starts at the newest and steps back with every tap. */
+  function renderPinned(chat: Chat) {
+    if (!shown) return;
+    const pinned = (client.messages.get(chat.id) ?? []).filter(m => m.pinned);
+    const ids = pinned.map(x => x.id).join(' ');
+    if (ids !== shown.pinnedIds) Object.assign(shown, { pinnedIds: ids, pinnedAt: undefined });
+    const m = pinned.find(x => x.id === shown!.pinnedAt) ?? pinned.at(-1);
+    shown.pinnedAt = m?.id;
+    shown.pinbar.hidden = !m;
+    if (!m) return;
+    const label = pinned.length > 1 ? t('chat.pinnedOf', { n: pinned.indexOf(m) + 1, count: pinned.length }) : t('chat.pinned');
+    shown.pinbar.replaceChildren(icon(ICONS.pin), h('span', {},
+      h('strong', {}, label),
+      h('span', {}, m.text || m.attachments[0]?.filename || '')));
+  }
+
+  function showPinned(chatId: string) {
+    const chat = client.chats.get(chatId);
+    if (!shown || !chat) return;
+    const pinned = (client.messages.get(chatId) ?? []).filter(m => m.pinned);
+    const i = pinned.findIndex(m => m.id === shown!.pinnedAt);
+    if (i < 0) return;
+    jumpTo(pinned[i].id);
+    shown.pinnedAt = pinned[(i - 1 + pinned.length) % pinned.length].id;
+    renderPinned(chat);
   }
 
   function renderMessages(chat: Chat, list: HTMLElement) {
@@ -992,6 +1026,7 @@ const ICONS = {
   more: 'M4 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0M11 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0M18 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
   select: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6',
+  pin: 'M12 17v5M9 4h6M10 4v6l-3.5 4v3h11v-3L14 10V4',
   close: 'M6 6l12 12M18 6 6 18',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
@@ -1001,6 +1036,13 @@ function stateMark(state: Exclude<Message['state'], 'received'>): Element {
   const label = t(`mark.${state}`);
   const mark = h('span', { class: 'state', 'data-state': state, role: 'img', 'aria-label': label, title: label });
   mark.append(icon(STATE_ICONS[state]));
+  return mark;
+}
+
+function pinMark(): Element {
+  const label = t('mark.pinned');
+  const mark = h('span', { class: 'pin', role: 'img', 'aria-label': label, title: label });
+  mark.append(icon(ICONS.pin));
   return mark;
 }
 
