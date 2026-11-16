@@ -135,7 +135,7 @@ function invitePage(lang, inv) {
 <p>${T('inviteText', { domain: esc(MAIL_DOMAIN) })}</p>
 ${inv.note ? `<p class="note">${esc(inv.note)}</p>` : ''}
 <form method="post"><button class="primary" type="submit">${T('inviteButton')}</button></form>
-<p class="small">${T('inviteOnce')}</p>`, { switchLanguage: true });
+<p class="small">${T('inviteOnce')}</p>`, { script: 'submit.js', switchLanguage: true });
 }
 
 function publicUrl(req, path) {
@@ -279,6 +279,7 @@ const STATIC = {
   'style.css': ['text/css; charset=utf-8', new URL('./public/style.css', import.meta.url)],
   'admin.js': ['text/javascript; charset=utf-8', new URL('./public/admin.js', import.meta.url)],
   'handoff.js': ['text/javascript; charset=utf-8', new URL('./public/handoff.js', import.meta.url)],
+  'submit.js': ['text/javascript; charset=utf-8', new URL('./public/submit.js', import.meta.url)],
 };
 
 // Redeeming is serialised so two clicks on one link cannot both create an account.

@@ -133,8 +133,26 @@ def test_core_logs_in_from_invite(admin, context, rpc):
         acc.remove()
 
 
+def test_create_button_is_disabled_while_submitting(admin, context):
+    friend = context.new_page()
+    friend.goto(create_invite(admin))
+    # Keeps the page, so the state during the submission can be inspected.
+    friend.evaluate("document.querySelector('form').addEventListener('submit', e => e.preventDefault())")
+    button = friend.get_by_role("button", name="Create my account")
+    button.click()
+    expect(button).to_be_disabled()
+    expect(button).to_have_attribute("aria-busy", "true")
+
+
 def test_revoked_invite_stops_working(admin, context):
     link = create_invite(admin)
-    admin.get_by_role("button", name="Revoke").first.click()
+    release = []
+    admin.route("**/api/invites/*", lambda route: release.append(route))
+    revoke = admin.get_by_role("button", name="Revoke").first
+    revoke.click()
+    expect(revoke).to_be_disabled()
+    expect(revoke).to_have_attribute("aria-busy", "true")
+    release[0].continue_()
+    admin.unroute("**/api/invites/*")
     expect(admin.locator("tbody tr").first).to_contain_text("revoked")
     assert context.new_page().goto(link).status == 410

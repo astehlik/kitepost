@@ -5,7 +5,7 @@ import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
-import { base64ToBlob, blobToBase64, clear, dialog, formatTime, h, trustedSvg } from './dom';
+import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatTime, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
@@ -130,30 +130,36 @@ function screen(title: string, rerender: () => void, ...content: Node[]) {
       h('div', { class: 'card-footer' }, languageSelect(rerender)))));
 }
 
+function errorDialog(e: unknown) {
+  dialog(t('error.title'), h('p', {}, e instanceof Error ? e.message : String(e)), [{ label: t('ok'), primary: true }]);
+}
+
+/** A click handler that keeps its button busy while `job` runs and reports failures. */
+const busyClick = (job: () => Promise<unknown>) => (ev: Event) =>
+  void whileBusy(ev.currentTarget as HTMLButtonElement, job).catch(errorDialog);
+
 function renderUnlock() {
   const pass = h('input', { type: 'password', id: 'current-password', name: 'current-password', autocomplete: 'current-password', required: true });
   const remember = rememberField();
   const err = errorBox();
+  const submit = h('button', { class: 'primary', type: 'submit' }, t('unlock.button'));
   const form = h('form', {
     onsubmit: async (ev: Event) => {
       ev.preventDefault();
       form.classList.add('busy');
-      try {
+      await whileBusy(submit, async () => {
         const store = await Store.unlock(pass.value);
         if (remember.box.checked) await store.remember();
         await openStore(store);
-      } catch (e) {
-        showError(err, e);
-      } finally {
-        form.classList.remove('busy');
-      }
+      }).catch(e => showError(err, e));
+      form.classList.remove('busy');
     },
   },
   passwordManagerUsername(),
   field(t('passphrase.label'), pass),
   remember.el,
   err,
-  h('button', { class: 'primary', type: 'submit' }, t('unlock.button')),
+  submit,
   h('button', {
     type: 'button', class: 'link danger',
     onclick: () => dialog(t('unlock.deleteTitle'), h('p', {}, t('unlock.deleteText')), [
@@ -170,19 +176,18 @@ function renderPassphraseSetup() {
   const pass2 = h('input', { type: 'password', id: 'confirm-password', name: 'confirm-password', autocomplete: 'new-password', required: true });
   const remember = rememberField();
   const err = errorBox();
+  const submit = h('button', { class: 'primary', type: 'submit' }, t('continue'));
   const form = h('form', {
     onsubmit: async (ev: Event) => {
       ev.preventDefault();
       if (pass.value !== pass2.value) return showError(err, t('passphrase.mismatch'));
       form.classList.add('busy');
-      try {
+      await whileBusy(submit, async () => {
         const store = await Store.create(pass.value);
         if (remember.box.checked) await store.remember();
         renderAccountSetup(store);
-      } catch (e) {
-        showError(err, e);
-        form.classList.remove('busy');
-      }
+      }).catch(e => showError(err, e));
+      form.classList.remove('busy');
     },
   },
   h('p', {}, t('welcome.text')),
@@ -191,7 +196,7 @@ function renderPassphraseSetup() {
   field(t('passphrase.repeat'), pass2),
   remember.el,
   err,
-  h('button', { class: 'primary', type: 'submit' }, t('continue')));
+  submit);
   screen(t('welcome.title'), renderPassphraseSetup, form);
   pass.focus();
 }
@@ -218,22 +223,20 @@ function renderAccountSetup(store: Store) {
     pendingLogin = undefined;
   }
   const err = errorBox();
+  const submit = h('button', { class: 'primary', type: 'submit' }, t('setup.create'));
   const form = h('form', {
     onsubmit: async (ev: Event) => {
       ev.preventDefault();
       form.classList.add('busy');
-      try {
+      await whileBusy(submit, async () => {
         const params = existing.checked
           ? { addr: addr.value, password: password.value }
           : { addr: `${randomAlnum(9)}@${relay.value.trim().toLowerCase()}`, password: randomAlnum(22) };
         const client = await DcClient.setup(store, { ...params, displayName: name.value, bridgeUrl: bridge.value.trim() || DEFAULT_BRIDGE });
         if (await handoffAvailable(handoffBase(), client.config.addr)) renderPhoneSetup(client);
         else await renderConnectPhone(client);
-      } catch (e) {
-        showError(err, e);
-      } finally {
-        form.classList.remove('busy');
-      }
+      }).catch(e => showError(err, e));
+      form.classList.remove('busy');
     },
   },
   field(t('setup.displayName'), name),
@@ -242,7 +245,7 @@ function renderAccountSetup(store: Store) {
   existingFields,
   h('details', {}, h('summary', {}, t('setup.advanced')), field(t('setup.bridge'), bridge, t('setup.bridgeHint'))),
   err,
-  h('button', { class: 'primary', type: 'submit' }, t('setup.create')));
+  submit);
 
   const backup = h('input', { type: 'file', accept: '.tar,application/x-tar', hidden: true });
   const importStatus = h('p', { class: 'hint', hidden: true });
@@ -259,7 +262,7 @@ function renderAccountSetup(store: Store) {
     importStatus.hidden = false;
     importBox.classList.add('busy');
     try {
-      const client = await job();
+      const client = await whileBusy(importButton, job);
       if (client) startMain(client);
       else importStatus.hidden = true;
     } catch (e) {
@@ -269,12 +272,13 @@ function renderAccountSetup(store: Store) {
       importBox.classList.remove('busy');
     }
   };
+  const importButton = h('button', { type: 'button', class: 'primary', onclick: () => backup.click() }, t('import.file'));
   const importBox = h('div', { class: 'import' },
     h('h2', {}, t('import.title')),
     h('p', {}, t('import.text')),
     importStatus, importErr,
     h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'primary', onclick: () => backup.click() }, t('import.file'))),
+      importButton),
     h('small', {}, t('import.note')),
     backup);
   backup.addEventListener('change', () => {
@@ -342,7 +346,7 @@ function renderPhoneSetup(client: DcClient) {
     h('p', {}, t('phone.text')),
     setup,
     h('button', { class: 'primary', onclick: leave(() => startMain(client)) }, t('continue')),
-    h('p', {}, h('button', { type: 'button', class: 'link', onclick: leave(() => renderConnectPhone(client)) }, t('phone.otherProfile'))));
+    h('p', {}, h('button', { type: 'button', class: 'link', onclick: busyClick(() => { polling.abort(); return renderConnectPhone(client); }) }, t('phone.otherProfile'))));
   render();
 }
 
@@ -379,7 +383,7 @@ function startMain(client: DcClient, initialChat?: string) {
   const sidebar = h('aside', { class: 'sidebar' },
     h('header', { class: 'profile' }, me, status, edit),
     h('nav', { class: 'nav-actions' },
-      action(ICONS.qr, t('nav.myInvite'), () => showInvite(client)),
+      action(ICONS.qr, t('nav.myInvite'), busyClick(() => showInvite(client))),
       action(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
       action(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))),
     chatList);
@@ -432,19 +436,19 @@ function startMain(client: DcClient, initialChat?: string) {
     const canReact = !chat.left && !chat.isRequest && m.id.includes('@');
     const mine = m.reactions.self;
     // One reaction per person: choosing the own one again removes it.
-    const react = (emoji: string) => void client.sendReaction(chat.id, m.id, emoji === mine ? '' : emoji).catch(e => console.warn(e));
+    const react = (emoji: string) => client.sendReaction(chat.id, m.id, emoji === mine ? '' : emoji);
     const counts = new Map<string, number>();
     for (const r of Object.values(m.reactions)) counts.set(r, (counts.get(r) ?? 0) + 1);
     const reactButton = canReact ? h('button', { type: 'button', class: 'react', title: t('chat.react'), 'aria-label': t('chat.react') }) : null;
     reactButton?.append(icon(ICONS.react));
-    reactButton?.addEventListener('click', () => openReactions(reactButton, react));
+    reactButton?.addEventListener('click', () => openReactions(reactButton, e => void whileBusy(reactButton, () => react(e)).catch(errorDialog)));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       ...m.attachments.map(attachmentView),
       m.text ? h('div', { class: 'text' }, m.text) : null,
       h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state ? ` ${state}` : '', m.error ? ` ${m.error}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
-        type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: () => react(r),
+        type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
       reactButton);
   }
@@ -467,7 +471,7 @@ function startMain(client: DcClient, initialChat?: string) {
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
       h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
-      chat.type === 'group' ? h('button', { onclick: () => showInvite(client, chat.id) }, t('invite.link')) : null,
+      chat.type === 'group' ? h('button', { onclick: busyClick(() => showInvite(client, chat.id)) }, t('invite.link')) : null,
       contact ? h('button', { onclick: () => fingerprintDialog(client, contact.fingerprint) }, t('chat.encryption')) : null,
       h('button', { onclick: () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteText')), [
         { label: t('cancel') },
@@ -480,8 +484,8 @@ function startMain(client: DcClient, initialChat?: string) {
     const request = chat.isRequest
       ? h('div', { class: 'request' },
         h('span', {}, t('chat.request')),
-        h('button', { class: 'primary', onclick: () => client.acceptChat(chat.id) }, t('accept')),
-        h('button', { onclick: async () => { await client.blockChat(chat.id); current = undefined; renderAll(); } }, t('block')))
+        h('button', { class: 'primary', onclick: busyClick(() => client.acceptChat(chat.id)) }, t('accept')),
+        h('button', { onclick: busyClick(async () => { await client.blockChat(chat.id); current = undefined; renderAll(); }) }, t('block')))
       : null;
 
     pane.append(header, list, request ?? composer(chat));
@@ -498,13 +502,18 @@ function startMain(client: DcClient, initialChat?: string) {
       const text = input.value.trim();
       if (!text && !attachment) return;
       const att = attachment;
+      const before = client.messages.get(chat.id)?.length ?? 0;
       input.value = '';
       attachment = undefined;
       chip.hidden = true;
       try {
         await client.sendText(chat.id, text, att);
       } catch (e) {
-        console.warn(e);
+        // A message that was created shows its error itself.
+        if ((client.messages.get(chat.id)?.length ?? 0) > before) return console.warn(e);
+        const ta = pane.querySelector('textarea');
+        if (ta && !ta.value) ta.value = text;
+        errorDialog(e);
       }
     };
     const attach = async (f: File) => {
@@ -620,7 +629,7 @@ function icon(d: string): SVGSVGElement {
   return svg;
 }
 
-function action(d: string, label: string, onclick: () => void) {
+function action(d: string, label: string, onclick: (ev: Event) => void) {
   const b = h('button', { onclick }, h('span', {}, label));
   b.prepend(icon(d));
   return b;
@@ -650,7 +659,18 @@ async function showInvite(client: DcClient, chatId?: string) {
     h('div', { class: 'qr' }, trustedSvg(qrSvg(link))),
     h('input', { type: 'text', readonly: true, value: link, 'aria-label': t('invite.link'), onfocus: (e: Event) => (e.target as HTMLInputElement).select() }));
   dialog(t(chatId ? 'invite.groupTitle' : 'invite.myTitle'), body, [
-    { label: t('invite.copy'), onClick: async () => { await navigator.clipboard.writeText(link); return false; } },
+    {
+      label: t('invite.copy'), onClick: async button => {
+        try {
+          await navigator.clipboard.writeText(link);
+          flashLabel(button, t('invite.copied'));
+        } catch {
+          body.querySelector('input')?.select();
+          flashLabel(button, t('invite.copyFailed'));
+        }
+        return false;
+      },
+    },
     { label: t('close'), primary: true },
   ]);
 }

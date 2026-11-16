@@ -8,6 +8,11 @@ h2 { font-size: 1.1rem; margin: 0 0 .3rem; }
 a { color: var(--accent); }
 button, .button { display: inline-block; font: inherit; padding: .6rem 1.2rem; border-radius: 999px; border: 2px solid var(--accent); background: transparent; color: var(--accent); text-decoration: none; cursor: pointer; font-weight: 600; }
 .primary { background: var(--accent); color: var(--on-accent); }
+button:disabled { opacity: .55; cursor: default; }
+button[aria-busy="true"] { opacity: 1; cursor: progress; }
+button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85em; height: .85em; margin-left: .5em; vertical-align: -.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { button[aria-busy="true"]::after { animation-duration: 3s; } }
 .small, .muted { color: var(--muted); font-size: .9rem; }
 .note { border-left: 3px solid var(--accent); padding-left: .8rem; color: var(--muted); }
 .warn { color: var(--warn); font-weight: 600; }

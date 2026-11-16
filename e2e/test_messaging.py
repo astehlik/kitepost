@@ -1,5 +1,6 @@
 """Messaging between the web client and Delta Chat core."""
 
+import re
 import time
 
 import pytest
@@ -153,6 +154,8 @@ def test_core_joins_web_invite(web, make_account):
     erin = make_account("Erin")
     web.page.get_by_role("button", name="My invite").click()
     link = web.page.locator("dialog input").input_value()
+    web.page.get_by_role("button", name="Copy link").click()
+    expect(web.page.locator("dialog .actions button").first).to_have_text(re.compile("Copied|Ctrl"))
     web.page.get_by_role("button", name="Close").click()
     erin.secure_join(link)
     wait_event(erin, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)

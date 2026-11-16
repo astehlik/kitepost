@@ -21,6 +21,24 @@ const lang = document.documentElement.lang in MESSAGES ? document.documentElemen
 const T = (key, params = {}) => MESSAGES[lang][key].replace(/\{(\w+)\}/g, (m, n) => (n in params ? String(params[n]) : m));
 let token = sessionStorage.getItem('invite-admin-token') ?? '';
 
+/** Disables `button` while `job` runs and shows a failure in `errorBox`. */
+async function whileBusy(button, job, errorBox) {
+  if (button.disabled) return;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  if (errorBox) errorBox.hidden = true;
+  try {
+    await job();
+  } catch (e) {
+    if (!token) return login(e.message);
+    errorBox.textContent = e.message;
+    errorBox.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+  }
+}
+
 async function copyLink(button, text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -65,15 +83,16 @@ const fmt = ts => (ts ? new Date(ts).toLocaleDateString(lang, { dateStyle: 'medi
 
 function login(error) {
   const input = h('input', { type: 'password', autocomplete: 'current-password', placeholder: T('token') });
+  const submit = h('button', { class: 'primary', type: 'submit' }, T('signIn'));
   const children = [h('h1', {}, T('title')), h('form', {
     class: 'signin',
     onsubmit: e => {
       e.preventDefault();
       token = input.value;
       sessionStorage.setItem('invite-admin-token', token);
-      render();
+      whileBusy(submit, render);
     },
-  }, input, h('button', { class: 'primary', type: 'submit' }, T('signIn')))];
+  }, input, submit)];
   if (error) children.push(h('p', { class: 'error' }, error));
   root.replaceChildren(...children);
   input.focus();
@@ -89,18 +108,22 @@ async function render(created) {
   const note = h('input', { name: 'note', maxlength: '200', placeholder: T('notePlaceholder') });
   const days = h('input', { name: 'days', type: 'number', min: '0', max: '365', value: '7' });
   const uses = h('input', { name: 'uses', type: 'number', min: '1', max: '100', value: '1' });
+  const error = h('p', { class: 'error', hidden: true });
+  const submit = h('button', { class: 'primary', type: 'submit' }, T('create'));
   const form = h('form', {
     class: 'grid',
-    onsubmit: async e => {
+    onsubmit: e => {
       e.preventDefault();
-      const inv = await api('POST', 'api/invites', { note: note.value, expiresDays: Number(days.value), uses: Number(uses.value) });
-      render(new URL(inv.token, location.href).href);
+      whileBusy(submit, async () => {
+        const inv = await api('POST', 'api/invites', { note: note.value, expiresDays: Number(days.value), uses: Number(uses.value) });
+        await render(new URL(inv.token, location.href).href);
+      }, error);
     },
   },
   h('label', { class: 'wide' }, h('span', {}, T('note')), note),
   h('label', {}, h('span', {}, T('days')), days),
   h('label', {}, h('span', {}, T('uses')), uses),
-  h('div', { class: 'wide' }, h('button', { class: 'primary', type: 'submit' }, T('create'))));
+  h('div', { class: 'wide' }, submit));
 
   const box = created ? h('div', { class: 'created' },
     h('strong', {}, T('created')),
@@ -112,9 +135,12 @@ async function render(created) {
     h('td', { class: 'status' }, T(inv.revoked ? 'revoked' : inv.active ? 'open' : inv.usesLeft ? 'expired' : 'used', { n: inv.usesLeft })),
     h('td', { class: 'accounts' }, ...inv.redeemed.flatMap(r => [...addrParts(r.addr), h('br')])),
     h('td', { class: 'muted dates' }, h('span', {}, `${fmt(inv.created)} –`), ' ', h('span', {}, fmt(inv.expires))),
-    h('td', { class: 'action' }, inv.active ? h('button', { class: 'compact', onclick: async () => { await api('DELETE', `api/invites/${inv.id}`); render(); } }, T('revoke')) : null)));
+    h('td', { class: 'action' }, inv.active ? h('button', {
+      class: 'compact',
+      onclick: e => whileBusy(e.currentTarget, async () => { await api('DELETE', `api/invites/${inv.id}`); await render(); }, error),
+    }, T('revoke')) : null)));
 
-  root.replaceChildren(h('h1', {}, T('title')), form, ...(box ? [box] : []),
+  root.replaceChildren(h('h1', {}, T('title')), form, error, ...(box ? [box] : []),
     h('table', {}, h('thead', {}, h('tr', {}, ...[T('note'), T('status'), T('accounts'), T('valid'), ''].map(t => h('th', {}, t)))), h('tbody', {}, ...rows)),
     h('p', {}, h('button', { onclick: () => { sessionStorage.removeItem('invite-admin-token'); token = ''; login(); } }, T('signOut'))));
 }
