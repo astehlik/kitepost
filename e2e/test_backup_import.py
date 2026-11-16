@@ -8,7 +8,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import PNG, addr_of, open_chat, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -19,11 +19,16 @@ def imported(page, make_account, tmp_path):
     bob.secure_join(phone.get_qr_code())
     wait_event(phone, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
     phone_bob = phone.get_contact_by_addr(addr_of(bob)).create_chat()
-    phone_bob.send_text("hello from alice\nsecond line")
+    hello_sent = phone_bob.send_text("hello from alice\nsecond line")
     hello = wait_text(bob, "hello from alice\nsecond line")
+    bob.mark_seen_messages([bob.get_message_by_id(hello.id)])
     bob_chat = bob.get_chat_by_id(hello.chat_id)
     bob_chat.send_message(text="reply from bob", quoted_msg=hello.id)
     reply = wait_text(phone, "reply from bob")
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while hello_sent.get_snapshot().state != MessageState.OUT_MDN_RCVD:
+        assert time.monotonic() < deadline, "the phone got no read receipt from Bob"
+        time.sleep(0.2)
     png = tmp_path / "pic.png"
     png.write_bytes(PNG)
     phone_bob.send_file(str(png))
@@ -140,3 +145,21 @@ def test_deleting_for_me_syncs_between_devices(imported):
     expect(page.locator(".msg.in", has_text="delete me on the phone")).to_be_visible()
     phone.delete_messages([phone.get_message_by_id(wait_text(phone, "delete me on the phone").id)])
     expect(page.locator(".msg.in", has_text="delete me on the phone")).to_have_count(0)
+
+
+def test_receive_times_and_read_receipts_are_imported(imported):
+    page = imported.page
+    open_chat(page, "Bob")
+    own = page.locator(".msg.out", has_text="hello from alice")
+    own.hover()
+    own.get_by_role("button", name="Message info").click()
+    expect(page.locator("dialog")).to_contain_text("Read by")
+    expect(page.locator("dialog")).to_contain_text("Bob")
+    page.locator("dialog").get_by_role("button", name="Close").click()
+
+    received = imported.phone.get_message_by_id(imported.reply.id).get_snapshot().received_timestamp
+    shown = page.evaluate("ts => new Date(ts * 1000).toLocaleString('en', { dateStyle: 'medium', timeStyle: 'medium' })", received)
+    reply = page.locator(".msg.in", has_text="reply from bob")
+    reply.hover()
+    reply.get_by_role("button", name="Message info").click()
+    expect(page.locator("dialog dd").nth(1)).to_have_text(shown)

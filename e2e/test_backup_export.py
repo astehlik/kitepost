@@ -18,7 +18,9 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     png.write_bytes(PNG)
     page.locator('.composer input[type="file"]').set_input_files(str(png))
     web_send(page, "hello dora")
-    wait_text(dora.acc, "hello dora")
+    read = wait_text(dora.acc, "hello dora")
+    dora.acc.mark_seen_messages([dora.acc.get_message_by_id(read.id)])
+    expect(page.locator(".msg.out", has_text="hello dora").locator(".meta")).to_contain_text("✓✓")
     page.get_by_role("button", name="New group").click()
     page.locator("dialog .field input").fill("Export group")
     page.locator("dialog .members label", has_text="Dora").locator("input").check()
@@ -53,6 +55,9 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         assert restored.get_message_by_id(quoted.quote.message_id).get_snapshot().text == "question\nin two lines"
         pic = next(s for s in snaps if s.text == "hello dora")
         assert pic.file_name == "dot.png" and Path(pic.file).read_bytes() == PNG, pic
+        receipts = rpc.get_message_read_receipts(restored.id, pic.id)
+        dora_id = restored.get_contact_by_addr(addr_of(dora.acc)).id
+        assert [r["contactId"] for r in receipts] == [dora_id], receipts
         contact = restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot()
         assert contact.is_key_contact and contact.e2ee_avail, contact
 

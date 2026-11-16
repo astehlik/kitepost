@@ -203,7 +203,11 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
           ts, att ? viewtype(att.mime) : 10, state, att ? att.data_b64.length * 3 / 4 : m.text.length, m.text,
           params([['f', file && `$BLOBDIR/${file}`], ['m', att?.mime], ['v', att?.filename], ['c', m.info ? undefined : 1],
             ['q', m.quote]]),
-          ts, ts, m.error ?? '', m.replyTo ? `<${m.replyTo}>` : '']);
+          ts, !out && m.addedAt ? Math.floor(m.addedAt / 1000) : ts, m.error ?? '', m.replyTo ? `<${m.replyTo}>` : '']);
+        for (const [fp, readAt] of Object.entries(m.readBy ?? {})) {
+          const contact = contactIds.get(fp);
+          if (contact) run('INSERT INTO msgs_mdns (msg_id, contact_id, timestamp_sent) VALUES (?, ?, ?)', [id, contact, Math.floor(readAt / 1000)]);
+        }
         for (const [fp, reaction] of Object.entries(m.reactions)) {
           const contact = contactIds.get(fp);
           if (contact) run('INSERT OR IGNORE INTO reactions (msg_id, contact_id, reaction) VALUES (?, ?, ?)', [id, contact, reaction]);
