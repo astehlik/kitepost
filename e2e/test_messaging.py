@@ -158,6 +158,29 @@ def test_narrow_screens_show_actions_of_the_tapped_message(web, dora):
     expect(actions).to_have_css("opacity", "0")
 
 
+def delete_message(page, msg, label):
+    msg.hover()
+    msg.get_by_role("button", name="Delete").click()
+    page.locator("dialog").get_by_role("button", name=label).click()
+    expect(msg).to_have_count(0)
+
+
+def test_delete_for_me_and_for_everyone(web, dora):
+    page = web.page
+    dora.chat.send_text("only gone here")
+    incoming = page.locator(".msg.in", has_text="only gone here")
+    incoming.hover()
+    incoming.get_by_role("button", name="Delete").click()
+    expect(page.locator("dialog").get_by_role("button", name="Delete for everyone")).to_have_count(0)
+    page.locator("dialog").get_by_role("button", name="Delete for me").click()
+    expect(incoming).to_have_count(0)
+
+    web_send(page, "oops, wrong chat")
+    sent = wait_text(dora.acc, "oops, wrong chat")
+    delete_message(page, page.locator(".msg.out", has_text="oops, wrong chat"), "Delete for everyone")
+    wait_event(dora.acc, EventType.MSG_DELETED, lambda e: e.msg_id == sent.id)
+
+
 def test_quotes_both_ways(web, dora):
     page = web.page
     web_send(page, "question from the browser")

@@ -120,3 +120,19 @@ def test_read_receipts_with_the_phone_online(imported):
     snap = wait_text(bob, "sent on the phone, read by bob")
     bob.mark_seen_messages([bob.get_message_by_id(snap.id)])
     expect(page.locator(".msg.out", has_text="sent on the phone, read by bob").locator(".meta")).to_contain_text("✓✓")
+
+
+def test_deleting_for_me_syncs_between_devices(imported):
+    page, phone = imported.page, imported.phone
+    open_chat(page, "Bob")
+    reply = page.locator(".msg.in", has_text="reply from bob")
+    reply.hover()
+    reply.get_by_role("button", name="Delete").click()
+    page.locator("dialog").get_by_role("button", name="Delete for me").click()
+    expect(reply).to_have_count(0)
+    wait_event(phone, EventType.MSG_DELETED, lambda e: e.msg_id == imported.reply.id)
+
+    imported.bob_chat.send_text("delete me on the phone")
+    expect(page.locator(".msg.in", has_text="delete me on the phone")).to_be_visible()
+    phone.delete_messages([phone.get_message_by_id(wait_text(phone, "delete me on the phone").id)])
+    expect(page.locator(".msg.in", has_text="delete me on the phone")).to_have_count(0)

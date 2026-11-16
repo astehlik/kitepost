@@ -446,6 +446,16 @@ function startMain(client: DcClient, initialChat?: string) {
       chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
   }
 
+  function deleteDialog(chat: Chat, m: Message) {
+    const remove = (forAll: boolean) => () => client.deleteMessage(chat.id, m.id, forAll);
+    const forAll = m.from === 'self' && m.id.includes('@') && !chat.left;
+    dialog(t('chat.deleteMessageTitle'), h('p', {}, t(forAll ? 'chat.deleteMessageTextOwn' : 'chat.deleteMessageText')), [
+      { label: t('cancel') },
+      { label: t('chat.deleteForMe'), primary: !forAll, onClick: remove(false) },
+      ...forAll ? [{ label: t('chat.deleteForAll'), primary: true, onClick: remove(true) }] : [],
+    ]);
+  }
+
   function jumpTo(id: string) {
     const node = rendered.get(id)?.node;
     if (!node) return;
@@ -479,6 +489,8 @@ function startMain(client: DcClient, initialChat?: string) {
     replyButton?.append(icon(ICONS.reply));
     const editButton = canEdit(chat, m) ? h('button', { type: 'button', class: 'edit', title: t('chat.edit'), 'aria-label': t('chat.edit'), onclick: () => startEdit?.(m) }) : null;
     editButton?.append(icon(ICONS.edit));
+    const deleteButton = h('button', { type: 'button', class: 'delete', title: t('chat.deleteMessage'), 'aria-label': t('chat.deleteMessage'), onclick: () => deleteDialog(chat, m) });
+    deleteButton.append(icon(ICONS.trash));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       quoteView(chat, m),
@@ -488,7 +500,7 @@ function startMain(client: DcClient, initialChat?: string) {
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
-      canReact ? h('div', { class: 'actions' }, editButton, replyButton, reactButton) : null);
+      h('div', { class: 'actions' }, deleteButton, editButton, replyButton, reactButton));
   }
 
   function forgetMessages() {
@@ -775,6 +787,7 @@ const ICONS = {
   addContact: 'M15 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 8v6M22 11h-6',
   edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
   reply: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
+  trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
   react: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01',
   star: 'M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',

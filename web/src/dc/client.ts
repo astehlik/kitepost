@@ -622,6 +622,44 @@ export class DcClient extends EventTarget {
     await this.saveMessage({ ...original, text, edited: true });
   }
 
+  /**
+   * Deletes a message like core's delete_msgs_ext(): for everyone only own sent messages, otherwise
+   * here and, through a sync message, on the own other devices.
+   */
+  async deleteMessage(chatId: string, msgId: string, forAll: boolean) {
+    const chat = this.chats.get(chatId);
+    const m = this.messages.get(chatId)?.find(x => x.id === msgId);
+    if (!chat || !m) throw new Error('unknown message');
+    if (forAll) {
+      if (m.from !== 'self' || m.info || !msgId.includes('@')) throw new Error('unknown message');
+      if (chat.left) throw new Error(t('error.notMember'));
+      const self = chat.type === 'self';
+      const members = self ? [] : this.memberContacts(chat);
+      if (!self && !members.length) throw new Error(t('error.noKey'));
+      const headers: OutgoingMessage['headers'] = [
+        { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+        { name: 'Chat-Delete', value: msgId, kind: 'messageid' },
+      ];
+      if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
+      await this.sendToChat(chat, members, { text: '🚮', headers });
+    } else if (this.config.bccSelf && msgId.includes('@')) {
+      await this.sendSync({ DeleteMessages: { msgs: [msgId] } });
+    }
+    await this.deleteLocally(msgId);
+  }
+
+  /** Sends sync items to the own other devices, like core's send_sync_msg(). */
+  private async sendSync(...data: Record<string, unknown>[]) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    await this.send({
+      to: [{ name: '', addr: this.config.addr }], subject: 'Multi-device synchronization',
+      text: 'This message is used to synchronize data between your devices.',
+      sync_json: JSON.stringify({ items: data.map(d => ({ timestamp, data: d })) }),
+      headers: [{ name: 'Chat-Version', value: '1.0', kind: 'raw' }],
+      encryption: { kind: 'asymmetric', keys: [] }, attach_pubkey: false, sign: true, compress: true, from_name: '',
+    }, [], true);
+  }
+
   /** Sets or, with an empty string, removes the own reaction, like core's send_reaction(). */
   async sendReaction(chatId: string, msgId: string, reaction: string) {
     const chat = this.chats.get(chatId);

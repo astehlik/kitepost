@@ -75,6 +75,7 @@ export interface OutgoingMessage {
   subject: string;
   text: string;
   quote?: string;
+  sync_json?: string;
   content_disposition?: string;
   headers: { name: string; value: string; kind: HeaderKind }[];
   gossip: { addr: string; key: string }[];

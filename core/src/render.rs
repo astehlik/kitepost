@@ -91,6 +91,9 @@ pub struct OutgoingMessage {
     /// Renders a read receipt for these Message-IDs instead of `text`, like core's `mdn_body`.
     #[serde(default)]
     pub mdn_for: Vec<String>,
+    /// Renders a multi-device sync message with this `multi-device-sync.json`, like core's sync.rs.
+    #[serde(default)]
+    pub sync_json: Option<String>,
     pub timestamp: i64,
 }
 
@@ -223,9 +226,16 @@ pub fn render(req: OutgoingMessage) -> Result<RenderedEmail> {
         headers.push(("Autocrypt-Gossip".into(), Raw::new(header.to_string()).into()));
     }
 
-    let mut main_part = match req.mdn_for.split_first() {
-        Some((first, rest)) => mdn_body(first, rest),
-        None => MimePart::new("text/plain", body_text(&req)),
+    let mut main_part = match (req.mdn_for.split_first(), &req.sync_json) {
+        (Some((first, rest)), _) => mdn_body(first, rest),
+        (None, Some(json)) => MimePart::new(
+            "multipart/report; report-type=multi-device-sync",
+            vec![
+                MimePart::new("text/plain", body_text(&req)),
+                MimePart::new("application/json", json.clone()).attachment("multi-device-sync.json"),
+            ],
+        ),
+        (None, None) => MimePart::new("text/plain", body_text(&req)),
     };
     if let Some(disposition) = &req.content_disposition {
         main_part = main_part.header("Content-Disposition", Raw::new(disposition.clone()));

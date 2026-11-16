@@ -47,6 +47,7 @@ fn message(from: &Account, encryption: Encryption, sign: bool) -> OutgoingMessag
         wrap_multipart_mixed: false,
         attachment: None,
         mdn_for: vec![],
+        sync_json: None,
         timestamp: 1_800_000_000,
     }
 }
@@ -222,4 +223,15 @@ fn quote_as_core_sends_it() {
     let (quote, text) = crate::parse::split_top_quote("> quoted\r\n>no space\r\n\r\nanswer");
     assert_eq!(quote.as_deref(), Some("quoted\nno space"));
     assert_eq!(text, "answer");
+}
+
+#[test]
+fn sync_roundtrip() {
+    let alice = account("alice@example.org");
+    let mut msg = message(&alice, Encryption::Asymmetric { keys: vec![alice.public.clone()] }, true);
+    let json = r#"{"items":[{"timestamp":1800000000,"data":{"DeleteMessages":{"msgs":["a@b"]}}}]}"#;
+    msg.sync_json = Some(json.into());
+    let parsed = bob_parses(msg, &alice);
+    assert!(parsed.is_sync);
+    assert_eq!(parsed.sync_json.as_deref(), Some(json));
 }
