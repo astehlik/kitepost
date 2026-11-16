@@ -66,6 +66,8 @@ export interface Message {
   /** Quoted text of a reply and the Message-ID it replies to (In-Reply-To). */
   quote?: string;
   replyTo?: string;
+  /** Local time the message was first stored, the tie-breaker like core's row id. */
+  addedAt?: number;
   attachments: AttachmentData[];
   reactions: Record<string, string>;
   /** INBOX UID while `\Seen` still has to be set on the server. */
@@ -87,4 +89,9 @@ export interface BobState {
   /** `pubkey` while waiting for vc-pubkey, `confirm` after vc-request-with-auth was sent. */
   stage: 'pubkey' | 'confirm';
   created: number;
+}
+
+/** Order in a chat like core: whole seconds, because Date headers carry no more, then arrival. */
+export function byChatOrder(a: Message, b: Message): number {
+  return Math.floor(a.timestamp / 1000) - Math.floor(b.timestamp / 1000) || (a.addedAt ?? a.timestamp) - (b.addedAt ?? b.timestamp);
 }

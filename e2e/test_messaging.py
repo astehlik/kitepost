@@ -79,6 +79,27 @@ def test_reactions(web, dora):
     wait_event(dora.acc, EventType.REACTIONS_CHANGED, lambda e: "❤️" not in str(msg.get_reactions()))
 
 
+def test_messages_of_the_same_second_keep_their_order(web, dora):
+    page = web.page
+    # Core smears its timestamps ahead after the burst of SecureJoin messages.
+    time.sleep(3)
+    while time.time() % 1 > 0.05:
+        time.sleep(0.01)
+    box = page.locator(".composer textarea")
+    box.fill("first, from the browser")
+    box.press("Enter")
+    dora.chat.send_text("second, from core")
+    expect(page.locator(".msg.in", has_text="second, from core")).to_be_visible()
+    texts = page.locator(".messages .msg .text").all_inner_texts()
+    assert texts.index("first, from the browser") < texts.index("second, from core"), texts
+
+    reload_and_unlock(page)
+    page.locator(".chatlist li", has_text="Dora").first.click()
+    expect(page.locator(".msg.in", has_text="second, from core")).to_be_visible()
+    texts = page.locator(".messages .msg .text").all_inner_texts()
+    assert texts.index("first, from the browser") < texts.index("second, from core"), texts
+
+
 def test_quotes_both_ways(web, dora):
     page = web.page
     web_send(page, "question from the browser")

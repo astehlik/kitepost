@@ -1,7 +1,7 @@
 import type { SqlValue } from 'sql.js';
 import schema from './backup-schema.sql?raw';
 import { openDatabase } from './backup';
-import { SELF_CHAT, type AuthToken, type Chat, type Config, type Contact, type Message } from './types';
+import { byChatOrder, SELF_CHAT, type AuthToken, type Chat, type Config, type Contact, type Message } from './types';
 
 // Writes a backup that Delta Chat imports with "Restore from backup" (see core src/imex.rs).
 // The schema is a fresh profile of core; core migrates it to its own version on import.
@@ -155,7 +155,7 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       const single = chat.type === 'single' ? contactIds.get(chat.contact ?? '') : undefined;
       if (chat.type === 'single' && !single) continue;
       const chatId = nextId++;
-      const msgs = (messagesByChat.get(chat.id) ?? []).sort((a, b) => a.timestamp - b.timestamp);
+      const msgs = (messagesByChat.get(chat.id) ?? []).sort(byChatOrder);
       const created = Math.floor((msgs[0]?.timestamp ?? Date.now()) / 1000);
       const name = chat.type === 'self' ? 'Saved messages'
         : single ? (src.contacts.find(c => c.fingerprint === chat.contact)?.name || src.contacts.find(c => c.fingerprint === chat.contact)?.addr || '')

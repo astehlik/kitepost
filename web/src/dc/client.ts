@@ -9,7 +9,7 @@ import {
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
 } from '../wasm';
 import { buildContactInvite, buildGroupInvite, parseInvite, type Invite } from './invite';
-import { SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
+import { byChatOrder, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
 
 export function createId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -121,7 +121,7 @@ export class DcClient extends EventTarget {
       c.messages.set(value.chatId, list);
       c.seen.add(value.id);
     }
-    for (const list of c.messages.values()) list.sort((a, b) => a.timestamp - b.timestamp);
+    for (const list of c.messages.values()) list.sort(byChatOrder);
     for (const id of (await store.get<string[]>('seen')) ?? []) c.seen.add(id);
     for (const uid of (await store.get<number[]>('seenQueue')) ?? []) c.seenQueue.add(uid);
     return c;
@@ -154,8 +154,9 @@ export class DcClient extends EventTarget {
     const idx = list.findIndex(x => x.id === m.id);
     if (idx >= 0) list[idx] = m;
     else {
+      m = { ...m, addedAt: m.addedAt ?? Date.now() };
       list.push(m);
-      list.sort((a, b) => a.timestamp - b.timestamp);
+      list.sort(byChatOrder);
     }
     this.messages.set(m.chatId, list);
     this.seen.add(m.id);
@@ -563,7 +564,7 @@ export class DcClient extends EventTarget {
     if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
 
     const local: Message = {
-      id: `pending-${createId()}`, chatId, from: 'self', text, timestamp: Date.now(), state: 'pending',
+      id: `pending-${createId()}`, chatId, from: 'self', text, timestamp: Date.now(), addedAt: Date.now(), state: 'pending',
       quote, replyTo: quoted?.id, attachments: attachment ? [attachment] : [], reactions: {},
     };
     await this.saveMessage(local);
