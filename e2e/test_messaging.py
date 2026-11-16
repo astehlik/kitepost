@@ -138,6 +138,26 @@ def test_edits_both_ways(web, dora):
     expect(edited.locator(".meta")).to_contain_text("edited")
 
 
+def test_narrow_screens_show_actions_of_the_tapped_message(web, dora):
+    page = web.page
+    page.set_viewport_size({"width": 390, "height": 700})
+    dora.chat.send_text("tap me")
+    incoming = page.locator(".msg.in", has_text="tap me")
+    actions = incoming.locator(".actions")
+    expect(actions).to_have_css("opacity", "0")
+
+    incoming.locator(".text").click()
+    page.mouse.move(0, 0)  # no hover, as on a touch screen
+    expect(actions).to_have_css("opacity", "1")
+    bar, bubble = actions.bounding_box(), incoming.bounding_box()
+    assert bubble["x"] <= bar["x"] and bar["x"] + bar["width"] <= bubble["x"] + bubble["width"], (bar, bubble)
+    incoming.get_by_role("button", name="Reply").click()
+    expect(page.locator(".composer .reply")).to_contain_text("tap me")
+
+    page.locator(".messages").click(position={"x": 5, "y": 5})
+    expect(actions).to_have_css("opacity", "0")
+
+
 def test_quotes_both_ways(web, dora):
     page = web.page
     web_send(page, "question from the browser")

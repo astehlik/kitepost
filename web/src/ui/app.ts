@@ -541,6 +541,14 @@ function startMain(client: DcClient, initialChat?: string) {
       const footer = chatFooter(chat);
       const list = h('div', { class: 'messages' });
       shown = { chatId: chat.id, header, headerKey, footer, footerKey: footerKey(chat), list };
+      // Narrow and touch screens show a message's actions only while it is selected by a tap.
+      list.addEventListener('click', ev => {
+        const target = ev.target as Element;
+        if (target.closest('button, a, .quote')) return;
+        const msg = target.closest('.msg');
+        for (const el of list.querySelectorAll('.msg.selected')) if (el !== msg) el.classList.remove('selected');
+        msg?.classList.toggle('selected');
+      });
       // Scroll anchoring keeps the top in place when the growing composer shrinks the list.
       let height = 0;
       new ResizeObserver(() => {

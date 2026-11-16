@@ -196,7 +196,14 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
   .msg.out .actions { flex-direction: row-reverse; }
 }
 .msg:hover .actions, .msg .actions:focus-within { opacity: 1; }
-@media (hover: none) { .msg .actions { opacity: .7; } }
+/* Without room beside the bubble or without hover: a bar above the tapped message. */
+@media (max-width: 720px), (hover: none) {
+  .msg .actions { top: auto; bottom: calc(100% - 6px); transform: none; flex-direction: row; z-index: 1; padding: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.15); pointer-events: none; }
+  .msg.out .actions { left: auto; right: 6px; flex-direction: row-reverse; }
+  .msg.in .actions { right: auto; left: 6px; }
+  .msg .actions:not(:focus-within) { opacity: 0; }
+  .msg.selected .actions { opacity: 1; pointer-events: auto; }
+}
 .quote { margin: 0 0 .3rem; padding: .2rem .55rem; border-left: 3px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 8%, transparent); font-size: .88rem; display: flex; flex-direction: column; }
 .quote span { color: var(--muted); white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .quote strong { color: var(--accent); font-size: .8rem; }
