@@ -2,9 +2,13 @@ import base64
 import os
 import secrets
 import subprocess
+import time
+from collections import deque
 from pathlib import Path
+from queue import Empty
 
 from deltachat_rpc_client import EventType
+from deltachat_rpc_client._utils import AttrDict
 from playwright.sync_api import Page, expect
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,11 +24,20 @@ TIMEOUT = 60_000
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPj/HwADAgH/eL9GtQAAAABJRU5ErkJggg==")
 
 
-def wait_event(acc, kind, pred=lambda e: True):
+def wait_event(acc, kind, pred=lambda e: True, timeout=90):
+    """Like `acc.wait_for_event()` with a timeout that reports the account's last events."""
+    deadline = time.monotonic() + timeout
+    queue = acc._rpc.get_queue(acc.id)
+    seen = deque(maxlen=60)
     while True:
-        ev = acc.wait_for_event()
+        try:
+            ev = AttrDict(queue.get(timeout=max(0, deadline - time.monotonic())))
+        except Empty:
+            log = "\n".join(seen) or "(none)"
+            raise TimeoutError(f"no {kind} matching the condition on account {acc.id} within {timeout} s, last events:\n{log}") from None
         if ev.kind == kind and pred(ev):
             return ev
+        seen.append(f"{time.strftime('%H:%M:%S')} {ev.kind} " + " ".join(f"{k}={v}" for k, v in ev.items() if k != "kind"))
 
 
 def wait_text(acc, text):
