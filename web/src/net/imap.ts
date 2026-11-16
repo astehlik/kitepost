@@ -17,6 +17,8 @@ function quote(s: string): string {
 
 export class ImapClient {
   private tagCounter = 0;
+  /** Dovecot announces mail once, possibly in the response to an unrelated command, and not again in IDLE. */
+  private newMail = false;
   capabilities = new Set<string>();
 
   private constructor(private sock: TlsSocket) {}
@@ -57,6 +59,7 @@ export class ImapClient {
         if (!/^OK/i.test(status)) throw new Error(`IMAP ${cmd.split(' ')[0]} failed: ${status}`);
         return untagged;
       }
+      if (/^\* \d+ (EXISTS|RECENT)/i.test(resp.line)) this.newMail = true;
       onUntagged?.(resp);
       untagged.push(resp);
     }
@@ -93,6 +96,8 @@ export class ImapClient {
 
   /** Fetches full messages with UID greater than `afterUid`, in batches. */
   async fetchNewer(afterUid: number, onMessage: (m: FetchedMessage) => Promise<void>) {
+    // Cleared before the search: mail announced in its response is not in its result.
+    this.newMail = false;
     const search = await this.command(`UID SEARCH UID ${afterUid + 1}:*`);
     const uids: number[] = [];
     for (const r of search) {
@@ -127,6 +132,7 @@ export class ImapClient {
 
   /** Waits in IDLE until the mailbox changes, `signal` aborts, or the timeout elapses. */
   async idle(signal: AbortSignal, timeoutMs = 20 * 60 * 1000): Promise<void> {
+    if (this.newMail) return;
     const tag = `A${++this.tagCounter}`;
     this.sock.write(`${tag} IDLE\r\n`);
     const cont = await this.readResponse();
