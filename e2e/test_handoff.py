@@ -31,7 +31,7 @@ def save_on_phone(context, url, tmp_path):
     phone = context.new_page()
     phone.goto(url)
     with phone.expect_download() as download:
-        phone.get_by_role("link", name="Save profile file").click()
+        phone.get_by_role("button", name="Save profile file").click()
     path = tmp_path / download.value.suggested_filename
     download.value.save_as(path)
     return phone, path
@@ -46,6 +46,23 @@ def restore(rpc, backup, addr):
         restored.add_or_update_transport(transport(addr, login["password"]))
     restored.start_io()
     return restored
+
+
+def test_handoff_survives_a_link_preview(page, context, tmp_path):
+    url = create_web_profile(page)
+    # Previews fetch links without a click; some run the page's scripts.
+    preview = context.new_page()
+    preview.goto(url)
+    preview.wait_for_load_state("networkidle")
+    preview.close()
+    page_url = url.split("#", 1)[0]
+    assert context.request.get(page_url).ok
+    assert context.request.get(page_url + "/data").status == 405
+    expect(page.locator(".phone-setup .ok")).to_have_count(0)
+
+    _, backup = save_on_phone(context, url, tmp_path)
+    assert backup.stat().st_size > 0
+    expect(page.locator(".phone-setup .ok")).to_contain_text("Your phone has the profile")
 
 
 def test_handoff_at_signup(page, context, rpc, tmp_path):

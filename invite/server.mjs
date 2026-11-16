@@ -248,8 +248,8 @@ function handoffPage(lang, id) {
   <li><h2>${T('handoffSaveHeading')}</h2>
     <div id="handoff" data-src="${esc(id)}/data" data-filename="${esc(filename)}"
       data-gone="${esc(plain(T('handoffGone')))}" data-failed="${esc(T('handoffFailed'))}">
-      <p class="status">${T('handoffLoading')}</p>
-      <p><a class="button primary" hidden>${T('handoffSave')}</a></p>
+      <p class="status" hidden>${T('handoffLoading')}</p>
+      <p><button class="primary" type="button">${T('handoffSave')}</button></p>
     </div>
     <p class="small">${T('handoffSaveHint')}</p></li>
   <li><h2>${T('handoffRestoreHeading')}</h2>
@@ -371,8 +371,10 @@ const server = createServer(async (req, res) => {
     if (path === 'install') return html(200, installPage(lang));
     if (await handoff.api(req, res, path)) return;
     const h = /^h\/([A-Za-z0-9_-]{22})(\/data)?$/.exec(path);
-    if (h && req.method === 'GET') {
-      if (!h[2]) return handoff.peek(h[1]) ? html(200, handoffPage(lang, h[1])) : html(410, handoffGonePage(lang));
+    if (h && !h[2] && req.method === 'GET') return handoff.peek(h[1]) ? html(200, handoffPage(lang, h[1])) : html(410, handoffGonePage(lang));
+    // The data can be fetched only once, so link previews and prefetching must not reach it with a GET.
+    if (h && h[2]) {
+      if (req.method !== 'POST') return send(res, 405, '', 'text/plain', { Allow: 'POST' });
       const data = handoff.take(h[1]);
       return data ? send(res, 200, data, 'application/octet-stream') : send(res, 410, '', 'text/plain');
     }
