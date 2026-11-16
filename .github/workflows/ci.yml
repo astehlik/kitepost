@@ -89,7 +89,7 @@ jobs:
 
       - name: Unit tests
         working-directory: web
-        run: node --test test/
+        run: node --test 'test/*.test.ts'
 
       - name: Type-check and build
         working-directory: web
