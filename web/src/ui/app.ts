@@ -7,6 +7,7 @@ import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatTime, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
+import { checkForUpdate } from './update';
 
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
 let DEFAULT_RELAY = 'nine.testrun.org';
@@ -642,9 +643,14 @@ function startMain(client: DcClient, initialChat?: string) {
     renderStatus();
   }
 
+  let connected = false;
   client.addEventListener('change', ev => {
     const what = (ev as CustomEvent<string>).detail;
-    if (what === 'status') return renderStatus();
+    if (what === 'status') {
+      if (client.status === 'connected' && !connected) void checkForUpdate();
+      connected = client.status === 'connected';
+      return renderStatus();
+    }
     renderList();
     if (what === 'config') renderProfile();
     if (what === 'chats' || what === `messages:${current}` || what === 'config') renderPane();

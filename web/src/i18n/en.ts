@@ -20,6 +20,9 @@ export const en = {
   'unlock.wrong': 'Wrong passphrase',
   'remember.label': 'Stay unlocked in this browser',
   'remember.hint': 'Kitepost then opens without the passphrase. Anyone who can use this browser profile can read your chats, so only use this on your own device.',
+  'update.available': 'A new version of Kitepost is available.',
+  'update.hint': 'Without “Stay unlocked in this browser” you will need your passphrase again.',
+  'update.reload': 'Reload',
 
   'welcome.title': 'Welcome to Kitepost',
   'welcome.text': 'Your keys and messages are stored encrypted in this browser. Choose a passphrase to protect them; it never leaves this device.',

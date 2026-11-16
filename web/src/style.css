@@ -47,7 +47,8 @@ body {
   color: var(--text);
   font: 15px/1.4 "Color Emoji", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-#app { height: 100%; }
+body { display: flex; flex-direction: column; }
+#app { flex: 1; min-height: 0; }
 .loading { padding: 2rem; color: var(--muted); }
 
 button {
@@ -147,6 +148,9 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .composer textarea { field-sizing: content; max-height: calc(8lh + 1rem + 2px); }
 .chip { font-size: .8rem; cursor: pointer; color: var(--muted); }
 .icon { padding: .45rem .55rem; }
+
+.update-bar { display: flex; gap: .4rem .8rem; align-items: center; justify-content: center; flex-wrap: wrap; padding: .45rem 1rem; background: var(--panel); border-bottom: 1px solid var(--border); text-align: center; }
+.update-bar small { color: var(--muted); }
 
 .dialog { border: none; border-radius: 14px; padding: 1.3rem; width: min(480px, calc(100% - 2rem)); background: var(--panel); color: var(--text); }
 .dialog::backdrop { background: rgba(0,0,0,.4); }
