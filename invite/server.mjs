@@ -4,17 +4,19 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import QRCode from 'qrcode';
 import { LANGUAGES, requestLanguage, translator } from './i18n.mjs';
 import { hashPassword } from './sha512crypt.mjs';
 import { handoffs } from './handoff.mjs';
+import { setupLinks } from './setup-links.mjs';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const MAIL_DOMAIN = (process.env.MAIL_DOMAIN ?? '').toLowerCase();
 const MAILBOXES_DIR = process.env.MAILBOXES_DIR ?? '/mailboxes';
 const DATA_FILE = process.env.DATA_FILE ?? '/data/invites.json';
+const SETUP_FILE = process.env.SETUP_FILE ?? join(dirname(DATA_FILE), 'setup-links.json');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? '';
 const APP_URL = process.env.APP_URL ?? '../app/';
 const USERNAME_LENGTH = Number(process.env.USERNAME_LENGTH ?? 9);
@@ -30,6 +32,7 @@ if (!MAIL_DOMAIN) throw new Error('MAIL_DOMAIN is required');
 if (ADMIN_TOKEN && ADMIN_TOKEN.length < 24) throw new Error('ADMIN_TOKEN must be at least 24 characters');
 
 const handoff = handoffs({ mailDomain: MAIL_DOMAIN, mailboxesDir: MAILBOXES_DIR });
+const setup = setupLinks({ file: SETUP_FILE, mailboxesDir: MAILBOXES_DIR });
 
 const sha256 = s => createHash('sha256').update(s).digest('hex');
 
@@ -157,6 +160,8 @@ async function successPage(lang, account, req) {
   const login = dclogin(account.addr, account.password);
   const installQr = await qrCode(publicUrl(req, 'install'));
   const loginQr = await qrCode(login);
+  const setupUrl = publicUrl(req, await setup.create(account.addr, login));
+  const setupQr = await qrCode(setupUrl);
   const web = `${APP_URL}#login=${encodeURIComponent(login)}`;
   return page(lang, T('readyTitle'), `<h1>${T('readyTitle')}</h1>
 <p>${T('readyAddress', { addr: esc(account.addr) })}</p>
@@ -176,7 +181,41 @@ async function successPage(lang, account, req) {
       <p><a class="button" href="${esc(login)}">${T('readyAppButton')}</a></p>
       <p class="warn">${T('readyAppOnce')}</p></li>
   </ol>
-  <p class="small">${T('readyPhoneOnlyLater')}</p></section>`);
+  <p class="small">${T('readyPhoneOnlyLater')}</p></section>
+<section class="way save"><h2>${T('saveHeading')}</h2>
+  <p>${T('saveText')}</p>
+  <img class="qr" src="${setupQr}" alt="${T('saveQrAlt')}" width="320" height="320">
+  <p><input type="text" readonly value="${esc(setupUrl)}" aria-label="${T('saveLinkLabel')}"></p>
+  <p class="buttons"><button type="button" data-copy data-copied="${T('saveCopied')}">${T('saveCopy')}</button>
+    <button type="button" data-print>${T('savePrint')}</button></p></section>`, { script: 'result.js' });
+}
+
+// Relative links of pages under s/ lead one level up; an absolute APP_URL stays as it is.
+const appUrlFrom = root => (/^[a-z][a-z0-9+.-]*:/i.test(APP_URL) ? APP_URL : root + APP_URL);
+
+function setupPage(lang, link) {
+  const T = translator(lang);
+  if (!link.sealed) {
+    return page(lang, T('setupUsedHeading'), `<h1>${T('setupUsedHeading')}</h1>
+<p>${T('setupUsedText', { addr: esc(link.addr) })}</p>`, { root: '../' });
+  }
+  return page(lang, T('setupTitle'), `<h1>${T('setupTitle')}</h1>
+<p>${T('readyAddress', { addr: esc(link.addr) })}</p>
+<div id="setup" data-sealed="${esc(link.sealed)}" data-app="${esc(appUrlFrom('../'))}" data-failed="${esc(T('setupFailed'))}">
+  <p class="status">${T('setupLoading')}</p>
+  <div class="ready" hidden>
+    <p>${T('setupText')}</p>
+    <p class="buttons"><a class="button primary" data-web>${T('readyWebButton')}</a>
+      <a class="button" data-app>${T('readyAppButton')}</a></p>
+    <p class="warn">${T('readyAppOnce')}</p>
+  </div>
+</div>`, { script: 'setup.js', root: '../' });
+}
+
+function setupGonePage(lang) {
+  const T = translator(lang);
+  return page(lang, T('setupGoneHeading'), `<h1>${T('setupGoneHeading')}</h1>
+<p>${T('setupGoneText')}</p>`, { root: '../' });
 }
 
 function installPage(lang) {
@@ -302,6 +341,8 @@ const STATIC = {
   'admin.js': ['text/javascript; charset=utf-8', new URL('./public/admin.js', import.meta.url)],
   'handoff.js': ['text/javascript; charset=utf-8', new URL('./public/handoff.js', import.meta.url)],
   'submit.js': ['text/javascript; charset=utf-8', new URL('./public/submit.js', import.meta.url)],
+  'result.js': ['text/javascript; charset=utf-8', new URL('./public/result.js', import.meta.url)],
+  'setup.js': ['text/javascript; charset=utf-8', new URL('./public/setup.js', import.meta.url)],
 };
 
 // Redeeming is serialised so two clicks on one link cannot both create an account.
@@ -335,6 +376,11 @@ const server = createServer(async (req, res) => {
       const data = handoff.take(h[1]);
       return data ? send(res, 200, data, 'application/octet-stream') : send(res, 410, '', 'text/plain');
     }
+    const s = /^s\/([A-Za-z0-9_-]{22})$/.exec(path);
+    if (s && req.method === 'GET') {
+      const link = await setup.get(s[1]);
+      return link ? html(200, setupPage(lang, link)) : html(410, setupGonePage(lang));
+    }
 
     if (!/^[A-Za-z0-9_-]{24}$/.test(path)) return html(404, invalidPage(lang));
     const hash = sha256(path);
@@ -363,5 +409,6 @@ const server = createServer(async (req, res) => {
 });
 
 await load();
+await setup.load();
 await mkdir(MAILBOXES_DIR, { recursive: true });
 server.listen(PORT, HOST, () => console.log(`invite service for ${MAIL_DOMAIN} on http://${HOST}:${PORT}${ADMIN_TOKEN ? '' : ' (admin disabled: no ADMIN_TOKEN)'}`));

@@ -33,6 +33,12 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .buttons { display: flex; flex-wrap: wrap; gap: .6rem; }
 .way { margin-top: 1.2rem; padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: 12px; }
 .way > h2 { margin-bottom: .6rem; }
+.save input { font-family: ui-monospace, monospace; font-size: .85rem; }
+@media print {
+  body { padding: 0; }
+  main > :not(h1, .save), .save .buttons { display: none; }
+  .save { border: none; }
+}
 h3 { font-size: 1rem; margin: 0 0 .3rem; }
 .qr { display: block; width: min(260px, 100%); height: auto; background: #fff; border-radius: 8px; }
 input, select { font: inherit; padding: .45rem .6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 100%; }

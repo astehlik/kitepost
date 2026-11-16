@@ -94,10 +94,10 @@ def test_result_page_offers_the_phone_only_path(admin, context):
     expect(friend.get_by_role("heading", name="Use Kitepost in the browser")).to_be_visible()
     expect(friend.get_by_role("heading", name="Only use Delta Chat on the phone")).to_be_visible()
     expect(friend.locator("details")).to_have_count(0)
-    expect(friend.locator(".way").last).to_contain_text("I already use Delta Chat")
+    expect(friend.locator(".way", has_text="Only use Delta Chat on the phone")).to_contain_text("I already use Delta Chat")
     expect(friend.locator("ol.steps > li").last.locator(".warn")).to_contain_text("For one device only")
     expect(friend.locator("ol.steps > li h3")).to_have_text(["Install Delta Chat on your phone", "Log in on your phone"])
-    expect(friend.locator("img.qr")).to_have_count(2)
+    expect(friend.locator(".way", has_text="Only use Delta Chat on the phone").locator("img.qr")).to_have_count(2)
 
     friend.get_by_role("link", name="Download page").click()
     assert friend.url == INVITE + "install"
@@ -212,3 +212,32 @@ def test_second_key_on_the_same_address_is_reported(admin, context, rpc):
     finally:
         other.stop_io()
         other.remove()
+
+
+def test_setup_link_works_until_the_first_login(admin, context, rpc):
+    friend = context.new_page()
+    addr, dclogin = redeem(friend, create_invite(admin))
+    web_link = friend.get_by_role("link", name="Continue in the browser").get_attribute("href")
+    link = friend.locator(".save input").input_value()
+    assert link.startswith(INVITE + "s/") and "#" in link, link
+
+    later = context.new_page()
+    later.goto(link)
+    expect(later.get_by_role("link", name="Open in Delta Chat")).to_have_attribute("href", dclogin)
+    expect(later.get_by_role("link", name="Continue in the browser")).to_have_attribute("href", web_link)
+
+    password = dclogin.split("?p=", 1)[1].split("&", 1)[0]
+    acc = DeltaChat(rpc).add_account()
+    try:
+        acc.add_or_update_transport(transport(addr, password))
+        acc.start_io()
+        again = context.new_page()
+        again.goto(link)
+        expect(again.locator("h1")).to_have_text("This address is already set up")
+        expect(again.get_by_role("link", name="Open in Delta Chat")).to_have_count(0)
+        expect(again.locator("main")).to_contain_text("Set up phone")
+    finally:
+        acc.stop_io()
+        acc.remove()
+
+    assert context.new_page().goto(INVITE + "s/" + "A" * 22).status == 410
