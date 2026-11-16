@@ -9,7 +9,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import PNG, addr_of, open_chat, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, open_chat, reload_and_unlock, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -30,7 +30,7 @@ def test_text_both_ways(web, dora):
     assert snap.show_padlock, "message not shown as encrypted in core"
 
 
-def wait_state(acc, msg_id, state, seconds=60):
+def wait_state(acc, msg_id, state, seconds=EVENT_TIMEOUT):
     deadline = time.time() + seconds
     while acc.get_message_by_id(msg_id).get_snapshot().state != state:
         assert time.time() < deadline, f"message {msg_id} did not reach state {state}"
@@ -312,10 +312,7 @@ def test_rename_updates_header(web):
 
 def test_storage_unlock_and_stay_unlocked(web):
     page = web.page
-    page.reload()
-    page.locator('input[type="password"]').fill("correct horse battery")
-    page.get_by_label("Stay unlocked in this browser").check()
-    page.get_by_role("button", name="Unlock").click()
+    reload_and_unlock(page, stay_unlocked=True)
     expect(page.locator(".chatlist li", has_text="Phone")).to_be_visible()
 
     page.reload()

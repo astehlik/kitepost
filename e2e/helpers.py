@@ -20,11 +20,13 @@ URL = f"http://127.0.0.1:{PORT}/"
 INVITE = "http://127.0.0.1:8084/"
 ADMIN_TOKEN = "test-admin-token-0123456789abcdef"
 PASSPHRASE = "correct horse battery"
-TIMEOUT = 60_000
+# Locally the slowest test takes about 5 s; these leave room for slower CI runners.
+TIMEOUT = 15_000
+EVENT_TIMEOUT = 30
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPj/HwADAgH/eL9GtQAAAABJRU5ErkJggg==")
 
 
-def wait_event(acc, kind, pred=lambda e: True, timeout=90):
+def wait_event(acc, kind, pred=lambda e: True, timeout=EVENT_TIMEOUT):
     """Like `acc.wait_for_event()` with a timeout that reports the account's last events."""
     deadline = time.monotonic() + timeout
     queue = acc._rpc.get_queue(acc.id)
@@ -40,22 +42,20 @@ def wait_event(acc, kind, pred=lambda e: True, timeout=90):
         seen.append(f"{time.strftime('%H:%M:%S')} {ev.kind} " + " ".join(f"{k}={v}" for k, v in ev.items() if k != "kind"))
 
 
-def wait_text(acc, text):
+def wait_text(acc, text, timeout=EVENT_TIMEOUT):
     """Waits for an incoming message with `text`, skipping others."""
-    while True:
-        snap = acc.wait_for_incoming_msg().get_snapshot()
-        if snap.text == text:
-            return snap
+    snap = lambda e: acc.get_message_by_id(e.msg_id).get_snapshot()
+    return snap(wait_event(acc, EventType.INCOMING_MSG, lambda e: snap(e).text == text, timeout))
 
 
-def wait_own_msg(acc, text):
+def wait_own_msg(acc, text, timeout=EVENT_TIMEOUT):
     """Waits until a message with `text` sent from another device shows up as outgoing."""
-    while True:
-        ev = acc.wait_for_event()
-        if ev.kind == EventType.MSGS_CHANGED and ev.msg_id:
-            snap = acc.get_message_by_id(ev.msg_id).get_snapshot()
-            if snap.text == text and snap.from_id == 1:
-                return snap
+    def own(e):
+        if not e.msg_id:
+            return False
+        s = acc.get_message_by_id(e.msg_id).get_snapshot()
+        return s.text == text and s.from_id == 1
+    return acc.get_message_by_id(wait_event(acc, EventType.MSGS_CHANGED, own, timeout).msg_id).get_snapshot()
 
 
 def addr_of(acc):
@@ -92,6 +92,16 @@ def set_passphrase(page: Page, url=URL, continue_label="Continue"):
     page.locator('input[type="password"]').nth(0).fill(PASSPHRASE)
     page.locator('input[type="password"]').nth(1).fill(PASSPHRASE)
     page.get_by_role("button", name=continue_label).click()
+
+
+def reload_and_unlock(page: Page, stay_unlocked=False):
+    """Reloads the web client and unlocks the profile with the test passphrase."""
+    page.reload()
+    page.locator('input[type="password"]').fill(PASSPHRASE)
+    if stay_unlocked:
+        page.get_by_label("Stay unlocked in this browser").check()
+    page.get_by_role("button", name="Unlock").click()
+    expect(page.locator(".chatlist")).to_be_visible()
 
 
 def create_profile(page: Page, phone, name="Webby"):
