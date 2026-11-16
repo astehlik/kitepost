@@ -103,6 +103,7 @@ export const de: Record<keyof typeof en, string> = {
   'chat.archive': 'Archivieren',
   'chat.unarchive': 'Aus dem Archiv holen',
   'mark.pinnedChat': 'Angehefteter Chat',
+  'chat.lastSeen': 'Zuletzt gesehen {when}',
   'list.empty': 'Noch keine Chats. Teile deinen Einladungslink oder füge einen Kontakt hinzu.',
   'pane.select': 'Wähle einen Chat.',
   'pane.e2e': 'Alles ist Ende-zu-Ende-verschlüsselt und wird nur in diesem Browser entschlüsselt.',

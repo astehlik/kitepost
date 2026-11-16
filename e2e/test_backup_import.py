@@ -236,6 +236,11 @@ def test_pins_are_imported(imported):
     expect(reply).to_have_class(re.compile("flash"))
 
 
+def test_last_seen_is_imported(imported):
+    page = imported.page
+    expect(page.locator(".chatlist li[data-chat]", has_text="Bob").first.locator(".avatar.seen")).to_be_visible()
+
+
 def test_saved_copies_are_imported(imported):
     page = imported.page
     open_chat(page, "Bob")

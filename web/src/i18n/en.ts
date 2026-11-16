@@ -101,6 +101,7 @@ export const en = {
   'chat.archive': 'Archive',
   'chat.unarchive': 'Unarchive',
   'mark.pinnedChat': 'Pinned chat',
+  'chat.lastSeen': 'Last seen {when}',
   'list.empty': 'No chats yet. Share your invite link or add a contact.',
   'pane.select': 'Select a chat.',
   'pane.e2e': 'Everything is end-to-end encrypted and decrypted only in this browser.',

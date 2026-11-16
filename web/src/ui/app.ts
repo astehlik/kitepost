@@ -5,7 +5,7 @@ import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
-import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatDateTime, formatTime, h, trustedSvg, whileBusy } from './dom';
+import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatAgo, formatDateTime, formatTime, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { sendErrorKind } from './send-error';
 import { checkForUpdate } from './update';
@@ -800,8 +800,8 @@ function startMain(client: DcClient, initialChat?: string) {
       ? t('chat.savedSubtitle')
       : chat.type === 'group'
       ? t('chat.members', { n: chat.members.length + 1 })
-      : contact ? contact.addr : '';
-    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr]);
+      : contact ? [contact.lastSeen && t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }), contact.addr].filter(Boolean).join(' · ') : '';
+    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact && client.freshness(contact)]);
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
@@ -1064,8 +1064,11 @@ function startMain(client: DcClient, initialChat?: string) {
     }
     renderList();
     if (what === 'config') renderProfile();
-    if (what === 'chats' || what === `messages:${current}` || what === 'config') renderPane();
+    if (what === 'chats' || what === 'contacts' || what === `messages:${current}` || what === 'config') renderPane();
   }, { signal });
+  // "Last seen" and the green dot age without any event.
+  const tick = setInterval(() => { renderList(); renderPane(); }, 60_000);
+  signal.addEventListener('abort', () => clearInterval(tick));
   client.addEventListener('incoming', ev => {
     const { chatId } = (ev as CustomEvent<{ chatId: string }>).detail;
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
@@ -1171,8 +1174,10 @@ function avatar(name: string, key: string, content?: Node) {
 
 function chatAvatar(client: DcClient, chat: Chat) {
   if (chat.type === 'self') return avatar('', 'self', icon(ICONS.star));
-  const key = chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.addr ?? chat.id : chat.grpid ?? chat.id;
-  return avatar(client.chatTitle(chat), key);
+  const contact = chat.type === 'single' ? client.contacts.get(chat.contact ?? '') : undefined;
+  const el = avatar(client.chatTitle(chat), contact?.addr ?? chat.grpid ?? chat.id);
+  if (contact && client.freshness(contact) === 'recent') el.classList.add('seen');
+  return el;
 }
 
 // ------------------------------------------------------------------ dialogs

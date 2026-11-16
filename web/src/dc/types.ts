@@ -33,6 +33,8 @@ export interface Contact {
   /** Connected via SecureJoin in Kitepost; current core no longer records this, so imports lack it. */
   verified: boolean;
   blocked: boolean;
+  /** Date of the newest message from the contact, like core's last_seen. */
+  lastSeen?: number;
 }
 
 export type ChatType = 'single' | 'group' | 'self';

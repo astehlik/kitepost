@@ -117,6 +117,8 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 1.05rem; user-select: none; }
 .avatar > span { line-height: 1; text-box: trim-both cap alphabetic; }
 .avatar svg { width: 20px; height: 20px; fill: currentColor; }
+.avatar.seen { position: relative; }
+.avatar.seen::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border: 2px solid var(--panel); border-radius: 50%; background: #3ba55c; }
 .chatlist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
 .chatlist li { display: flex; align-items: center; gap: .7rem; padding: .6rem .9rem; border-bottom: 1px solid var(--border); cursor: pointer; }
 .chatlist .item { flex: 1; min-width: 0; }

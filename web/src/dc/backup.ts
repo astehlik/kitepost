@@ -196,7 +196,7 @@ export async function readBackup(
     progress(t('backup.contacts'));
     const fpById = new Map<number, string>([[CONTACT_SELF, 'self']]);
     const contacts: Contact[] = [];
-    const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.blocked, c.verifier, k.public_key
+    const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.blocked, c.verifier, c.last_seen, k.public_key
       FROM contacts c JOIN public_keys k ON k.fingerprint = c.fingerprint
       WHERE c.id > 9 AND c.fingerprint != ''`);
     for (const r of contactRows) {
@@ -208,6 +208,7 @@ export async function readBackup(
           fingerprint: info.fingerprint, addr: str(r.addr).toLowerCase(), name: str(r.name) || str(r.authname),
           publicKey: info.key, relays: info.relays?.length ? info.relays : [str(r.addr).toLowerCase()],
           verified: num(r.verifier) !== 0, blocked: num(r.blocked) === BLOCKED_YES,
+          lastSeen: num(r.last_seen) * 1000 || undefined,
         });
       } catch (e) {
         console.warn('skipping contact with unusable key', r.addr, e);

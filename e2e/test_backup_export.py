@@ -60,6 +60,7 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         chats = {c.get_basic_snapshot().name: c for c in restored.get_chatlist()}
         assert {"Dora", "Export group", "Phone", "Saved messages"} <= set(chats), list(chats)
         assert chats["Export group"].get_basic_snapshot().pinned
+        assert restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot().last_seen > 0
         snaps = [m.get_snapshot() for m in chats["Dora"].get_messages()]
         assert {"hello web", "hello dora"} <= {s.text for s in snaps}
         quoted = next(s for s in snaps if s.text == "hello web")

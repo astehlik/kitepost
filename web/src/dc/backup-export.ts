@@ -134,9 +134,9 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       if (!c.publicKey) continue;
       const id = nextId++;
       contactIds.set(c.fingerprint, id);
-      run(`INSERT INTO contacts (id, name, addr, origin, blocked, authname, fingerprint, verifier)
-        VALUES (?, '', ?, ?, ?, ?, ?, ?)`,
-      [id, c.addr, ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0]);
+      run(`INSERT INTO contacts (id, name, addr, origin, blocked, authname, fingerprint, verifier, last_seen)
+        VALUES (?, '', ?, ?, ?, ?, ?, ?, ?)`,
+      [id, c.addr, ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0, Math.floor((c.lastSeen ?? 0) / 1000)]);
       run('INSERT OR IGNORE INTO public_keys (fingerprint, public_key) VALUES (?, ?)', [c.fingerprint, fromBase64(c.publicKey)]);
     }
 

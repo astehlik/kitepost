@@ -662,6 +662,23 @@ def test_archive_and_pin_chats(web, dora):
     expect(entries).to_have_text(["Dora", "Phone"])
 
 
+def test_last_seen(web, dora):
+    page = web.page
+    entry = page.locator(".chatlist li[data-chat]", has_text="Dora")
+    dora.chat.send_text("still here")
+    expect(entry.locator(".avatar.seen")).to_be_visible()
+    expect(page.locator(".chathead small")).to_contain_text("Last seen 1 minute ago")
+    expect(page.locator(".chathead .avatar.seen")).to_be_visible()
+
+    page.clock.install()
+    reload_and_unlock(page)
+    open_chat(page, "Dora")
+    expect(entry.locator(".avatar.seen")).to_be_visible()
+    page.clock.fast_forward("11:00")
+    expect(entry.locator(".avatar.seen")).to_have_count(0)
+    expect(page.locator(".chathead small")).to_contain_text("Last seen 11 minutes ago")
+
+
 def test_rename_updates_header(web):
     web.page.get_by_role("button", name="Edit profile").click()
     web.page.locator("dialog .field input").first.fill("Webby Renamed")

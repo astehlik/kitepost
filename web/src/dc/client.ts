@@ -270,6 +270,20 @@ export class DcClient extends EventTarget {
     return chat.type === 'single' && chat.contact ? this.contactName(chat.contact) : chat.name;
   }
 
+  private async updateLastSeen(c: Contact, ts: number) {
+    if (ts <= (c.lastSeen ?? 0)) return;
+    await this.saveContact({ ...this.contacts.get(c.fingerprint) ?? c, lastSeen: ts });
+    this.changed('contacts');
+  }
+
+  /** Like core's Contact::get_freshness(). */
+  freshness(c: Contact): 'recent' | 'normal' | 'old' {
+    if (!c.publicKey || c.blocked) return 'normal';
+    const age = Date.now() - (c.lastSeen ?? 0);
+    if (!c.lastSeen || age > 60 * 86_400_000) return 'old';
+    return age <= 600_000 ? 'recent' : 'normal';
+  }
+
   /** Pinned chats first, like core's chatlist. */
   sortedChats(): Chat[] {
     const pinned = (c: Chat) => c.visibility === 'pinned' ? 1 : 0;
@@ -866,6 +880,10 @@ export class DcClient extends EventTarget {
 
     const sender = await this.senderContact(p);
     if (!sender || sender.blocked) return false;
+    // Like core, a read receipt that names no message does not count as a sign of life.
+    if (p.mdn_for.length || !/report-type="?disposition-notification/i.test(p.headers['content-type'] ?? '')) {
+      await this.updateLastSeen(sender, this.timestamp(p));
+    }
 
     for (const g of p.gossip) {
       if (g.fingerprint !== this.config.fingerprint && g.can_encrypt && !this.contacts.get(g.fingerprint)?.publicKey) {

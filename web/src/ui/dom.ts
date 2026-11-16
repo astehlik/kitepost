@@ -89,6 +89,17 @@ export function formatDateTime(ts: number): string {
   return new Date(ts).toLocaleString(getLanguage(), { dateStyle: 'medium', timeStyle: 'medium' });
 }
 
+/** "5 minutes ago", "3 days ago" … in the UI language. */
+export function formatAgo(ts: number): string {
+  const rtf = new Intl.RelativeTimeFormat(getLanguage(), { numeric: 'auto' });
+  const minutes = Math.max(1, Math.round((Date.now() - ts) / 60_000));
+  if (minutes < 60) return rtf.format(-minutes, 'minute');
+  if (minutes < 24 * 60) return rtf.format(-Math.round(minutes / 60), 'hour');
+  const days = Math.round(minutes / 1440);
+  if (days < 30) return rtf.format(-days, 'day');
+  return days < 365 ? rtf.format(-Math.round(days / 30), 'month') : rtf.format(-Math.round(days / 365), 'year');
+}
+
 export function formatTime(ts: number): string {
   const d = new Date(ts);
   const now = new Date();
