@@ -160,21 +160,22 @@ async function successPage(lang, account, req) {
   const web = `${APP_URL}#login=${encodeURIComponent(login)}`;
   return page(lang, T('readyTitle'), `<h1>${T('readyTitle')}</h1>
 <p>${T('readyAddress', { addr: esc(account.addr) })}</p>
-<p>${T('readyWebText')}</p>
-<p><a class="button primary" href="${esc(web)}">${T('readyWebButton')}</a></p>
 <p class="warn">${T('readyWarn')}</p>
-<details class="alternative"><summary>${T('readyPhoneOnlyHeading')}</summary>
+<section class="way"><h2>${T('readyWebHeading')}</h2>
+  <p>${T('readyWebText')}</p>
+  <p><a class="button primary" href="${esc(web)}">${T('readyWebButton')}</a></p></section>
+<section class="way"><h2>${T('readyPhoneOnlyHeading')}</h2>
   <ol class="steps">
-    <li><h2>${T('readyInstallHeading')}</h2>
+    <li><h3>${T('readyInstallHeading')}</h3>
       <p>${T('readyInstallText')}</p>
       <img class="qr" src="${installQr}" alt="${T('readyInstallQrAlt')}" width="320" height="320">
       <p><a class="button" href="install">${T('readyInstallButton')}</a></p></li>
-    <li><h2>${T('readyAppHeading')}</h2>
+    <li><h3>${T('readyAppHeading')}</h3>
       <p>${T('readyAppText')}</p>
       <img class="qr" src="${loginQr}" alt="${T('readyQrAlt')}" width="320" height="320">
       <p><a class="button" href="${esc(login)}">${T('readyAppButton')}</a></p></li>
   </ol>
-  <p class="small">${T('readyPhoneOnlyLater')}</p></details>`);
+  <p class="small">${T('readyPhoneOnlyLater')}</p></section>`);
 }
 
 function installPage(lang) {

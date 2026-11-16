@@ -91,8 +91,11 @@ def test_invite_works_once(admin, context):
 def test_result_page_offers_the_phone_only_path(admin, context):
     friend = context.new_page()
     redeem(friend, create_invite(admin))
-    friend.get_by_text("Only use Delta Chat on the phone").click()
-    expect(friend.locator("ol.steps > li h2")).to_have_text(["Install Delta Chat on your phone", "Log in on your phone"])
+    expect(friend.get_by_role("heading", name="Use Kitepost in the browser")).to_be_visible()
+    expect(friend.get_by_role("heading", name="Only use Delta Chat on the phone")).to_be_visible()
+    expect(friend.locator("details")).to_have_count(0)
+    expect(friend.locator(".way").last).to_contain_text("I already use Delta Chat")
+    expect(friend.locator("ol.steps > li h3")).to_have_text(["Install Delta Chat on your phone", "Log in on your phone"])
     expect(friend.locator("img.qr")).to_have_count(2)
 
     friend.get_by_role("link", name="Download page").click()
@@ -114,6 +117,7 @@ def test_web_client_logs_in_from_invite(admin, context):
     web.route("**/config.json", lambda route: route.fulfill(json={"handoffUrl": INVITE}))
     set_passphrase(web, web_link)
     expect(web.locator(".field", has_text="E-mail address").locator("input")).to_have_value(addr)
+    expect(web.get_by_role("radio")).to_have_count(0)
     web.get_by_role("button", name="Create profile").click()
     expect(web.get_by_role("heading", name="Use it on your phone too")).to_be_visible()
     expect(web.locator(".phone-setup svg")).to_be_visible()

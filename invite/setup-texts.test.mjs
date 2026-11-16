@@ -27,10 +27,11 @@ for (const [lang, web] of Object.entries({ en, de })) {
   const setUpPhone = path(label('nav.editProfile'), label('profile.phone'));
   const exportFromWeb = path(label('nav.editProfile'), label('profile.export'));
   const importFile = label('import.file');
+  const deltaChatWay = path(label('way.deltaChat'), importFile);
 
   const sources = {
     'web client': [all(web), [exportBackup, restoreBackup]],
-    'invite page': [all(LANGUAGES[lang]), [exportBackup, restoreBackup, setUpPhone, importFile]],
+    'invite page': [all(LANGUAGES[lang]), [exportBackup, restoreBackup, setUpPhone, deltaChatWay]],
     site: [plain(readFileSync(new URL(`../site/index.${lang}.html`, import.meta.url), 'utf8')),
       [exportBackup, restoreBackup, setUpPhone, exportFromWeb, importFile]],
   };

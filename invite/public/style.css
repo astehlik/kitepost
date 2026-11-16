@@ -31,8 +31,9 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .steps { padding-left: 1.2rem; }
 .steps li { margin-bottom: 1.8rem; }
 .buttons { display: flex; flex-wrap: wrap; gap: .6rem; }
-details.alternative { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
-details.alternative summary { cursor: pointer; font-weight: 600; }
+.way { margin-top: 1.2rem; padding: 1rem 1.2rem; border: 1px solid var(--line); border-radius: 12px; }
+.way > h2 { margin-bottom: .6rem; }
+h3 { font-size: 1rem; margin: 0 0 .3rem; }
 .qr { display: block; width: min(260px, 100%); height: auto; background: #fff; border-radius: 8px; }
 input, select { font: inherit; padding: .45rem .6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: 100%; }
 form.signin { display: flex; gap: .6rem; align-items: center; }
