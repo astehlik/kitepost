@@ -8,7 +8,7 @@ docker compose -f e2e/relay/compose.yaml up -d --build --wait
 (cd core && cargo test --quiet --release --workspace)
 (cd invite && node --test)
 ./build-wasm.sh
-(cd web && pnpm run build)
+(cd web && node --test test/ && pnpm run build)
 # Arguments go to pytest, e.g. -k reactions. Tests that change the whole relay run alone afterwards;
 # pytest exits with 5 when the arguments select none of them.
 work/venv/bin/pytest e2e -n "${E2E_WORKERS:-4}" "$@"

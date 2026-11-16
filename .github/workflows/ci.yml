@@ -87,6 +87,10 @@ jobs:
         working-directory: web
         run: pnpm install --frozen-lockfile
 
+      - name: Unit tests
+        working-directory: web
+        run: node --test test/
+
       - name: Type-check and build
         working-directory: web
         run: pnpm run build

@@ -7,6 +7,7 @@ import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatDateTime, formatTime, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
+import { sendErrorKind } from './send-error';
 import { checkForUpdate } from './update';
 
 // Relative so the client works under any subdirectory, e.g. /app/ -> /bridge.
@@ -132,7 +133,10 @@ function screen(title: string, rerender: () => void, ...content: Node[]) {
 }
 
 function errorDialog(e: unknown) {
-  dialog(t('error.title'), h('p', {}, e instanceof Error ? e.message : String(e)), [{ label: t('ok'), primary: true }]);
+  const raw = e instanceof Error ? e.message : String(e);
+  const kind = sendErrorKind(raw);
+  dialog(t('error.title'), h('div', {}, h('p', {}, kind ? t(`sendError.${kind}`) : raw), kind ? h('p', { class: 'error-detail' }, raw) : null),
+    [{ label: t('ok'), primary: true }]);
 }
 
 /** A click handler that keeps its button busy while `job` runs and reports failures. */
@@ -557,7 +561,7 @@ function startMain(client: DcClient, initialChat?: string) {
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, m.text) : null,
-      h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${m.error}` : ''),
+      h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,

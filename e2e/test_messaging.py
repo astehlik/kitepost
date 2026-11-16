@@ -289,6 +289,28 @@ def test_message_info(web, dora):
     expect(info).not_to_contain_text("Read by")
 
 
+def test_send_errors_are_explained(web, dora):
+    page = web.page
+    web_send(page, "edit me offline")
+    page.route_web_socket(re.compile(r"port=465"), lambda ws: ws.close())
+    box = page.locator(".composer textarea")
+    box.fill("no way out")
+    box.press("Enter")
+    own = page.locator(".msg.out", has_text="no way out")
+    expect(own.locator(".meta .state")).to_have_attribute("data-state", "failed")
+    expect(own.locator(".meta")).to_have_text(re.compile(r"No connection to the server$"))
+    info = open_info(page, own)
+    expect(info.locator("dd", has_text="connection closed")).to_be_visible()
+    info.get_by_role("button", name="Close").click()
+
+    message_action(page, page.locator(".msg.out", has_text="edit me offline"), "Edit")
+    box.fill("edited offline")
+    box.press("Enter")
+    error = page.locator("dialog", has_text="That did not work")
+    expect(error).to_contain_text("No connection to the server")
+    expect(error.locator(".error-detail")).to_have_text("connection closed")
+
+
 def test_quotes_both_ways(web, dora):
     page = web.page
     web_send(page, "question from the browser")
