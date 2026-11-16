@@ -242,7 +242,7 @@ function renderAccountSetup(store: Store) {
   },
   field(t('setup.displayName'), name),
   relayField,
-  h('label', { class: 'check' }, existing, t('setup.existing')),
+  h('div', {}, h('label', { class: 'check' }, existing, t('setup.existing')), h('small', { class: 'hint' }, t('setup.existingHint'))),
   existingFields,
   h('details', {}, h('summary', {}, t('setup.advanced')), field(t('setup.bridge'), bridge, t('setup.bridgeHint'))),
   err,
@@ -274,20 +274,36 @@ function renderAccountSetup(store: Store) {
     }
   };
   const importButton = h('button', { type: 'button', class: 'primary', onclick: () => backup.click() }, t('import.file'));
-  const importBox = h('div', { class: 'import' },
-    h('h2', {}, t('import.title')),
-    h('p', {}, t('import.text')),
-    importStatus, importErr,
-    h('div', { class: 'row' },
-      importButton),
-    h('small', {}, t('import.note')),
-    backup);
+  const importBox = h('div', { class: 'import' }, importStatus, importErr, h('div', { class: 'row' }, importButton), backup);
   backup.addEventListener('change', () => {
     const file = backup.files?.[0];
     backup.value = '';
     if (file) void busy(() => importFrom(file));
   });
-  screen(t('setup.title'), () => renderAccountSetup(store), form, importBox);
+
+  // The two ways to an existing profile only differ in where the backup comes from.
+  const restoreWay = (text: string, exportStep: string) => {
+    const steps = h('ol', { class: 'steps' },
+      h('li', {}, exportStep), h('li', {}, t('way.transfer')), h('li', {}, t('way.importHere')));
+    return h('div', { class: 'way', hidden: true }, h('p', {}, text), steps, h('p', { class: 'hint' }, t('way.oneKey')));
+  };
+  const ways = {
+    new: h('div', { class: 'way' }, form),
+    deltaChat: restoreWay(t('way.deltaChatText'), t('way.deltaChatExport')),
+    otherBrowser: restoreWay(t('way.otherBrowserText'), t('way.otherBrowserExport')),
+  };
+  ways.deltaChat.append(importBox);
+  const choice = h('fieldset', { class: 'ways' }, h('legend', {}, t('way.legend')),
+    ...(['new', 'deltaChat', 'otherBrowser'] as const).map(key => h('label', {},
+      h('input', { type: 'radio', name: 'way', value: key, checked: key === 'new', onchange: () => show(key) }),
+      t(`way.${key}`))));
+  const show = (key: keyof typeof ways) => {
+    for (const [k, el] of Object.entries(ways)) el.hidden = k !== key;
+    if (key !== 'new') ways[key].append(importBox);
+  };
+  // An invite link brings a new address, so there is nothing to choose.
+  const fromInvite = existing.checked;
+  screen(t('setup.title'), () => renderAccountSetup(store), ...(fromInvite ? [form] : [choice, ...Object.values(ways)]));
   name.focus();
 }
 
