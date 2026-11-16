@@ -5,6 +5,7 @@ default, the local relay: docker compose -f e2e/relay/compose.yaml up -d --build
 """
 
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -66,11 +67,16 @@ def bridge():
         **os.environ, "PORT": str(PORT), "HOST_MAP": f"{RELAY}={RELAY_IP}" if RELAY_IP else "",
         "CONNECT_SRC": f"ws://127.0.0.1:3340 http://127.0.0.1:3340 {INVITE.rstrip('/')}",
     }
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", PORT)) == 0:
+            raise RuntimeError(f"port {PORT} is in use, the tests would run against another bridge")
     proc = subprocess.Popen(["node", str(ROOT / "bridge/server.mjs")], env=env)
     deadline = time.time() + 20
     while True:
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{PORT}/healthz", timeout=1)
+            if proc.poll() is not None:
+                raise RuntimeError(f"bridge exited, port {PORT} is probably in use")
             break
         except OSError:
             if time.time() > deadline or proc.poll() is not None:
