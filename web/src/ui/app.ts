@@ -369,7 +369,8 @@ function startMain(client: DcClient, initialChat?: string) {
   mainListeners = new AbortController();
   const { signal } = mainListeners;
   let current = initialChat;
-  const objectUrls: string[] = [];
+  let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement } | undefined;
+  const rendered = new Map<string, { node: Element; key: string; urls: string[] }>();
 
   const status = h('span', { class: 'status' });
   const chatList = h('ul', { class: 'chatlist' });
@@ -421,15 +422,22 @@ function startMain(client: DcClient, initialChat?: string) {
     document.title = unread ? `(${unread}) Kitepost` : 'Kitepost';
   }
 
-  function attachmentView(a: AttachmentData): Node {
+  function attachmentView(a: AttachmentData, urls: string[]): Node {
     const safeImage = INLINE_IMAGE_TYPES.has(a.mime);
     const url = URL.createObjectURL(base64ToBlob(a.data_b64, safeImage ? a.mime : 'application/octet-stream'));
-    objectUrls.push(url);
+    urls.push(url);
     const link = h('a', { href: url, download: a.filename, rel: 'noopener' }, `📎 ${a.filename}`);
     return safeImage ? h('div', { class: 'attachment' }, h('img', { src: url, alt: a.filename }), link) : h('div', { class: 'attachment' }, link);
   }
 
-  function messageView(chat: Chat, m: Message): Node {
+  /** Everything `messageView` shows, so that unchanged messages keep their nodes. */
+  function messageKey(chat: Chat, m: Message): string {
+    return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.reactions, formatTime(m.timestamp),
+      m.attachments.map(a => [a.filename, a.mime, a.data_b64.length]),
+      chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
+  }
+
+  function messageView(chat: Chat, m: Message, urls: string[]): Element {
     if (m.info) return h('div', { class: 'info' }, m.text);
     const out = m.from === 'self';
     const state = out ? { pending: '⏳', sent: '✓', read: '✓✓', failed: '⚠', received: '' }[m.state] : '';
@@ -444,7 +452,7 @@ function startMain(client: DcClient, initialChat?: string) {
     reactButton?.addEventListener('click', () => openReactions(reactButton, e => void whileBusy(reactButton, () => react(e)).catch(errorDialog)));
     return h('div', { class: `msg ${out ? 'out' : 'in'}` },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
-      ...m.attachments.map(attachmentView),
+      ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, m.text) : null,
       h('div', { class: 'meta' }, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state ? ` ${state}` : '', m.error ? ` ${m.error}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
@@ -453,21 +461,20 @@ function startMain(client: DcClient, initialChat?: string) {
       reactButton);
   }
 
-  function renderPane() {
-    for (const u of objectUrls.splice(0)) URL.revokeObjectURL(u);
-    clear(pane);
-    const chat = current ? client.chats.get(current) : undefined;
-    if (!chat) {
-      pane.append(h('div', { class: 'placeholder' }, h('p', {}, t('pane.select')), h('p', {}, t('pane.e2e'))));
-      return;
-    }
+  function forgetMessages() {
+    for (const r of rendered.values()) for (const u of r.urls) URL.revokeObjectURL(u);
+    rendered.clear();
+  }
+
+  function chatHeader(chat: Chat): [string, Element] {
     const contact = chat.contact ? client.contacts.get(chat.contact) : undefined;
     const subtitle = chat.type === 'self'
       ? t('chat.savedSubtitle')
       : chat.type === 'group'
       ? t('chat.members', { n: chat.members.length + 1 })
       : contact ? contact.addr : '';
-    const header = h('header', { class: 'chathead' },
+    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr]);
+    return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
       h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
@@ -476,24 +483,85 @@ function startMain(client: DcClient, initialChat?: string) {
       h('button', { onclick: () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteText')), [
         { label: t('cancel') },
         { label: t('delete'), primary: true, onClick: async () => { await client.deleteChat(chat.id); current = undefined; renderAll(); } },
-      ]) }, t('delete')));
+      ]) }, t('delete')))];
+  }
 
-    const list = h('div', { class: 'messages' });
-    for (const m of client.messages.get(chat.id) ?? []) list.append(messageView(chat, m));
+  const footerKey = (chat: Chat) => JSON.stringify([chat.isRequest, chat.left]);
 
-    const request = chat.isRequest
+  function chatFooter(chat: Chat): Element {
+    return chat.isRequest
       ? h('div', { class: 'request' },
         h('span', {}, t('chat.request')),
         h('button', { class: 'primary', onclick: busyClick(() => client.acceptChat(chat.id)) }, t('accept')),
         h('button', { onclick: busyClick(async () => { await client.blockChat(chat.id); current = undefined; renderAll(); }) }, t('block')))
-      : null;
+      : composer(chat);
+  }
 
-    pane.append(header, list, request ?? composer(chat));
-    list.scrollTop = list.scrollHeight;
+  function renderPane() {
+    const chat = current ? client.chats.get(current) : undefined;
+    if (!chat) {
+      shown = undefined;
+      forgetMessages();
+      pane.replaceChildren(h('div', { class: 'placeholder' }, h('p', {}, t('pane.select')), h('p', {}, t('pane.e2e'))));
+      return;
+    }
+    if (shown?.chatId !== chat.id) {
+      forgetMessages();
+      const [headerKey, header] = chatHeader(chat);
+      const footer = chatFooter(chat);
+      shown = { chatId: chat.id, header, headerKey, footer, footerKey: footerKey(chat), list: h('div', { class: 'messages' }) };
+      pane.replaceChildren(header, shown.list, footer);
+    } else {
+      const [headerKey, header] = chatHeader(chat);
+      if (headerKey !== shown.headerKey) {
+        shown.header.replaceWith(header);
+        Object.assign(shown, { header, headerKey });
+      }
+      if (footerKey(chat) !== shown.footerKey) {
+        const footer = chatFooter(chat);
+        shown.footer.replaceWith(footer);
+        Object.assign(shown, { footer, footerKey: footerKey(chat) });
+      }
+    }
+    renderMessages(chat, shown.list);
     if (!document.hidden) void client.markRead(chat.id);
   }
 
-  function composer(chat: Chat): Node {
+  function renderMessages(chat: Chat, list: HTMLElement) {
+    const msgs = client.messages.get(chat.id) ?? [];
+    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+    const ownNew = msgs.some(m => m.from === 'self' && !m.info && !rendered.has(m.id));
+    const ids = new Set(msgs.map(m => m.id));
+    for (const [id, r] of rendered) {
+      if (ids.has(id)) continue;
+      r.node.remove();
+      for (const u of r.urls) URL.revokeObjectURL(u);
+      rendered.delete(id);
+    }
+    let prev: Element | null = null;
+    for (const m of msgs) {
+      const key = messageKey(chat, m);
+      let r = rendered.get(m.id);
+      if (r?.key !== key) {
+        const urls: string[] = [];
+        const node = messageView(chat, m, urls);
+        if (r) {
+          r.node.replaceWith(node);
+          for (const u of r.urls) URL.revokeObjectURL(u);
+        }
+        r = { node, key, urls };
+        rendered.set(m.id, r);
+      }
+      if ((prev ? prev.nextElementSibling : list.firstElementChild) !== r.node) {
+        if (prev) prev.after(r.node);
+        else list.prepend(r.node);
+      }
+      prev = r.node;
+    }
+    if (atBottom || ownNew) list.scrollTop = list.scrollHeight;
+  }
+
+  function composer(chat: Chat): Element {
     let attachment: AttachmentData | undefined;
     const input = h('textarea', { rows: '1', placeholder: chat.left ? t('chat.notMember') : t('chat.message'), disabled: chat.left });
     const file = h('input', { type: 'file', hidden: true });
@@ -572,12 +640,7 @@ function startMain(client: DcClient, initialChat?: string) {
     if (what === 'status') return renderStatus();
     renderList();
     if (what === 'config') renderProfile();
-    if (what === 'chats' || what === `messages:${current}` || what === 'config') {
-      const draft = pane.querySelector('textarea')?.value;
-      renderPane();
-      const ta = pane.querySelector('textarea');
-      if (ta && draft) ta.value = draft;
-    }
+    if (what === 'chats' || what === `messages:${current}` || what === 'config') renderPane();
   }, { signal });
   client.addEventListener('incoming', ev => {
     const { chatId } = (ev as CustomEvent<{ chatId: string }>).detail;

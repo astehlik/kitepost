@@ -79,6 +79,32 @@ def test_reactions(web, dora):
     wait_event(dora.acc, EventType.REACTIONS_CHANGED, lambda e: "❤️" not in str(msg.get_reactions()))
 
 
+def test_new_messages_leave_the_chat_in_place(web, dora):
+    page = web.page
+    for i in range(8):
+        dora.chat.send_text(f"filler {i}\n" + "line\n" * 6)
+    expect(page.locator(".msg.in", has_text="filler 7")).to_be_visible()
+    page.locator(".msg.in", has_text="filler 0").evaluate("el => el.dataset.probe = 'kept'")
+    box = page.locator(".composer textarea")
+    box.fill("unfinished draft")
+    messages = page.locator(".messages")
+    messages.evaluate("el => el.scrollTop = 0")
+
+    dora.chat.send_text("while typing")
+    expect(page.locator(".msg.in", has_text="while typing")).to_be_attached()
+    expect(box).to_be_focused()
+    expect(box).to_have_value("unfinished draft")
+    assert messages.evaluate("el => el.scrollTop") == 0
+    expect(page.locator("[data-probe=kept]")).to_have_count(1)
+
+    box.fill("sent now")
+    box.press("Enter")
+    expect(page.locator(".msg.out", has_text="sent now").locator(".meta")).to_contain_text("✓")
+    expect(box).to_be_focused()
+    expect(page.locator(".msg.out", has_text="sent now")).to_be_in_viewport()
+    expect(page.locator("[data-probe=kept]")).to_have_count(1)
+
+
 def test_emoji_completion_and_picker(web, dora):
     box = web.page.locator(".composer textarea")
     box.press_sequentially("Emoji test :thumbsu")
