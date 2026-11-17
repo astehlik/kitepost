@@ -588,6 +588,9 @@ PERMISSION = """state => {
 
 def test_notification_permission_is_asked_on_request(web):
     page = web.page
+    # Headless browsers may start with a decided permission.
+    page.add_init_script(f"({PERMISSION})('default')")
+    reload_and_unlock(page)
     bar = page.locator(".notify-bar")
     expect(bar).to_be_visible()
     bar.get_by_role("button", name="Later").click()
@@ -603,7 +606,6 @@ def test_notification_permission_is_asked_on_request(web):
 
     page.evaluate("localStorage.removeItem('kitepost-notify-later')")
     reload_and_unlock(page)
-    page.evaluate(PERMISSION, "default")
     expect(bar).to_be_visible()
     page.get_by_role("button", name="Edit profile").click()
     page.locator("dialog").get_by_role("button", name="Turn on notifications").click()

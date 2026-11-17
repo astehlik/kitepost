@@ -84,6 +84,8 @@ def configure(acc, name):
     else:
         acc.add_transport_from_qr(f"dcaccount:{RELAY}")
     acc.start_io()
+    # Core skips mail that is already in INBOX when it selects the folder for the first time.
+    wait_event(acc, EventType.IMAP_INBOX_IDLE)
     return acc
 
 
