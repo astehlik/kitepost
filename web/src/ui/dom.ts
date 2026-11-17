@@ -85,8 +85,41 @@ export function trustedSvg(svg: string): Element {
   return document.importNode(root, true);
 }
 
+const DATE_LOCALE = 'kitepost-date-locale';
+export const DATE_LOCALES = ['auto', 'en-US', 'en-GB', 'de-DE'] as const;
+export type DateLocale = (typeof DATE_LOCALES)[number];
+let chosenDateLocale: DateLocale | undefined;
+
+/** The date format chosen in this browser; "auto" follows the browser's language. */
+export function getDateLocale(): DateLocale {
+  if (!chosenDateLocale) {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(DATE_LOCALE);
+    } catch {
+      // Storage can be blocked.
+    }
+    chosenDateLocale = DATE_LOCALES.find(l => l === saved) ?? 'auto';
+  }
+  return chosenDateLocale;
+}
+
+export function setDateLocale(locale: DateLocale) {
+  chosenDateLocale = locale;
+  try {
+    if (locale === 'auto') localStorage.removeItem(DATE_LOCALE);
+    else localStorage.setItem(DATE_LOCALE, locale);
+  } catch {
+    // Storage can be blocked; the choice then lasts until the page is reloaded.
+  }
+}
+
+export function dateLocale(choice = getDateLocale()): string {
+  return choice === 'auto' ? navigator.language || getLanguage() : choice;
+}
+
 export function formatDateTime(ts: number): string {
-  return new Date(ts).toLocaleString(getLanguage(), { dateStyle: 'medium', timeStyle: 'medium' });
+  return new Date(ts).toLocaleString(dateLocale(), { dateStyle: 'medium', timeStyle: 'medium' });
 }
 
 /** "5 minutes ago", "3 days ago" … in the UI language. */
@@ -104,8 +137,8 @@ export function formatTime(ts: number): string {
   const d = new Date(ts);
   const now = new Date();
   return d.toDateString() === now.toDateString()
-    ? d.toLocaleTimeString(getLanguage(), { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString(getLanguage(), { day: 'numeric', month: 'short' });
+    ? d.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' });
 }
 
 export function base64ToBlob(b64: string, type: string): Blob {

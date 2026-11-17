@@ -5,7 +5,7 @@ import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
-import { base64ToBlob, blobToBase64, clear, dialog, flashLabel, formatAgo, formatDateTime, formatTime, h, trustedSvg, whileBusy } from './dom';
+import { base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale, dialog, flashLabel, formatAgo, formatDateTime, formatTime, getDateLocale, setDateLocale, type DateLocale, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { sendErrorKind } from './send-error';
 import { checkForUpdate } from './update';
@@ -1391,6 +1391,10 @@ function profileDialog(client: DcClient, rebuild: () => void) {
   };
   renderPermission();
   const notifyField = h('div', {}, field(t('profile.notify'), notifyDetails), permission, h('small', { class: 'hint' }, t('profile.notifyHint')));
+  const example = new Date();
+  const dateFormat = h('select', {},
+    ...DATE_LOCALES.map(l => h('option', { value: l, selected: getDateLocale() === l },
+      `${t(`date.${l}`)} – ${example.toLocaleString(dateLocale(l), { dateStyle: 'short', timeStyle: 'short' })}`)));
   const lang = languageSelect(() => {
     document.querySelector('dialog')?.close();
     rebuild();
@@ -1400,6 +1404,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
     client.config.secured ? null : h('p', { class: 'warning' }, t('backup.unsecured')),
     field(t('setup.displayName'), name),
     field(t('language'), lang),
+    field(t('profile.dateFormat'), dateFormat),
     receiptsField,
     notifyField,
     remember.el,
@@ -1415,6 +1420,10 @@ function profileDialog(client: DcClient, rebuild: () => void) {
         await client.setRemembered(remember.box.checked);
         await client.setReadReceipts(receipts.checked);
         await client.setNotifyDetails(notifyDetails.value as 'all' | 'sender' | 'none');
+        if (dateFormat.value !== getDateLocale()) {
+          setDateLocale(dateFormat.value as DateLocale);
+          rebuild();
+        }
       },
     },
   ]);

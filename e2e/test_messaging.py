@@ -562,14 +562,14 @@ def test_notifications_show_sender_and_content(web, dora, tmp_path):
     assert (note["title"], note["body"]) == ("Notify group", "Dora: hello group"), note
 
     page.get_by_role("button", name="Edit profile").click()
-    page.locator("dialog select").nth(1).select_option(label="Sender only")
+    page.locator("dialog").get_by_label("Notifications show").select_option(label="Sender only")
     page.get_by_role("button", name="Save").click()
     group.send_text("secret in the group")
     note = next_note(page, 5)
     assert (note["title"], note["body"]) == ("Notify group", "Dora: New message"), note
 
     page.get_by_role("button", name="Edit profile").click()
-    page.locator("dialog select").nth(1).select_option(label="No details")
+    page.locator("dialog").get_by_label("Notifications show").select_option(label="No details")
     page.get_by_role("button", name="Save").click()
     dora.chat.send_text("secret")
     note = next_note(page, 6)
@@ -827,6 +827,36 @@ def test_disappearing_messages_set_in_core(web, dora):
     expect(page.get_by_role("button", name="Disappearing messages: 1 minute")).to_have_count(0)
     web_send(page, "no timer any more")
     assert core_timer(dora.acc, wait_text(dora.acc, "no timer any more").id) == {"kind": "disabled"}
+
+
+def test_date_format(web, dora):
+    page = web.page
+    dora.chat.send_text("what time is it")
+    msg = page.locator(".msg.in", has_text="what time is it")
+    expect(msg).to_be_visible()
+
+    def choose(value):
+        page.get_by_role("button", name="Edit profile").click()
+        page.locator("dialog").get_by_label("Date format").select_option(value)
+        page.get_by_role("button", name="Save").click()
+        open_chat(page, "Dora")
+
+    def sent():
+        message_action(page, msg, "Message info")
+        text = page.locator("dialog dd").first.inner_text()
+        page.locator("dialog").get_by_role("button", name="Close").click()
+        return text
+
+    choose("de-DE")
+    assert re.match(r"\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}:\d{2} ", sent())
+    expect(msg.locator(".meta")).to_have_text(re.compile(r"^\d{2}:\d{2}$"))
+    choose("en-US")
+    assert re.match(r"[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}:\d{2}\s[AP]M ", sent())
+    expect(msg.locator(".meta")).to_have_text(re.compile(r"^\d{2}:\d{2}\s[AP]M$"))
+    choose("en-GB")
+    reload_and_unlock(page)
+    open_chat(page, "Dora")
+    assert re.match(r"\d{1,2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}:\d{2} ", sent())
 
 
 def test_rename_updates_header(web):
