@@ -166,7 +166,6 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .pinbar > span { display: grid; min-width: 0; }
 .pinbar strong { font-size: .75rem; color: var(--accent); }
 .pinbar span span { overflow: hidden; font-size: .88rem; white-space: nowrap; text-overflow: ellipsis; }
-.msg .reactions { font-size: .9rem; }
 .attachment img { max-width: 100%; max-height: 320px; border-radius: 8px; display: block; }
 .attachment .image { display: block; padding: 0; border: 0; background: none; border-radius: 8px; cursor: zoom-in; }
 .chips { display: flex; flex-wrap: wrap; gap: .25rem .6rem; }
@@ -307,9 +306,12 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .composer .reply span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .composer .reply strong { color: var(--accent); font-size: .8rem; }
 .composer .reply button { flex: none; padding: .2rem .45rem; }
-.reactions { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
-.reaction { padding: .05rem .45rem; border-radius: 999px; font-size: .9rem; background: var(--bg); }
-.reaction.mine { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--panel)); }
+.msg.reacted { margin-bottom: .9rem; }
+.reactions { position: absolute; bottom: 0; transform: translateY(75%); display: flex; padding: 1px; border: 2px solid var(--bg); border-radius: 999px; background: var(--in); box-shadow: 0 1px 2px rgba(0,0,0,.15); white-space: nowrap; }
+.msg.in .reactions { left: .6rem; }
+.msg.out .reactions { right: .6rem; }
+.reaction { padding: 0 .3rem; border: 0; border-radius: 999px; background: none; font-size: .85rem; line-height: 1.45; }
+.reaction.mine { background: var(--out); }
 .reaction:disabled { opacity: 1; cursor: default; }
 .popover { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: .4rem; }
 .quick-reactions { display: flex; gap: .1rem; }

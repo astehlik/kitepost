@@ -649,7 +649,7 @@ function startMain(client: DcClient, initialChat?: string) {
     const actions = messageActions(chat, [m]);
     const hover = actions.filter(a => a.icon === ICONS.react || a.icon === ICONS.reply).map(actionButton);
     const more = iconButton(ICONS.more, t('chat.more'), ev => openMenu(chat, m, more, undefined, (ev as MouseEvent).detail === 0));
-    return h('div', { class: `msg ${out ? 'out' : 'in'}`, 'data-id': m.id },
+    return h('div', { class: `msg ${out ? 'out' : 'in'}${counts.size ? ' reacted' : ''}`, 'data-id': m.id },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       originView(m),
       quoteView(chat, m),
