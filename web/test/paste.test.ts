@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { pastedFiles } from '../src/ui/paste.ts';
+import { pastedFiles, pasteIncomplete } from '../src/ui/paste.ts';
 
 const png = (name = 'image.png') => new File([new Uint8Array([1, 2, 3])], name, { type: 'image/png' });
 const names = (files: File[] | undefined) => files?.map(f => [f.name, f.type]);
@@ -34,4 +34,11 @@ test('keeps real names and files of several copied files', () => {
   const docs = [new File(['a'], 'a.pdf', { type: 'application/pdf' }), png('b.png')];
   assert.deepEqual(names(pastedFiles(docs, '', 'file:///x/a.pdf\nfile:///x/b.png')), [['a.pdf', 'application/pdf'], ['b.png', 'image/png']]);
   assert.deepEqual(names(pastedFiles([png('shot.png')], '', 'file:///x/other.png')), [['shot.png', 'image/png']]);
+});
+
+test('notices copied files the browser left out', () => {
+  assert.deepEqual(pasteIncomplete([png('a.png')], '', 'file:///x/a.png\nfile:///x/b.png\nfile:///x/c.png'), { n: 1, count: 3 });
+  assert.equal(pasteIncomplete([png('a.png'), png('b.png')], '', 'file:///x/a.png\nfile:///x/b.png'), undefined);
+  assert.equal(pasteIncomplete([png()], 'Quarterly report'), undefined);
+  assert.equal(pasteIncomplete([], '/x/a.png\n/x/b.png'), undefined);
 });

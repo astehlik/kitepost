@@ -245,6 +245,8 @@ export const de: Record<keyof typeof en, string> = {
   'image.previous': 'Vorheriges Bild',
   'image.next': 'Nächstes Bild',
   'chat.removeFile': 'Datei entfernen',
+  'chat.pasteIncompleteTitle': 'Nicht alle Dateien eingefügt',
+  'chat.pasteIncompleteText': 'Der Browser hat nur {n} von {count} kopierten Dateien übergeben. Zieh die Dateien in den Chat oder wähle sie mit 📎 aus.',
   'e2e.title': 'Ende-zu-Ende-Verschlüsselung',
   'e2e.invite': '✔ Über einen Einladungslink verbunden, der beide Schlüssel geprüft hat.',
   'e2e.compare': 'Nachrichten werden mit diesem Schlüssel Ende-zu-Ende-verschlüsselt. Zum Prüfen vergleicht ihr die Fingerabdrücke persönlich.',

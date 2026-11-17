@@ -643,6 +643,33 @@ def test_attachment_by_paste(web, dora, browser_name):
     snap = wait_text(dora.acc, "pasted pictures")
     assert received_files(dora.acc, snap.chat_id, 3) == [("pasted pictures", "Holiday photo.png"), ("", "a.png"), ("", "b.png")]
 
+    textarea.evaluate(PASTE, [PNG.hex(), ["a.png"], "", "file:///home/me/a.png\r\nfile:///home/me/b.png\r\n"])
+    expect(chips).to_have_text(["📎 a.png ✕"])
+    hint = page.locator("dialog")
+    expect(hint).to_contain_text("only 1 of 2 copied files")
+    hint.get_by_role("button", name="OK").click()
+    expect(hint).to_have_count(0)
+
+
+DROP = """(el, [hex, names]) => {
+    const bytes = new Uint8Array(hex.match(/../g).map(b => parseInt(b, 16)));
+    const data = new DataTransfer();
+    for (const name of names) data.items.add(new File([bytes], name, { type: 'image/png' }));
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+        el.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }));
+    }
+}"""
+
+
+def test_attachment_by_drop(web, dora):
+    page = web.page
+    page.locator(".messages").evaluate(DROP, [PNG.hex(), ["a.png", "b.png"]])
+    expect(page.locator(".composer .chip")).to_have_text(["📎 a.png ✕", "📎 b.png ✕"])
+    expect(page.locator(".pane.dropping")).to_have_count(0)
+    web_send(page, "dropped pictures")
+    snap = wait_text(dora.acc, "dropped pictures")
+    assert received_files(dora.acc, snap.chat_id, 2) == [("dropped pictures", "a.png"), ("", "b.png")]
+
 
 def solid_png(width, height):
     def chunk(kind, data):

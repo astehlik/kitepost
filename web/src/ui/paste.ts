@@ -41,3 +41,9 @@ export function pastedFiles(files: File[], text: string, uriList = ''): File[] |
   const [f] = files;
   return [new File([f], withExtension(names[0], f.type), { type: f.type, lastModified: f.lastModified })];
 }
+
+/** How many copied files the browser left out of a paste; Firefox passes only the first. */
+export function pasteIncomplete(files: File[], text: string, uriList = ''): { n: number; count: number } | undefined {
+  const count = copiedNames(text, uriList)?.length ?? 0;
+  return files.length && count > files.length ? { n: files.length, count } : undefined;
+}

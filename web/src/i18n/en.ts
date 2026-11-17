@@ -243,6 +243,8 @@ export const en = {
   'image.previous': 'Previous image',
   'image.next': 'Next image',
   'chat.removeFile': 'Remove file',
+  'chat.pasteIncompleteTitle': 'Not all files pasted',
+  'chat.pasteIncompleteText': 'The browser passed on only {n} of {count} copied files. Drag the files into the chat or choose them with 📎 instead.',
   'e2e.title': 'End-to-end encryption',
   'e2e.invite': '✔ Connected through an invite link, which checked both keys.',
   'e2e.compare': 'Messages are end-to-end encrypted with this key. To check it, compare the fingerprints in person.',

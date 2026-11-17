@@ -8,7 +8,7 @@ import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../was
 import { base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale, dialog, flashLabel, formatAgo, formatDateTime, formatTime, getDateLocale, setDateLocale, type DateLocale, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { splitLinks } from './links';
-import { pastedFiles } from './paste';
+import { pastedFiles, pasteIncomplete } from './paste';
 import { sendErrorKind } from './send-error';
 import { checkForUpdate } from './update';
 
@@ -408,6 +408,7 @@ function startMain(client: DcClient, initialChat?: string) {
   const rendered = new Map<string, { node: Element; key: string; urls: string[] }>();
   let startReply: ((m: Message) => void) | undefined;
   let startEdit: ((m: Message) => void) | undefined;
+  let dropTarget: { chatId: string; attach: (files: File[]) => Promise<void> } | undefined;
   // Like core's send_edit_request(): own text messages only.
   const canEdit = (chat: Chat, m: Message) => m.from === 'self' && !m.info && !!m.text && m.id.includes('@') && !chat.left;
 
@@ -416,6 +417,22 @@ function startMain(client: DcClient, initialChat?: string) {
   let showArchived = false;
   listenForChatMenu();
   const pane = h('section', { class: 'pane' });
+  const droppable = (ev: DragEvent) => {
+    const chat = current ? client.chats.get(current) : undefined;
+    return !!ev.dataTransfer?.types.includes('Files') && dropTarget?.chatId === chat?.id && !chat?.isRequest && !chat?.left;
+  };
+  pane.addEventListener('dragover', ev => {
+    if (!droppable(ev)) return;
+    ev.preventDefault();
+    pane.classList.add('dropping');
+  });
+  pane.addEventListener('dragleave', ev => { if (!pane.contains(ev.relatedTarget as Node | null)) pane.classList.remove('dropping'); });
+  pane.addEventListener('drop', ev => {
+    pane.classList.remove('dropping');
+    if (!droppable(ev)) return;
+    ev.preventDefault();
+    void dropTarget?.attach([...ev.dataTransfer?.files ?? []]);
+  });
   const me = h('div', { class: 'me' });
   const keyWarning = h('div', { class: 'key-warning', role: 'alert', hidden: true });
   const notifyBar = h('div', { class: 'notify-bar', hidden: true });
@@ -1072,7 +1089,9 @@ function startMain(client: DcClient, initialChat?: string) {
         attachments.push({ filename: f.name.replace(/[\\/\p{Cc}]/gu, '_') || 'file', mime: f.type || 'application/octet-stream', data_b64: await blobToBase64(f) });
       }
       renderChips();
+      input.focus();
     };
+    dropTarget = { chatId: chat.id, attach };
     file.addEventListener('change', () => {
       const files = [...file.files ?? []];
       file.value = '';
@@ -1080,10 +1099,14 @@ function startMain(client: DcClient, initialChat?: string) {
     });
     input.addEventListener('paste', ev => {
       const data = ev.clipboardData;
-      const files = data && pastedFiles([...data.files], data.getData('text/plain'), data.getData('text/uri-list'));
+      if (!data) return;
+      const args: [File[], string, string] = [[...data.files], data.getData('text/plain'), data.getData('text/uri-list')];
+      const files = pastedFiles(...args);
       if (!files) return;
       ev.preventDefault();
       void attach(files);
+      const missing = pasteIncomplete(...args);
+      if (missing) dialog(t('chat.pasteIncompleteTitle'), h('p', {}, t('chat.pasteIncompleteText', missing)), [{ label: t('ok'), primary: true }]);
     });
     const grow = h('div', { class: 'grow' }, replyBox, chips, input);
     // Before the Enter handler below, so that Enter picks a suggestion instead of sending.

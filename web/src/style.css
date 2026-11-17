@@ -134,6 +134,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .badge { background: var(--accent); color: var(--accent-text); border-radius: 10px; padding: 0 .45rem; font-size: .8rem; }
 
 .pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.pane.dropping { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .placeholder { margin: auto; text-align: center; color: var(--muted); padding: 1rem; }
 .chathead { display: flex; align-items: center; gap: .5rem; padding: .6rem 1rem; background: var(--panel); border-bottom: 1px solid var(--border); }
 .chathead .who { flex: 1; }
