@@ -8,6 +8,7 @@ import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../was
 import { base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale, dialog, flashLabel, formatAgo, formatDateTime, formatTime, getDateLocale, setDateLocale, type DateLocale, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { splitLinks } from './links';
+import { pastedFiles } from './paste';
 import { sendErrorKind } from './send-error';
 import { checkForUpdate } from './update';
 
@@ -507,10 +508,15 @@ function startMain(client: DcClient, initialChat?: string) {
 
   function attachmentView(a: AttachmentData, urls: string[]): Node {
     const safeImage = INLINE_IMAGE_TYPES.has(a.mime);
-    const url = URL.createObjectURL(base64ToBlob(a.data_b64, safeImage ? a.mime : 'application/octet-stream'));
+    const blob = base64ToBlob(a.data_b64, safeImage ? a.mime : 'application/octet-stream');
+    const url = URL.createObjectURL(blob);
     urls.push(url);
     const link = h('a', { href: url, download: a.filename, rel: 'noopener' }, `📎 ${a.filename}`);
-    return safeImage ? h('div', { class: 'attachment' }, h('img', { src: url, alt: a.filename }), link) : h('div', { class: 'attachment' }, link);
+    if (!safeImage) return h('div', { class: 'attachment' }, link);
+    const img = h('img', { src: url, alt: a.filename });
+    imageBlobs.set(img, blob);
+    const image = h('button', { type: 'button', class: 'image', title: t('image.open'), onclick: ev => lightbox(ev.currentTarget as HTMLElement) }, img);
+    return h('div', { class: 'attachment' }, image, link);
   }
 
   const authorName = (from: string) => from === 'self' ? t('me') : client.contactName(from);
@@ -957,12 +963,16 @@ function startMain(client: DcClient, initialChat?: string) {
   }
 
   function composer(chat: Chat): Element {
-    let attachment: AttachmentData | undefined;
+    let attachments: AttachmentData[] = [];
     let quoted: Message | undefined;
     let editing: Message | undefined;
     const input = h('textarea', { rows: '1', placeholder: chat.left ? t('chat.notMember') : t('chat.message'), disabled: chat.left });
-    const file = h('input', { type: 'file', hidden: true });
-    const chip = h('span', { class: 'chip', hidden: true });
+    const file = h('input', { type: 'file', multiple: true, hidden: true });
+    const chips = h('div', { class: 'chips' });
+    const renderChips = () => chips.replaceChildren(...attachments.map(a => h('button', {
+      type: 'button', class: 'chip', title: t('chat.removeFile'),
+      onclick: () => { attachments = attachments.filter(x => x !== a); renderChips(); input.focus(); },
+    }, `📎 ${a.filename} ✕`)));
     const replyBox = h('div', { class: 'reply', hidden: true });
     /** Shows what the next message replies to or which message it edits; without `kind` neither. */
     const setContext = (kind?: 'reply' | 'edit', m?: Message) => {
@@ -977,8 +987,8 @@ function startMain(client: DcClient, initialChat?: string) {
         h('div', {}, h('strong', {}, kind === 'edit' ? t('chat.editing') : authorName(m.from)), h('span', {}, m.text || m.attachments[0]?.filename || '')),
         h('button', { type: 'button', class: 'icon', title: cancel, 'aria-label': cancel, onclick: () => { setContext(); input.focus(); } }, '✕'));
       if (kind === 'edit') {
-        attachment = undefined;
-        chip.hidden = true;
+        attachments = [];
+        renderChips();
         input.value = m.text;
       }
       input.focus();
@@ -998,16 +1008,18 @@ function startMain(client: DcClient, initialChat?: string) {
     const send = async () => {
       const text = input.value.trim();
       if (editing) return text ? sendEdit(editing, text) : undefined;
-      if (!text && !attachment) return;
-      const att = attachment;
+      if (!text && !attachments.length) return;
+      const atts = attachments;
       const q = quoted;
       const before = client.messages.get(chat.id)?.length ?? 0;
       input.value = '';
-      attachment = undefined;
-      chip.hidden = true;
+      attachments = [];
+      renderChips();
       setContext();
       try {
-        await client.sendText(chat.id, text, att, q);
+        // Delta Chat shows one file per message; the text and the reply go with the first.
+        await client.sendText(chat.id, text, atts[0], q);
+        for (const a of atts.slice(1)) await client.sendText(chat.id, '', a);
       } catch (e) {
         // A message that was created shows its error itself.
         if ((client.messages.get(chat.id)?.length ?? 0) > before) return console.warn(e);
@@ -1017,27 +1029,27 @@ function startMain(client: DcClient, initialChat?: string) {
         errorDialog(e);
       }
     };
-    const attach = async (f: File) => {
+    const attach = async (files: File[]) => {
       if (editing) setContext();
-      if (f.size > MAX_UPLOAD) return void dialog(t('chat.tooLargeTitle'), h('p', {}, t('chat.tooLargeText')), [{ label: t('ok') }]);
-      attachment = { filename: f.name.replace(/[\\/\p{Cc}]/gu, '_') || 'file', mime: f.type || 'application/octet-stream', data_b64: await blobToBase64(f) };
-      chip.textContent = `📎 ${attachment.filename} ✕`;
-      chip.hidden = false;
+      if (files.some(f => f.size > MAX_UPLOAD)) void dialog(t('chat.tooLargeTitle'), h('p', {}, t('chat.tooLargeText')), [{ label: t('ok') }]);
+      for (const f of files.filter(f => f.size <= MAX_UPLOAD)) {
+        attachments.push({ filename: f.name.replace(/[\\/\p{Cc}]/gu, '_') || 'file', mime: f.type || 'application/octet-stream', data_b64: await blobToBase64(f) });
+      }
+      renderChips();
     };
     file.addEventListener('change', () => {
-      const f = file.files?.[0];
+      const files = [...file.files ?? []];
       file.value = '';
-      if (f) void attach(f);
+      void attach(files);
     });
-    // Office apps put an image of copied text on the clipboard too, so text wins.
     input.addEventListener('paste', ev => {
-      const f = ev.clipboardData?.files[0];
-      if (!f || ev.clipboardData?.getData('text/plain')) return;
+      const data = ev.clipboardData;
+      const files = data && pastedFiles([...data.files], data.getData('text/plain'), data.getData('text/uri-list'));
+      if (!files) return;
       ev.preventDefault();
-      void attach(f);
+      void attach(files);
     });
-    chip.addEventListener('click', () => { attachment = undefined; chip.hidden = true; });
-    const grow = h('div', { class: 'grow' }, replyBox, chip, input);
+    const grow = h('div', { class: 'grow' }, replyBox, chips, input);
     // Before the Enter handler below, so that Enter picks a suggestion instead of sending.
     attachEmojiCompletion(input, grow);
     const emojiButton = h('button', { class: 'icon', type: 'button', title: t('chat.emoji'), 'aria-label': t('chat.emoji'), disabled: chat.left }, '😊');
@@ -1173,6 +1185,8 @@ const ICONS = {
   archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
   timer: 'M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9',
   back: 'M15 18l-6-6 6-6',
+  forward: 'M9 6l6 6-6 6',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   close: 'M6 6l12 12M18 6 6 18',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
@@ -1353,6 +1367,49 @@ function linkified(text: string): (string | Node)[] {
     class: 'link', href, target: '_blank', rel: 'noopener noreferrer',
     onclick: suspicious ? ev => { ev.preventDefault(); confirmLink(href); } : undefined,
   }, text));
+}
+
+const imageBlobs = new WeakMap<HTMLImageElement, Blob>();
+
+/** Shows the image of `opener` large, with the other images of the chat a step away. */
+function lightbox(opener: HTMLElement) {
+  const images = [...(opener.closest('.messages') ?? document).querySelectorAll<HTMLImageElement>('.attachment .image img')];
+  let index = Math.max(0, images.findIndex(img => opener.contains(img)));
+  // An own URL, because a redrawn message revokes those of its old node.
+  let url = '';
+  const img = h('img', { alt: '' });
+  const name = h('span', { class: 'name' });
+  const save = h('a', { class: 'icon-button', title: t('image.download'), 'aria-label': t('image.download') }, icon(ICONS.download));
+  const step = (d: number) => images.length > 1 && show(index + d);
+  const prev = iconButton(ICONS.back, t('image.previous'), () => step(-1));
+  const next = iconButton(ICONS.forward, t('image.next'), () => step(1));
+  const close = iconButton(ICONS.close, t('close'), () => dlg.close());
+  const dlg = h('dialog', { class: 'lightbox', 'aria-label': t('image.title') },
+    h('div', { class: 'bar' }, name, save, close), prev, img, next);
+  for (const b of [prev, next, close]) b.classList.add('icon-button');
+  prev.classList.add('prev');
+  next.classList.add('next');
+  prev.hidden = next.hidden = images.length < 2;
+  function show(i: number) {
+    index = (i + images.length) % images.length;
+    const src = images[index];
+    const blob = imageBlobs.get(src);
+    if (!blob) return;
+    URL.revokeObjectURL(url);
+    url = URL.createObjectURL(blob);
+    img.src = save.href = url;
+    img.alt = name.textContent = save.download = src.alt;
+  }
+  dlg.addEventListener('click', ev => { if (ev.target === dlg) dlg.close(); });
+  dlg.addEventListener('keydown', ev => {
+    if (ev.key === 'ArrowLeft') step(-1);
+    else if (ev.key === 'ArrowRight') step(1);
+  });
+  dlg.addEventListener('close', () => { URL.revokeObjectURL(url); dlg.remove(); opener.focus(); });
+  document.body.append(dlg);
+  dlg.showModal();
+  close.focus();
+  show(index);
 }
 
 /** Shows where a link that can imitate another address really leads, like Delta Chat Desktop. */

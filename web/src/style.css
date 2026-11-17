@@ -162,13 +162,30 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .pinbar span span { overflow: hidden; font-size: .88rem; white-space: nowrap; text-overflow: ellipsis; }
 .msg .reactions { font-size: .9rem; }
 .attachment img { max-width: 100%; max-height: 320px; border-radius: 8px; display: block; }
+.attachment .image { display: block; padding: 0; border: 0; background: none; border-radius: 8px; cursor: zoom-in; }
+.chips { display: flex; flex-wrap: wrap; gap: .25rem .6rem; }
+.chips:empty { display: none; }
+.chips .chip { max-width: 100%; padding: 0; border: 0; background: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lightbox { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: rgba(0,0,0,.92); color: #fff; }
+.lightbox[open] { display: grid; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); place-items: center; }
+.lightbox::backdrop { background: transparent; }
+.lightbox .bar { justify-self: stretch; display: flex; align-items: center; gap: .5rem; padding: .6rem 1rem; }
+.lightbox .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lightbox img { max-width: 100%; max-height: calc(100dvh - 4rem); object-fit: contain; }
+.lightbox .icon-button svg { stroke: #fff; }
+.lightbox .icon-button:hover { background: rgba(255,255,255,.12); }
+.lightbox .icon-button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.lightbox .prev, .lightbox .next { position: absolute; top: 50%; translate: 0 -50%; width: 44px; height: 44px; background: rgba(0,0,0,.45); }
+.lightbox .prev { left: .5rem; }
+.lightbox .next { right: .5rem; }
+.lightbox .icon-button[hidden] { display: none; }
 .attachment a { color: inherit; font-size: .9rem; }
 .info { align-self: center; font-size: .82rem; color: var(--muted); background: var(--panel); border-radius: 10px; padding: .25rem .7rem; text-align: center; }
 .info.linked { border: 0; font-size: .82rem; cursor: pointer; }
 .request { display: flex; gap: .6rem; align-items: center; padding: .8rem 1rem; background: var(--panel); border-top: 1px solid var(--border); flex-wrap: wrap; }
 .request span { flex: 1; }
 .composer { display: flex; gap: .5rem; align-items: flex-end; padding: .6rem 1rem; background: var(--panel); border-top: 1px solid var(--border); }
-.composer .grow { flex: 1; display: flex; flex-direction: column; gap: .3rem; }
+.composer .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
 .composer textarea { field-sizing: content; max-height: calc(8lh + 1rem + 2px); }
 .chip { font-size: .8rem; cursor: pointer; color: var(--muted); }
 .icon { padding: .45rem .55rem; }

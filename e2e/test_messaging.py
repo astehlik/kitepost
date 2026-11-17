@@ -2,8 +2,10 @@
 
 import random
 import re
+import struct
 import subprocess
 import time
+import zlib
 from pathlib import Path
 
 import pytest
@@ -514,12 +516,32 @@ def test_picker_only_offers_emojis_the_browser_can_show(web):
                     f"emoji fonts: {sorted(set(f for f in fonts.splitlines() if 'moji' in f.lower()))}")
 
 
+def received_files(acc, chat_id, count):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while True:
+        snaps = [m.get_snapshot() for m in acc.get_chat_by_id(chat_id).get_messages()]
+        files = [(s.text, s.file_name) for s in snaps if s.file_name]
+        if len(files) >= count:
+            return files
+        assert time.monotonic() < deadline, f"Dora got only {files}"
+        time.sleep(0.2)
+
+
 def test_attachment_by_file_picker(web, dora, tmp_path):
-    png = tmp_path / "dot.png"
-    png.write_bytes(PNG)
-    web.page.locator('.composer input[type="file"]').set_input_files(str(png))
-    web_send(web.page, "a picture")
-    assert wait_text(dora.acc, "a picture").file_name == "dot.png"
+    page = web.page
+    paths = []
+    for name in ("one.png", "two.png", "three.png"):
+        paths.append(tmp_path / name)
+        paths[-1].write_bytes(PNG)
+    page.locator('.composer input[type="file"]').set_input_files([str(p) for p in paths])
+    chips = page.locator(".composer .chip")
+    expect(chips).to_have_text(["📎 one.png ✕", "📎 two.png ✕", "📎 three.png ✕"])
+    chips.nth(1).click()
+    expect(chips).to_have_text(["📎 one.png ✕", "📎 three.png ✕"])
+    web_send(page, "two pictures")
+    expect(chips).to_have_count(0)
+    snap = wait_text(dora.acc, "two pictures")
+    assert received_files(dora.acc, snap.chat_id, 2) == [("two pictures", "one.png"), ("", "three.png")]
 
 
 def test_sends_large_attachments(web, dora, tmp_path):
@@ -533,18 +555,67 @@ def test_sends_large_attachments(web, dora, tmp_path):
     expect(own_state(web.page, "a large file")).to_have_attribute("data-state", "sent")
 
 
+PASTE = """(el, [hex, names, text, uris]) => {
+    const bytes = new Uint8Array(hex.match(/../g).map(b => parseInt(b, 16)));
+    const data = new DataTransfer();
+    for (const name of names) data.items.add(new File([bytes], name, { type: 'image/png' }));
+    if (text) data.setData('text/plain', text);
+    if (uris) data.setData('text/uri-list', uris);
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+}"""
+
+
 def test_attachment_by_paste(web, dora, browser_name):
     if browser_name == "firefox":
         pytest.skip("Firefox drops the files of synthetic paste events; real pastes are trusted events")
-    web.page.locator(".composer textarea").evaluate("""(el, hex) => {
-        const bytes = new Uint8Array(hex.match(/../g).map(b => parseInt(b, 16)));
-        const data = new DataTransfer();
-        data.items.add(new File([bytes], 'pasted.png', { type: 'image/png' }));
-        el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
-    }""", PNG.hex())
-    expect(web.page.locator(".composer .chip")).to_contain_text("pasted.png")
-    web_send(web.page, "a pasted picture")
-    assert wait_text(dora.acc, "a pasted picture").file_name == "pasted.png"
+    page = web.page
+    textarea = page.locator(".composer textarea")
+    chips = page.locator(".composer .chip")
+    textarea.evaluate(PASTE, [PNG.hex(), ["image.png"], "Quarterly report", ""])
+    textarea.evaluate(PASTE, [PNG.hex(), ["image.png"], "", "file:///home/me/Holiday%20photo.jpg\r\n"])
+    expect(chips).to_have_text(["📎 Holiday photo.png ✕"])
+    textarea.evaluate(PASTE, [PNG.hex(), ["a.png", "b.png"], "/home/me/a.png\n/home/me/b.png", ""])
+    expect(chips).to_have_text(["📎 Holiday photo.png ✕", "📎 a.png ✕", "📎 b.png ✕"])
+    web_send(page, "pasted pictures")
+    snap = wait_text(dora.acc, "pasted pictures")
+    assert received_files(dora.acc, snap.chat_id, 3) == [("pasted pictures", "Holiday photo.png"), ("", "a.png"), ("", "b.png")]
+
+
+def solid_png(width, height):
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\x00" + b"\x40\x80\xc0" * width for _ in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+def test_images_open_in_a_lightbox(web, dora, tmp_path):
+    page = web.page
+    for name in ("first.png", "second.png"):
+        (tmp_path / name).write_bytes(solid_png(64, 48))
+        dora.chat.send_file(str(tmp_path / name))
+    images = page.locator(".msg.in .attachment .image")
+    expect(images).to_have_count(2)
+    images.first.click()
+    box = page.locator("dialog.lightbox")
+    expect(box.locator(".name")).to_have_text("first.png")
+    expect(box.locator("a[download]")).to_have_attribute("download", "first.png")
+    page.keyboard.press("ArrowRight")
+    expect(box.locator(".name")).to_have_text("second.png")
+    box.get_by_role("button", name="Next image").click()
+    expect(box.locator(".name")).to_have_text("first.png")
+    with page.expect_download() as download:
+        box.locator("a[download]").click()
+    assert download.value.suggested_filename == "first.png"
+    page.keyboard.press("Escape")
+    expect(box).to_have_count(0)
+    expect(images.first).to_be_focused()
+
+    msg = page.locator(".msg.in").filter(has=page.locator(".attachment .image")).first
+    message_action(page, msg, "Select")
+    images.nth(1).click()
+    expect(page.locator(".msg.selected")).to_have_count(2)
+    expect(box).to_have_count(0)
 
 
 def test_core_group_with_web_member(web, dora):
