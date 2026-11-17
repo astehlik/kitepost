@@ -73,6 +73,25 @@ def test_settings_page(web):
     expect(page.locator(".chatlist")).to_be_visible()
 
 
+def test_dark_mode_can_be_chosen(web):
+    page = web.page
+    page.emulate_media(color_scheme="light")
+    background = lambda: page.evaluate("getComputedStyle(document.body).backgroundColor")
+    light = background()
+    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_label("Theme").select_option("dark")
+    dark = background()
+    assert dark != light
+    reload_and_unlock(page)
+    assert background() == dark
+    page.get_by_role("button", name="Edit profile").click()
+    expect(page.get_by_label("Theme")).to_have_value("dark")
+    page.get_by_label("Theme").select_option("auto")
+    assert background() == light
+    page.emulate_media(color_scheme="dark")
+    assert background() == dark
+
+
 def test_read_receipts_can_be_turned_off(web, dora):
     web.page.get_by_role("button", name="Edit profile").click()
     web.page.get_by_label("Send read receipts").uncheck()

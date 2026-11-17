@@ -114,6 +114,35 @@ export function setDateLocale(locale: DateLocale) {
   }
 }
 
+const THEME = 'kitepost-theme';
+export const THEMES = ['auto', 'light', 'dark'] as const;
+export type Theme = (typeof THEMES)[number];
+
+/** The color scheme chosen in this browser; "auto" follows the system. */
+export function getTheme(): Theme {
+  try {
+    const saved = localStorage.getItem(THEME);
+    return THEMES.find(x => x === saved) ?? 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+export function applyTheme(theme = getTheme()) {
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+}
+
+export function setTheme(theme: Theme) {
+  applyTheme(theme);
+  try {
+    if (theme === 'auto') localStorage.removeItem(THEME);
+    else localStorage.setItem(THEME, theme);
+  } catch {
+    // Storage can be blocked; the choice then lasts until the page is reloaded.
+  }
+}
+
 export function dateLocale(choice = getDateLocale()): string {
   return choice === 'auto' ? navigator.language || getLanguage() : choice;
 }

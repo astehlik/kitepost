@@ -5,7 +5,7 @@ import { byChatOrder, type Chat, type Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
-import { base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale, dialog, flashLabel, formatAgo, formatDateTime, formatTime, getDateLocale, setDateLocale, type DateLocale, h, trustedSvg, whileBusy } from './dom';
+import { applyTheme, base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale, dialog, flashLabel, formatAgo, formatDateTime, formatTime, getDateLocale, getTheme, setDateLocale, setTheme, THEMES, type DateLocale, type Theme, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { splitLinks } from './links';
 import { pastedFiles, pasteIncomplete } from './paste';
@@ -118,6 +118,7 @@ function takeLoginFromUrl(): Login | undefined {
 let pendingLogin: Login | undefined;
 
 export async function boot() {
+  applyTheme();
   pendingLogin = takeLoginFromUrl();
   await loadRuntimeConfig();
   if (!(await Store.exists())) return renderPassphraseSetup();
@@ -1552,6 +1553,9 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
   name.addEventListener('change', save(() => client.setDisplayName(name.value)));
 
   const lang = languageSelect(rebuild);
+  const theme = h('select', {},
+    ...THEMES.map(v => h('option', { value: v, selected: getTheme() === v }, t(`theme.${v}`))));
+  theme.addEventListener('change', () => setTheme(theme.value as Theme));
   const example = new Date();
   const dateFormat = h('select', {},
     ...DATE_LOCALES.map(l => h('option', { value: l, selected: getDateLocale() === l },
@@ -1593,6 +1597,7 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
           h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))),
       section(t('settings.appearance'),
         field(t('language'), lang),
+        field(t('settings.theme'), theme),
         field(t('profile.dateFormat'), dateFormat)),
       section(t('settings.chats'),
         check(receipts, t('profile.readReceipts'), t('profile.readReceiptsHint')),
