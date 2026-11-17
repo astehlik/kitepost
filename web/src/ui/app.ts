@@ -1518,6 +1518,7 @@ function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
   ]);
   const dlg = dialog(client.chatTitle(chat), h('div', { class: 'chat-settings' },
     nickname && c ? field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })) : null,
+    chat.type === 'group' && !chat.left ? membersSection(client, chat) : null,
     h('section', {}, h('h3', {}, t('e2e.title')), ...encryption),
     chat.type === 'self' ? null : h('section', {}, h('h3', {}, t('chat.deleteChat')),
       h('p', {}, [t(client.config.bccSelf ? 'chat.deleteEverywhere' : 'chat.deleteHere'), consequence].filter(Boolean).join(' ')),
@@ -1526,6 +1527,45 @@ function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
     ? [{ label: t('cancel') }, { label: t('save'), primary: true, onClick: () => client.setNickname(c.fingerprint, nickname.value) }]
     : [{ label: t('close'), primary: true }]);
   nickname?.select();
+}
+
+function membersSection(client: DcClient, chat: Chat): Element {
+  const list = h('ul', { class: 'member-list' });
+  const addButton = h('button', { type: 'button', onclick: () => addMembersDialog(client, chat, render) }, t('group.add'));
+  function render() {
+    const fps = client.chats.get(chat.id)?.members ?? [];
+    list.replaceChildren(
+      h('li', {}, h('span', {}, h('strong', {}, client.config.displayName || t('me')), h('small', {}, client.config.addr))),
+      ...fps.map(fp => {
+        const c = client.contacts.get(fp);
+        const name = client.contactName(fp);
+        const remove = iconButton(ICONS.close, t('group.remove', { name }), () => dialog(t('group.removeTitle'), h('p', {}, t('group.removeText', { name })), [
+          { label: t('cancel') },
+          { label: t('group.removeConfirm'), primary: true, onClick: async () => { await client.removeMember(chat.id, fp); render(); } },
+        ]));
+        remove.classList.add('icon-button');
+        return h('li', {}, h('span', {}, h('strong', {}, name), h('small', {}, c?.addr ?? '')), remove);
+      }));
+  }
+  render();
+  return h('section', {}, h('h3', {}, t('group.members')), list, addButton);
+}
+
+function addMembersDialog(client: DcClient, chat: Chat, done: () => void) {
+  const boxes = [...client.contacts.values()]
+    .filter(c => c.publicKey && !c.blocked && !chat.members.includes(c.fingerprint))
+    .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: client.contactName(c.fingerprint) }));
+  const list = h('div', { class: 'members' }, ...boxes.map(b => h('label', { class: 'check' }, b.box, b.label)));
+  if (!boxes.length) list.append(h('p', {}, t('group.noMoreContacts')));
+  dialog(t('group.add'), list, [
+    { label: t('cancel') },
+    ...boxes.length ? [{
+      label: t('group.addConfirm'), primary: true, onClick: async () => {
+        for (const b of boxes.filter(b => b.box.checked)) await client.addMember(chat.id, b.fp);
+        done();
+      },
+    }] : [],
+  ]);
 }
 
 function exportDialog(client: DcClient, done?: () => void) {

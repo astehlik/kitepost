@@ -947,6 +947,57 @@ export class DcClient extends EventTarget {
     return chat.id;
   }
 
+  /** Adds a member like core's add_contact_to_chat(): one message per member, with the keys for the newcomer. */
+  async addMember(chatId: string, fp: string) {
+    const chat = this.chats.get(chatId);
+    const c = this.contacts.get(fp);
+    if (!chat || chat.type !== 'group' || !c?.publicKey) throw new Error('unknown contact');
+    if (chat.left) throw new Error(t('error.notMember'));
+    if (chat.members.includes(fp)) return;
+    chat.members = [...chat.members, fp];
+    await this.saveChat(chat);
+    const members = this.memberContacts(chat);
+    const mid = await this.sendToChat(chat, members, {
+      text: `Member ${c.addr} added.`,
+      headers: [
+        { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+        ...this.groupHeaders(chat, members),
+        { name: 'Chat-Group-Member-Added', value: c.addr, kind: 'raw' },
+        { name: 'Chat-Group-Member-Added-Fpr', value: fp, kind: 'raw' },
+      ],
+      gossip: members.map(m => ({ addr: m.addr, key: m.publicKey })),
+    });
+    await this.addOwnInfo(chat, mid, t('info.youAdded', { addr: this.contactName(fp) }));
+  }
+
+  /** Removes a member like core's remove_contact_from_chat(); the removed member is told too. */
+  async removeMember(chatId: string, fp: string) {
+    const chat = this.chats.get(chatId);
+    const c = this.contacts.get(fp);
+    if (!chat || chat.type !== 'group' || !c) throw new Error('unknown contact');
+    if (chat.left) throw new Error(t('error.notMember'));
+    if (!chat.members.includes(fp)) return;
+    const before = this.memberContacts(chat);
+    chat.members = chat.members.filter(x => x !== fp);
+    await this.saveChat(chat);
+    const mid = await this.sendToChat(chat, before, {
+      text: `Member ${c.addr} was removed.`,
+      headers: [
+        { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+        ...this.groupHeaders(chat, this.memberContacts(chat)),
+        { name: 'Chat-Group-Member-Removed', value: c.addr, kind: 'raw' },
+        { name: 'Chat-Group-Member-Removed-Fpr', value: fp, kind: 'raw' },
+      ],
+    });
+    await this.addOwnInfo(chat, mid, t('info.youRemoved', { addr: this.contactName(fp) }));
+  }
+
+  private async addOwnInfo(chat: Chat, id: string, text: string) {
+    await this.saveMessage({ id, chatId: chat.id, from: 'self', text, timestamp: Date.now(), state: 'sent', info: true, attachments: [], reactions: {} });
+    chat.lastActivity = Date.now();
+    await this.saveChat(chat);
+  }
+
   // ---------------------------------------------------------------- receiving
 
   private parseContext() {
@@ -1053,7 +1104,10 @@ export class DcClient extends EventTarget {
     let chat: Chat | undefined;
     if (grpid) {
       chat = this.groupByGrpid(grpid);
-      const members = this.recipientFingerprints(p).filter(fp => fp !== this.config.fingerprint && this.contacts.has(fp));
+      const removed = p.headers['chat-group-member-removed'] ?? '';
+      // A removal also goes to the removed member.
+      const members = this.recipientFingerprints(p)
+        .filter(fp => fp !== this.config.fingerprint && this.contacts.has(fp) && !addrEq(this.contacts.get(fp)!.addr, removed));
       if (!chat) {
         if (!p.headers['chat-group-name']) return;
         chat = {

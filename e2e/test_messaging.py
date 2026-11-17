@@ -1000,6 +1000,60 @@ def test_group_without_members_accepts_messages(web, make_account):
     assert erin.get_chat_by_id(snap.chat_id).get_basic_snapshot().name == "Solo group"
 
 
+def wait_members(acc, chat_id, addrs):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while True:
+        members = {c.get_snapshot().address for c in acc.get_chat_by_id(chat_id).get_contacts() if c.id != 1}
+        if members == set(addrs):
+            return
+        assert time.monotonic() < deadline, f"members of {acc}: {members}"
+        time.sleep(0.2)
+
+
+def test_manage_group_members(web, dora, make_account):
+    page = web.page
+    erin = make_account("Erin")
+    page.get_by_role("button", name="Add contact").click()
+    page.locator("dialog textarea").fill(erin.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+
+    page.get_by_role("button", name="New group").click()
+    page.locator("dialog .field input").fill("Managed group")
+    page.locator("dialog .members label", has_text="Dora").locator("input").check()
+    page.get_by_role("button", name="Create", exact=True).click()
+    expect(page.locator(".info", has_text="Group created")).to_be_visible()
+    web_send(page, "hello Dora")
+    dora_chat = wait_text(dora.acc, "hello Dora").chat_id
+
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = page.locator("dialog").first
+    expect(settings.locator(".member-list li")).to_have_count(2)
+    settings.get_by_role("button", name="Add members").click()
+    adding = page.locator("dialog", has_text="Add members").last
+    expect(adding.locator(".members label")).to_have_text(["Phone", "Erin"])
+    adding.locator(".members label", has_text="Erin").locator("input").check()
+    adding.get_by_role("button", name="Add", exact=True).click()
+    expect(settings.locator(".member-list li")).to_have_count(3)
+    expect(page.locator(".info", has_text="You added Erin.")).to_be_visible()
+    wait_members(dora.acc, dora_chat, [addr_of(erin), web.addr])
+
+    settings.locator(".member-list li", has_text="Dora").get_by_role("button", name="Remove Dora").click()
+    page.locator("dialog", has_text="Remove member?").get_by_role("button", name="Remove", exact=True).click()
+    expect(settings.locator(".member-list li")).to_have_count(2)
+    expect(page.locator(".info", has_text="You removed Dora.")).to_be_visible()
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while dora.acc.get_chat_by_id(dora_chat).get_full_snapshot().self_in_group:
+        assert time.monotonic() < deadline, "Dora was not removed"
+        time.sleep(0.2)
+    settings.get_by_role("button", name="Close").click()
+
+    web_send(page, "only for Erin")
+    snap = wait_text(erin, "only for Erin")
+    assert erin.get_chat_by_id(snap.chat_id).get_basic_snapshot().name == "Managed group"
+    wait_members(erin, snap.chat_id, [web.addr])
+
+
 def chat_menu(page, title, action):
     page.locator(".chatlist li[data-chat]", has_text=title).first.click(button="right")
     page.locator(".menu").get_by_role("menuitem", name=action).click()
