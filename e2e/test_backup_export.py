@@ -5,7 +5,7 @@ from pathlib import Path
 from deltachat_rpc_client import DeltaChat
 from playwright.sync_api import expect
 
-from helpers import PNG, RELAY_IP, addr_of, message_action, open_chat, own_state, transport, wait_own_msg, wait_text, web_send
+from helpers import PNG, RELAY_IP, addr_of, message_action, open_chat, own_state, set_passphrase, transport, wait_own_msg, wait_text, web_send
 
 
 def test_export_restores_in_core(web, dora, rpc, tmp_path):
@@ -106,3 +106,34 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     finally:
         restored.stop_io()
         restored.remove()
+
+
+def test_nicknames_sync_between_browsers(web, dora, browser, tmp_path):
+    page = web.page
+    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Export backup").click()
+    with page.expect_download() as download:
+        page.get_by_role("button", name="Download").click()
+    backup = tmp_path / download.value.suggested_filename
+    download.value.save_as(backup)
+    page.keyboard.press("Escape")
+
+    other = browser.new_context().new_page()
+    set_passphrase(other)
+    other.locator('.import input[type="file"]').set_input_files(str(backup))
+    expect(other.locator(".status.ok")).to_be_visible()
+    other_entry = other.locator(".chatlist li[data-chat] strong", has_text="Dora")
+    expect(other_entry).to_have_text("Dora")
+
+    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator("dialog input").fill("Dora from work")
+    page.get_by_role("button", name="Save").click()
+    expect(other_entry).to_have_text("Dora from work")
+    open_chat(other, "Dora")
+    expect(other.locator(".chathead strong")).to_have_text("Dora from work")
+
+    other.locator(".chathead").get_by_role("button", name="Edit name").click()
+    other.locator("dialog input").fill("Dora at home")
+    other.get_by_role("button", name="Save").click()
+    expect(page.locator(".chatlist li[data-chat] strong", has_text="Dora")).to_have_text("Dora at home")
+    expect(page.locator(".chathead strong")).to_have_text("Dora at home")
