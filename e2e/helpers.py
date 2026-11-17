@@ -89,6 +89,13 @@ def configure(acc, name):
     return acc
 
 
+def mailbox_size(addr):
+    """Number of mails in the INBOX of `addr` on the local relay."""
+    out = subprocess.run(["docker", "exec", "kitepost-test-chatmail", "sh", "-c", f"ls /home/vmail/mail/{RELAY}/{addr}/cur /home/vmail/mail/{RELAY}/{addr}/new | grep -c ."],
+                         capture_output=True, text=True)
+    return int(out.stdout.strip() or 0)
+
+
 def relay_exec(*cmd):
     subprocess.run(["docker", "exec", "kitepost-test-chatmail", *cmd], check=True)
 

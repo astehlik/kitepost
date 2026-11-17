@@ -1107,11 +1107,7 @@ export class DcClient extends EventTarget {
       if (info === null) return;
       const content = p.headers['chat-content'];
       const pin = content === 'message-pinned' || content === 'message-unpinned' ? this.messageById(stripMid(p.headers['in-reply-to'])) : undefined;
-      // Like core's receive_imf(): only members change pins; Kitepost also keeps them to their chat.
-      const member = own || chat.left || chat.type !== 'group' || chat.members.includes(from);
-      if (pin && pin.chatId === chat.id && member && pinnable(pin)) {
-        await this.saveMessage({ ...pin, pinned: content === 'message-pinned' || undefined });
-      }
+      if (pin && pin.chatId === chat.id) await this.applyPin(p, pin, chat, from);
       await this.saveMessage({
         id: mid, chatId: chat.id, from, text: info, timestamp: this.timestamp(p),
         state: 'received', info: true, attachments: [], reactions: {}, replyTo: pin?.id,
@@ -1404,6 +1400,48 @@ export class DcClient extends EventTarget {
     for (const m of msgs) if (m.ephemeralTimer && !m.ephemeralAt) await this.saveMessage({ ...m, ephemeralAt: now + m.ephemeralTimer * 1000 });
   }
 
+  /** Like core's receive_imf(): only members change pins; Kitepost also keeps them to their chat. */
+  private async applyPin(p: ParsedMessage, target: Message, chat: Chat, from: string) {
+    const member = from === 'self' || chat.left || chat.type !== 'group' || chat.members.includes(from);
+    if (member && pinnable(target)) await this.saveMessage({ ...target, pinned: p.headers['chat-content'] === 'message-pinned' || undefined });
+  }
+
+  /**
+   * Kitepost before pinning stored pin messages without their target and does not fetch mail
+   * twice, so this applies them once from the copies still on the server.
+   */
+  private async repairPins(imap: ImapClient) {
+    const found: { p: ParsedMessage; mid: string; from: string }[] = [];
+    // Pin messages carry no attachment; this leaves out the large mails.
+    await imap.fetchUids(await imap.searchSmall(65_536), async m => {
+      let p: ParsedMessage;
+      try {
+        p = parseMessage(m.body, this.parseContext());
+      } catch {
+        return;
+      }
+      const content = p.headers['chat-content'];
+      const mid = stripMid(p.headers['message-id']);
+      if ((content !== 'message-pinned' && content !== 'message-unpinned') || !mid || !p.encrypted || !p.signature) return;
+      const own = addrEq(p.from.addr, this.config.addr);
+      if (own ? p.signature !== this.config.fingerprint : !this.contacts.get(p.signature)) return;
+      found.push({ p, mid, from: own ? 'self' : p.signature });
+    });
+    found.sort((a, b) => this.timestamp(a.p) - this.timestamp(b.p));
+    for (const { p, mid, from } of found) {
+      const target = this.messageById(stripMid(p.headers['in-reply-to']));
+      const chat = target && this.chats.get(target.chatId);
+      if (!target || !chat) continue;
+      await this.applyPin(p, target, chat, from);
+      const stored = this.messageById(mid);
+      if (stored && stored.chatId === chat.id) {
+        await this.saveMessage({ ...stored, info: true, text: this.systemInfo(p, from) ?? stored.text, replyTo: target.id, quote: undefined, attachments: [] });
+      }
+    }
+    this.config.pinsRepaired = true;
+    await this.saveConfig();
+  }
+
   /** Sets disappearing messages for everyone in the chat, like core's set_ephemeral_timer(). */
   async setEphemeralTimer(chatId: string, seconds: number) {
     const chat = this.chats.get(chatId);
@@ -1485,6 +1523,7 @@ export class DcClient extends EventTarget {
         }
         this.setStatus('connected');
         backoff = 2000;
+        if (!this.config.pinsRepaired) await this.repairPins(imap);
         while (!signal.aborted) {
           const toDelete: number[] = [];
           await this.flushSeen(imap);

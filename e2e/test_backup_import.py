@@ -1,6 +1,8 @@
 """A Delta Chat core profile imported into the web client from a backup, then used on both devices."""
 
 import re
+import sqlite3
+import tarfile
 import time
 from types import SimpleNamespace
 
@@ -9,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, message_action, open_chat, own_state, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, own_state, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -248,6 +250,17 @@ def test_disappearing_messages_are_imported(imported):
     expect(page.get_by_role("button", name="Disappearing messages: 1 week")).to_be_visible()
 
 
+def test_pins_from_the_phone(imported):
+    page, phone = imported.page, imported.phone
+    open_chat(page, "Bob")
+    reply = page.locator(".msg.in", has_text="reply from bob")
+    phone._rpc.set_pinned_message_state(phone.id, imported.reply.id, False)
+    expect(page.locator(".messages .info", has_text="You unpinned a message.")).to_be_visible()
+    expect(reply.get_by_role("img", name="Pinned")).to_have_count(0)
+    phone._rpc.set_pinned_message_state(phone.id, imported.reply.id, True)
+    expect(reply.get_by_role("img", name="Pinned")).to_be_visible()
+
+
 def test_saved_copies_are_imported(imported):
     page = imported.page
     open_chat(page, "Bob")
@@ -256,3 +269,46 @@ def test_saved_copies_are_imported(imported):
     message_action(page, own, "Remove from saved")
     open_chat(page, "Saved messages")
     expect(page.locator(".messages .msg", has_text="hello from alice")).to_have_count(0)
+
+
+@pytest.mark.local_relay
+def test_pins_from_before_kitepost_knew_them_are_repaired(page, make_account, tmp_path):
+    phone = make_account("Alice Phone")
+    bob = make_account("Bob")
+    bob.secure_join(phone.get_qr_code())
+    wait_event(phone, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+    bob.get_chat_by_id(bob.get_contact_by_addr(addr_of(phone)).create_chat().id).send_text("pin me later")
+    pinned = wait_text(phone, "pin me later")
+    # With a second device, as in real use, core keeps a copy of its own messages in INBOX.
+    phone.set_config("bcc_self", "1")
+    phone._rpc.set_pinned_message_state(phone.id, pinned.id, True)
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while not mailbox_size(addr_of(phone)):
+        assert time.monotonic() < deadline, "the copy of the pin message did not reach the server"
+        time.sleep(0.2)
+    phone.stop_io()
+    phone.export_backup(str(tmp_path), "")
+    phone.start_io()
+
+    # The state Kitepost kept before it knew pins: nothing pinned, the pin message as a plain one.
+    backup = next(tmp_path.glob("*.tar"))
+    with tarfile.open(backup) as tar:
+        tar.extractall(tmp_path / "old", filter="data")
+    db = sqlite3.connect(tmp_path / "old" / "dc_database_backup.sqlite")
+    db.execute("UPDATE msgs SET pinned = 0")
+    assert db.execute("UPDATE msgs SET param = '' WHERE txt = 'You pinned a message.'").rowcount == 1
+    db.commit()
+    db.close()
+    old = tmp_path / "old.tar"
+    with tarfile.open(old, "w") as tar:
+        for f in sorted((tmp_path / "old").rglob("*")):
+            tar.add(f, arcname=str(f.relative_to(tmp_path / "old")), recursive=False)
+
+    set_passphrase(page)
+    page.locator('.import input[type="file"]').set_input_files(str(old))
+    expect(page.locator(".status.ok")).to_be_visible()
+    page.locator(".chatlist li[data-chat]", has_text="Bob").click()
+    expect(page.locator(".msg.in", has_text="pin me later").get_by_role("img", name="Pinned")).to_be_visible()
+    expect(page.locator(".messages .info", has_text="You pinned a message.")).to_be_visible()
+    expect(page.locator(".msg.out", has_text="You pinned a message.")).to_have_count(0)
+

@@ -17,6 +17,8 @@ export interface Config {
   bccSelf?: boolean;
   /** Request and send read receipts, on unless turned off, like core's mdns_enabled. */
   readReceipts?: boolean;
+  /** Pins received before Kitepost knew them were applied from the mail still on the server. */
+  pinsRepaired?: boolean;
   /** What notifications show, like Delta Chat's setting; everything when unset. */
   notifyDetails?: 'sender' | 'none';
   /** A backup was downloaded or another device has the profile, so losing the browser loses nothing. */

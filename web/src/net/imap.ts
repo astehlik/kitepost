@@ -104,7 +104,22 @@ export class ImapClient {
       const m = /^\* SEARCH(.*)$/i.exec(r.line);
       if (m) uids.push(...m[1].trim().split(/\s+/).filter(Boolean).map(Number));
     }
-    const pending = uids.filter(u => u > afterUid).sort((a, b) => a - b);
+    await this.fetchUids(uids.filter(u => u > afterUid), onMessage);
+  }
+
+  /** UIDs of messages smaller than `maxBytes`. */
+  async searchSmall(maxBytes: number): Promise<number[]> {
+    const uids: number[] = [];
+    for (const r of await this.command(`UID SEARCH SMALLER ${maxBytes}`)) {
+      const m = /^\* SEARCH(.*)$/i.exec(r.line);
+      if (m) uids.push(...m[1].trim().split(/\s+/).filter(Boolean).map(Number));
+    }
+    return uids;
+  }
+
+  /** Fetches full messages in batches, in UID order. */
+  async fetchUids(uids: number[], onMessage: (m: FetchedMessage) => Promise<void>) {
+    const pending = [...uids].sort((a, b) => a - b);
     for (let i = 0; i < pending.length; i += 20) {
       const batch = pending.slice(i, i + 20);
       const resp = await this.command(`UID FETCH ${batch.join(',')} (UID BODY.PEEK[])`);
