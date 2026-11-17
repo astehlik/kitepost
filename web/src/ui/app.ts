@@ -1511,7 +1511,11 @@ function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
     ? [h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), h('div', { class: 'fingerprints' },
       ...fingerprint(client.config.displayName || t('me'), client.config.fingerprint), ...fingerprint(client.contactName(c.fingerprint), c.fingerprint))]
     : [h('p', {}, t(chat.type === 'self' ? 'e2e.self' : 'e2e.group'))];
-  const consequence = c ? t('chat.deleteKeepContact', { name: client.contactName(c.fingerprint) }) : chat.type === 'group' ? t('chat.deleteKeepGroup') : '';
+  const consequence = c ? t('chat.deleteKeepContact', { name: client.contactName(c.fingerprint) }) : chat.type === 'group' && !chat.left ? t('chat.deleteKeepGroup') : '';
+  const confirmLeave = () => dialog(t('group.leaveTitle'), h('p', {}, t('group.leaveText')), [
+    { label: t('cancel') },
+    { label: t('group.leave'), primary: true, onClick: async () => { await client.leaveGroup(chat.id); dlg.close(); } },
+  ]);
   const confirmDelete = () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteUndo')), [
     { label: t('cancel') },
     { label: t('delete'), primary: true, onClick: async () => { await client.deleteChat(chat.id); dlg.close(); deleted(); } },
@@ -1520,6 +1524,9 @@ function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
     nickname && c ? field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })) : null,
     chat.type === 'group' && !chat.left ? membersSection(client, chat) : null,
     h('section', {}, h('h3', {}, t('e2e.title')), ...encryption),
+    chat.type === 'group' && !chat.left ? h('section', {}, h('h3', {}, t('group.leave')),
+      h('p', {}, t('group.leaveText')),
+      h('button', { class: 'danger', onclick: confirmLeave }, t('group.leave'))) : null,
     chat.type === 'self' ? null : h('section', {}, h('h3', {}, t('chat.deleteChat')),
       h('p', {}, [t(client.config.bccSelf ? 'chat.deleteEverywhere' : 'chat.deleteHere'), consequence].filter(Boolean).join(' ')),
       h('button', { class: 'danger', onclick: confirmDelete }, t('chat.deleteChat')))),

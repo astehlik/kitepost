@@ -242,6 +242,9 @@ export const de: Record<keyof typeof en, string> = {
   'group.removeTitle': 'Mitglied entfernen?',
   'group.removeConfirm': 'Entfernen',
   'group.removeText': '{name} bekommt keine neuen Nachrichten dieser Gruppe mehr. Alle Mitglieder sehen, dass du {name} entfernt hast.',
+  'group.leave': 'Gruppe verlassen',
+  'group.leaveTitle': 'Gruppe verlassen?',
+  'group.leaveText': 'Du bekommst keine Nachrichten mehr daraus und kannst nicht mehr darin schreiben. Der Chat mit seinen Nachrichten bleibt hier, bis du ihn löschst, und die anderen Mitglieder sehen, dass du gegangen bist.',
 
   'contact.nicknameHint': 'Nur du siehst diesen Namen, auf allen deinen Geräten. Leer lassen, um wieder „{name}“ zu verwenden.',
   'link.title': 'Link öffnen?',
@@ -298,6 +301,7 @@ export const de: Record<keyof typeof en, string> = {
   'info.joinedGroup': '{name} ist der Gruppe beigetreten.',
   'info.removedYou': '{name} hat dich aus der Gruppe entfernt.',
   'info.removed': '{addr} wurde von {name} entfernt.',
+  'info.left': '{name} hat die Gruppe verlassen.',
   'info.added': '{addr} wurde von {name} hinzugefügt.',
   'info.addedYou': '{name} hat dich zur Gruppe hinzugefügt.',
   'info.youAdded': 'Du hast {addr} hinzugefügt.',

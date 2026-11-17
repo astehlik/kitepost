@@ -1054,6 +1054,42 @@ def test_manage_group_members(web, dora, make_account):
     wait_members(erin, snap.chat_id, [web.addr])
 
 
+def test_leave_group(web, dora, make_account):
+    page = web.page
+    erin = make_account("Erin")
+    page.get_by_role("button", name="Add contact").click()
+    page.locator("dialog textarea").fill(erin.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+    page.get_by_role("button", name="New group").click()
+    page.locator("dialog .field input").fill("Leaving group")
+    for name in ("Dora", "Erin"):
+        page.locator("dialog .members label", has_text=name).locator("input").check()
+    page.get_by_role("button", name="Create", exact=True).click()
+    expect(page.locator(".info", has_text="Group created")).to_be_visible()
+    web_send(page, "hello both")
+    dora_chat = dora.acc.get_chat_by_id(wait_text(dora.acc, "hello both").chat_id)
+    erin_chat = erin.get_chat_by_id(wait_text(erin, "hello both").chat_id)
+
+    erin_chat.leave()
+    expect(page.locator(".info", has_text="Erin left the group.")).to_be_visible()
+    expect(page.locator(".chathead small")).to_have_text("2 members")
+
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = page.locator("dialog").first
+    settings.get_by_role("button", name="Leave group").click()
+    page.locator("dialog", has_text="Leave group?").get_by_role("button", name="Leave group").click()
+    expect(page.locator("dialog")).to_have_count(0)
+    expect(page.locator(".info", has_text="You left the group.")).to_be_visible()
+    expect(page.locator(".composer textarea")).to_be_disabled()
+    wait_members(dora.acc, dora_chat.id, [])
+
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    expect(settings.get_by_role("button", name="Leave group")).to_have_count(0)
+    expect(settings.locator(".member-list")).to_have_count(0)
+    expect(settings).not_to_contain_text("You stay a member")
+
+
 def chat_menu(page, title, action):
     page.locator(".chatlist li[data-chat]", has_text=title).first.click(button="right")
     page.locator(".menu").get_by_role("menuitem", name=action).click()

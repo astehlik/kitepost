@@ -992,6 +992,25 @@ export class DcClient extends EventTarget {
     await this.addOwnInfo(chat, mid, t('info.youRemoved', { addr: this.contactName(fp) }));
   }
 
+  /** Leaves a group like core's remove_contact_from_chat() with oneself; the chat and its messages stay. */
+  async leaveGroup(chatId: string) {
+    const chat = this.chats.get(chatId);
+    if (!chat || chat.type !== 'group') throw new Error('unknown chat');
+    if (chat.left) return;
+    const members = this.memberContacts(chat);
+    const mid = await this.sendToChat(chat, members, {
+      text: `Member ${this.config.addr} was removed.`,
+      headers: [
+        { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+        ...this.groupHeaders(chat, members),
+        { name: 'Chat-Group-Member-Removed', value: this.config.addr, kind: 'raw' },
+        { name: 'Chat-Group-Member-Removed-Fpr', value: this.config.fingerprint, kind: 'raw' },
+      ],
+    });
+    chat.left = true;
+    await this.addOwnInfo(chat, mid, t('info.youLeft'));
+  }
+
   private async addOwnInfo(chat: Chat, id: string, text: string) {
     await this.saveMessage({ id, chatId: chat.id, from: 'self', text, timestamp: Date.now(), state: 'sent', info: true, attachments: [], reactions: {} });
     chat.lastActivity = Date.now();
@@ -1339,7 +1358,8 @@ export class DcClient extends EventTarget {
           await this.addInfo(chat.id, t('info.removedYou', { name: this.contactName(sender.fingerprint) }));
         } else {
           for (const fp of members) if (addrEq(this.contacts.get(fp)?.addr ?? '', removed)) members.delete(fp);
-          await this.addInfo(chat.id, t('info.removed', { addr: removed, name: this.contactName(sender.fingerprint) }));
+          const name = this.contactName(sender.fingerprint);
+          await this.addInfo(chat.id, addrEq(removed, sender.addr) ? t('info.left', { name }) : t('info.removed', { addr: removed, name }));
         }
       }
       if (added) {

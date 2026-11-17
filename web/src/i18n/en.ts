@@ -240,6 +240,9 @@ export const en = {
   'group.removeTitle': 'Remove member?',
   'group.removeConfirm': 'Remove',
   'group.removeText': '{name} no longer gets new messages of this group. All members see that you removed {name}.',
+  'group.leave': 'Leave group',
+  'group.leaveTitle': 'Leave group?',
+  'group.leaveText': 'You no longer get its messages and cannot write in it any more. The chat and its messages stay here until you delete it, and the other members see that you left.',
 
   'contact.nicknameHint': 'Only you see this name, on all your devices. Leave it empty to use “{name}” again.',
   'link.title': 'Open link?',
@@ -296,6 +299,7 @@ export const en = {
   'info.joinedGroup': '{name} joined the group.',
   'info.removedYou': '{name} removed you from the group.',
   'info.removed': '{addr} was removed by {name}.',
+  'info.left': '{name} left the group.',
   'info.added': '{addr} was added by {name}.',
   'info.addedYou': '{name} added you to the group.',
   'info.youAdded': 'You added {addr}.',
