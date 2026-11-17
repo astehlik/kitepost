@@ -847,6 +847,11 @@ export class DcClient extends EventTarget {
     return this.messages.get(SELF_CHAT)?.find(x => x.savedFrom === m.id);
   }
 
+  /** The original of a copy in "Saved messages" while it exists, like core's get_original_msg_id(). */
+  originalOf(m: Message): Message | undefined {
+    return m.savedFrom ? this.messageById(m.savedFrom) : undefined;
+  }
+
   /** Copies a message to "Saved messages" and tells the own other devices, like core's save_msgs(). */
   async saveToSelf(chatId: string, msgId: string) {
     const orig = this.messages.get(chatId)?.find(m => m.id === msgId);
@@ -1108,8 +1113,9 @@ export class DcClient extends EventTarget {
     this.messages.set(m.chatId, (this.messages.get(m.chatId) ?? []).filter(x => x.id !== id));
     await this.store.delete(`msg/${m.chatId}/${id}`);
     this.changed(`messages:${m.chatId}`);
-    const orig = m.savedFrom && this.messageById(m.savedFrom);
+    const orig = this.originalOf(m);
     if (orig) this.changed(`messages:${orig.chatId}`);
+    if (this.savedCopy(m)) this.changed(`messages:${SELF_CHAT}`);
   }
 
   private async senderContact(p: ParsedMessage): Promise<Contact | undefined> {

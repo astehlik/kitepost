@@ -188,13 +188,13 @@ def test_nicknames_sync_between_devices(imported):
     open_chat(page, "Bobby")
     page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     page.locator("dialog input").fill("Bob from work")
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
     expect(entry).to_have_text("Bob from work")
     wait_contact_name(bob, "Bob from work")
 
     page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     page.locator("dialog input").fill("")
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
     expect(entry).to_have_text("Bob")
     wait_contact_name(bob, "")
 
@@ -241,7 +241,7 @@ def test_saving_syncs_between_devices(imported, rpc):
     bob.click()
     reply = page.locator(".msg.in", has_text="reply from bob")
     message_action(page, reply, "Save")
-    expect(reply.get_by_role("img", name="Saved")).to_be_visible()
+    expect(reply.get_by_role("button", name="Show in saved messages")).to_be_visible()
     saved_on_phone(phone, imported.reply.id, True)
     copy = phone.get_message_by_id(phone.get_message_by_id(imported.reply.id).get_snapshot().saved_message_id).get_snapshot()
     assert copy.chat_id == imported.phone_saved.id and copy.text == "reply from bob", copy
@@ -250,7 +250,7 @@ def test_saving_syncs_between_devices(imported, rpc):
 
     bob.click()
     message_action(page, reply, "Remove from saved")
-    expect(reply.get_by_role("img", name="Saved")).to_have_count(0)
+    expect(reply.get_by_role("button", name="Show in saved messages")).to_have_count(0)
     saved_on_phone(phone, imported.reply.id, False)
 
     imported.bob_chat.send_text("saved on the phone")
@@ -258,7 +258,7 @@ def test_saving_syncs_between_devices(imported, rpc):
     incoming = page.locator(".msg.in", has_text="saved on the phone")
     expect(incoming).to_be_visible()
     rpc.save_msgs(phone.id, [on_phone.id])
-    expect(incoming.get_by_role("img", name="Saved")).to_be_visible()
+    expect(incoming.get_by_role("button", name="Show in saved messages")).to_be_visible()
     message_action(page, incoming, "Remove from saved")
     saved_on_phone(phone, on_phone.id, False)
 
@@ -315,7 +315,7 @@ def test_saved_copies_are_imported(imported):
     page = imported.page
     open_chat(page, "Bob")
     own = page.locator(".msg.out", has_text="hello from alice")
-    expect(own.get_by_role("img", name="Saved")).to_be_visible()
+    expect(own.get_by_role("button", name="Show in saved messages")).to_be_visible()
     message_action(page, own, "Remove from saved")
     open_chat(page, "Saved messages")
     expect(page.locator(".messages .msg", has_text="hello from alice")).to_have_count(0)

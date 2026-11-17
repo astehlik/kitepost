@@ -67,7 +67,7 @@ def test_profile_dialog_can_be_cancelled(web):
 def test_read_receipts_can_be_turned_off(web, dora):
     web.page.get_by_role("button", name="Edit profile").click()
     web.page.get_by_label("Send read receipts").uncheck()
-    web.page.get_by_role("button", name="Save").click()
+    web.page.get_by_role("button", name="Save", exact=True).click()
 
     msg = dora.chat.send_text("read silently")
     expect(web.page.locator(".msg.in", has_text="read silently")).to_be_visible()
@@ -766,14 +766,14 @@ def test_notifications_show_sender_and_content(web, dora, tmp_path):
 
     page.get_by_role("button", name="Edit profile").click()
     page.locator("dialog").get_by_label("Notifications show").select_option(label="Sender only")
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
     group.send_text("secret in the group")
     note = next_note(page, 5)
     assert (note["title"], note["body"]) == ("Notify group", "Dora: New message"), note
 
     page.get_by_role("button", name="Edit profile").click()
     page.locator("dialog").get_by_label("Notifications show").select_option(label="No details")
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
     dora.chat.send_text("secret")
     note = next_note(page, 6)
     assert note == {"title": "Kitepost", "body": "New message", "tag": note["tag"], "icon": False, "renotify": True}, note
@@ -960,7 +960,7 @@ def test_archive_and_pin_chats(web, dora):
 def set_nickname(page, name):
     page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     page.locator("dialog input").fill(name)
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
 
 
 def test_contact_nickname(web, dora):
@@ -981,7 +981,7 @@ def test_contact_nickname(web, dora):
     title.click()
     expect(page.locator("dialog")).to_contain_text("“Dora Renamed”")
     page.locator("dialog input").fill("")
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
     expect(title).to_have_text("Dora Renamed")
 
     reload_and_unlock(page)
@@ -1016,6 +1016,39 @@ def test_chat_settings_explain_deletion(web, dora):
     expect(settings).to_have_count(0)
 
 
+def test_saved_copy_links_to_its_original(web, dora):
+    page = web.page
+    dora.chat.send_text("keep this")
+    for i in range(30):
+        dora.chat.send_text(f"filler {i}")
+    expect(page.locator(".msg.in", has_text="filler 29")).to_be_visible()
+    original = page.locator(".msg.in", has_text="keep this")
+    message_action(page, original, "Save")
+    open_chat(page, "Saved messages")
+    page.locator(".chathead").get_by_role("button", name="About saved messages").click()
+    expect(page.locator("dialog")).to_contain_text("a copy of it here")
+    page.locator("dialog").get_by_role("button", name="Close").click()
+
+    copy = page.locator(".msg", has_text="keep this")
+    expect(copy.locator(".origin")).to_have_text("Dora")
+    copy.locator(".origin").click()
+    expect(page.locator(".chathead strong")).to_have_text("Dora")
+    expect(original).to_be_in_viewport()
+    original.get_by_role("button", name="Show in saved messages").click()
+    expect(page.locator(".chathead strong")).to_have_text("Saved messages")
+    expect(copy).to_be_in_viewport()
+    copy.locator(".origin").click()
+
+    message_action(page, original, "Delete message")
+    page.locator("dialog").get_by_role("button", name="Delete for me").click()
+    expect(original).to_have_count(0)
+    open_chat(page, "Saved messages")
+    expect(copy).to_be_visible()
+    expect(copy.locator(".origin")).to_have_count(0)
+    page.locator(".msg", has_text="keep this").locator(".actions").get_by_role("button", name="More").click()
+    expect(page.get_by_role("menuitem", name="Show in chat")).to_have_count(0)
+
+
 def test_last_seen(web, dora):
     page = web.page
     entry = page.locator(".chatlist li[data-chat]", has_text="Dora")
@@ -1042,7 +1075,7 @@ def test_disappearing_messages_set_in_web(web, dora):
     page = web.page
     chat_menu(page, "Dora", "Disappearing messages")
     page.locator("dialog select").select_option(label="1 hour")
-    page.get_by_role("button", name="Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
     expect(page.locator(".messages .info", has_text="You set disappearing messages to 1 hour.")).to_be_visible()
     expect(page.get_by_role("button", name="Disappearing messages: 1 hour")).to_be_visible()
     deadline = time.monotonic() + EVENT_TIMEOUT
@@ -1096,7 +1129,7 @@ def test_date_format(web, dora):
     def choose(value):
         page.get_by_role("button", name="Edit profile").click()
         page.locator("dialog").get_by_label("Date format").select_option(value)
-        page.get_by_role("button", name="Save").click()
+        page.get_by_role("button", name="Save", exact=True).click()
         open_chat(page, "Dora")
 
     def sent():
@@ -1120,7 +1153,7 @@ def test_date_format(web, dora):
 def test_rename_updates_header(web):
     web.page.get_by_role("button", name="Edit profile").click()
     web.page.locator("dialog .field input").first.fill("Webby Renamed")
-    web.page.get_by_role("button", name="Save").click()
+    web.page.get_by_role("button", name="Save", exact=True).click()
     expect(web.page.locator(".profile strong")).to_have_text("Webby Renamed")
 
 

@@ -147,12 +147,17 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .msg .text a { color: inherit; text-decoration: underline; }
 .link-target { display: block; overflow-wrap: anywhere; font-size: .85rem; }
 .msg .sender { font-size: .8rem; font-weight: 600; color: var(--accent); }
+.msg .origin { display: flex; align-items: center; gap: .3rem; max-width: 100%; margin: 0 0 .2rem; padding: 0; border: 0; background: none; color: var(--accent); font-size: .8rem; font-weight: 600; cursor: pointer; }
+.msg .origin svg { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.msg .origin span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg .meta { font-size: .72rem; color: var(--muted); text-align: right; }
 .msg .meta .state { display: inline-flex; margin-left: .25rem; vertical-align: -.2em; }
 .msg .meta .state svg { width: 1.35em; height: 1.35em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .msg .meta .state[data-state="read"] { color: var(--accent); }
 .msg .meta .state[data-state="failed"] { color: var(--danger); }
 .msg .meta .mark { display: inline-flex; margin-right: .3rem; vertical-align: -.2em; }
+.msg .meta button.mark { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.msg .meta button.mark:hover { color: var(--accent); }
 .msg .meta .mark svg { width: 1.2em; height: 1.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .pinbar { display: flex; align-items: center; gap: .7rem; padding: .4rem 1rem; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: var(--panel); color: var(--text); text-align: left; }
 .pinbar[hidden] { display: none; }

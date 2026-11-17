@@ -527,7 +527,7 @@ function startMain(client: DcClient, initialChat?: string) {
     const parent = m.quote !== undefined ? repliedTo(chat, m) : undefined;
     return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.pinned, !!client.savedCopy(m), m.ephemeralTimer, m.reactions, formatTime(m.timestamp),
       m.attachments.map(a => [a.filename, a.mime, a.data_b64.length]), m.quote, parent && authorName(parent.from),
-      chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
+      chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '', originChat(m)?.id, originChat(m) && client.chatTitle(originChat(m)!)]);
   }
 
   function deleteDialog(chat: Chat, msgs: Message[]) {
@@ -565,6 +565,40 @@ function startMain(client: DcClient, initialChat?: string) {
     dialog(t('chat.messageInfo'), h('dl', { class: 'info-list' }, ...rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])), [{ label: t('close') }]);
   }
 
+  function originChat(m: Message): Chat | undefined {
+    const orig = client.originalOf(m);
+    return orig && client.chats.get(orig.chatId);
+  }
+
+  function showOriginal(m: Message) {
+    const orig = client.originalOf(m);
+    if (!orig) return;
+    open(orig.chatId);
+    jumpTo(orig.id);
+  }
+
+  function showSaved(m: Message) {
+    const copy = client.savedCopy(m);
+    if (!copy) return;
+    open(copy.chatId);
+    jumpTo(copy.id);
+  }
+
+  function savedMark(m: Message): Element | null {
+    if (!client.savedCopy(m)) return null;
+    const b = h('button', { type: 'button', class: 'mark', title: t('mark.showSaved'), 'aria-label': t('mark.showSaved'), onclick: () => showSaved(m) });
+    b.append(icon(ICONS.star));
+    return b;
+  }
+
+  function originView(m: Message): Element | null {
+    const chat = originChat(m);
+    if (!chat) return null;
+    const b = h('button', { type: 'button', class: 'origin', title: t('chat.showOriginal'), onclick: () => showOriginal(m) }, h('span', {}, client.chatTitle(chat)));
+    b.prepend(icon(ICONS.forward));
+    return b;
+  }
+
   function jumpTo(id: string) {
     const node = rendered.get(id)?.node;
     if (!node) return;
@@ -600,10 +634,11 @@ function startMain(client: DcClient, initialChat?: string) {
     const more = iconButton(ICONS.more, t('chat.more'), ev => openMenu(chat, m, more, undefined, (ev as MouseEvent).detail === 0));
     return h('div', { class: `msg ${out ? 'out' : 'in'}`, 'data-id': m.id },
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
+      originView(m),
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, ...linkified(m.text)) : null,
-      h('div', { class: 'meta' }, m.ephemeralTimer ? metaMark(ICONS.timer, 'mark.ephemeral') : null, client.savedCopy(m) ? metaMark(ICONS.star, 'mark.saved') : null, m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
+      h('div', { class: 'meta' }, m.ephemeralTimer ? metaMark(ICONS.timer, 'mark.ephemeral') : null, savedMark(m), m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
@@ -629,6 +664,7 @@ function startMain(client: DcClient, initialChat?: string) {
       one && canEdit(chat, one) && { label: t('chat.edit'), icon: ICONS.edit, run: done(() => startEdit?.(one)) },
       canResend(chat, msgs) && { label: t('chat.resend'), icon: ICONS.resend, run: done(() => client.resend(chat.id, [...msgs].sort(byChatOrder).map(m => m.id)).catch(errorDialog)) },
       one && { label: t('chat.messageInfo'), icon: ICONS.info, run: done(() => infoDialog(one)) },
+      one && originChat(one) && { label: t('chat.showOriginal'), icon: ICONS.forward, run: done(() => showOriginal(one)) },
       one && pinnable(one) && !chat.left && !chat.isRequest && {
         label: t(one.pinned ? 'chat.unpin' : 'chat.pin'), icon: ICONS.pin, run: done(() => client.setPinned(chat.id, one.id, !one.pinned).catch(errorDialog)),
       },
@@ -837,7 +873,12 @@ function startMain(client: DcClient, initialChat?: string) {
       h('button', { type: 'button', class: 'who', title: t('chat.settings'), onclick: settings }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
       chat.ephemeralTimer ? h('button', { class: 'icon-button', title: timerLabel, 'aria-label': timerLabel, onclick: () => timerDialog(chat) }, icon(ICONS.timer)) : null,
       chat.type === 'group' ? h('button', { onclick: busyClick(() => showInvite(client, chat.id)) }, t('invite.link')) : null,
+      chat.type === 'self' ? h('button', { class: 'icon-button', title: t('saved.about'), 'aria-label': t('saved.about'), onclick: savedInfo }, icon(ICONS.info)) : null,
       h('button', { class: 'icon-button edit-chat', title: t('chat.settings'), 'aria-label': t('chat.settings'), onclick: settings }, icon(ICONS.edit)))];
+  }
+
+  function savedInfo() {
+    dialog(t('chat.saved'), h('div', {}, ...(['saved.notes', 'saved.copies', 'saved.sync'] as const).map(k => h('p', {}, t(k)))), [{ label: t('close') }]);
   }
 
   const footerKey = (chat: Chat) => JSON.stringify([chat.isRequest, chat.left]);
@@ -1195,7 +1236,7 @@ function stateMark(state: Exclude<Message['state'], 'received'>): Element {
   return mark;
 }
 
-function metaMark(d: string, key: 'mark.pinned' | 'mark.saved' | 'mark.pinnedChat' | 'mark.ephemeral'): Element {
+function metaMark(d: string, key: 'mark.pinned' | 'mark.pinnedChat' | 'mark.ephemeral'): Element {
   const label = t(key);
   const mark = h('span', { class: 'mark', role: 'img', 'aria-label': label, title: label });
   mark.append(icon(d));
