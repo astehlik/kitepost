@@ -576,7 +576,9 @@ function startMain(client: DcClient, initialChat?: string) {
 
   function messageView(chat: Chat, m: Message, urls: string[]): Element {
     if (m.info) {
-      return m.replyTo ? h('button', { type: 'button', class: 'info linked', onclick: () => jumpTo(m.replyTo!) }, m.text) : h('div', { class: 'info' }, m.text);
+      return m.replyTo
+        ? h('button', { type: 'button', class: 'info linked', 'data-id': m.id, onclick: () => jumpTo(m.replyTo!) }, m.text)
+        : h('div', { class: 'info', 'data-id': m.id }, m.text);
     }
     const out = m.from === 'self';
     const state = out && m.state !== 'received' ? stateMark(m.state) : null;
@@ -606,7 +608,7 @@ function startMain(client: DcClient, initialChat?: string) {
   /** Android's message actions: all for one message, those that make sense for several. */
   function messageActions(chat: Chat, msgs: Message[]): MsgAction[] {
     const one = msgs.length === 1 ? msgs[0] : undefined;
-    const canReact = one && !chat.left && !chat.isRequest && one.id.includes('@');
+    const canReact = one && !one.info && !chat.left && !chat.isRequest && one.id.includes('@');
     const done = <T>(f: () => T) => () => { clearSelection(); return f(); };
     const text = copyText(msgs);
     const actions: (MsgAction | false | undefined)[] = [
@@ -734,7 +736,7 @@ function startMain(client: DcClient, initialChat?: string) {
   }
 
   function listenForSelection(list: HTMLElement) {
-    const msgOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>('.msg[data-id]');
+    const msgOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>('.msg[data-id], .info[data-id]');
     let press: { timer: number; x: number; y: number } | undefined;
     let longPressed = false;
     let touch = false;

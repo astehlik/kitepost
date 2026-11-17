@@ -199,6 +199,29 @@ def test_select_several_messages(web, dora):
     expect(page.locator(".msg.selected")).to_have_count(0)
 
 
+def test_info_messages_can_be_selected_and_deleted(web, dora):
+    page = web.page
+    established = page.locator(".messages .info", has_text="Secure connection established")
+    establishing = page.locator(".messages .info", has_text="Establishing a secure connection")
+    established.click(button="right")
+    menu = page.locator(".menu")
+    expect(menu.get_by_role("menuitem")).to_have_text(["Message info", "Copy text", "Delete message", "Select"])
+    menu.get_by_role("menuitem", name="Select").click()
+    expect(established).to_have_class(re.compile("selected"))
+    establishing.click()
+    expect(page.locator(".selbar")).to_contain_text("2 selected")
+    page.locator(".selbar").get_by_role("button", name="Delete message").click()
+    dialog = page.locator("dialog")
+    expect(dialog.get_by_role("button", name="Delete for everyone")).to_have_count(0)
+    dialog.get_by_role("button", name="Delete for me").click()
+    expect(established).to_have_count(0)
+    expect(establishing).to_have_count(0)
+    reload_and_unlock(page)
+    open_chat(page, "Dora")
+    expect(page.locator(".chathead strong")).to_have_text("Dora")
+    expect(established).to_have_count(0)
+
+
 def test_long_press_selects_on_narrow_screens(web, dora):
     page = web.page
     page.set_viewport_size({"width": 390, "height": 700})

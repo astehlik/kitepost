@@ -254,6 +254,8 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .messages.selecting .msg .actions { display: none; }
 .msg.selected { outline: 2px solid var(--accent); outline-offset: 2px; background: color-mix(in srgb, var(--accent) 14%, var(--in)); }
 .msg.out.selected { background: color-mix(in srgb, var(--accent) 14%, var(--out)); }
+.messages.selecting .info { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.info.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
 .selbar { display: none; align-items: center; gap: .25rem; min-height: 60px; padding: .45rem .6rem; background: var(--panel); border-bottom: 1px solid var(--border); }
 .pane.selecting .chathead { display: none; }
 .pane.selecting .selbar { display: flex; }
