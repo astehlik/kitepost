@@ -340,3 +340,25 @@ def test_pins_from_before_kitepost_knew_them_are_repaired(page, make_account, tm
     expect(page.locator(".messages .info", has_text="You pinned a message.")).to_be_visible()
     expect(page.locator(".msg.out", has_text="You pinned a message.")).to_have_count(0)
 
+
+
+def test_nicknames_are_imported(page, make_account, tmp_path):
+    phone = make_account("Alice Phone")
+    bob = make_account("Bob")
+    bob.secure_join(phone.get_qr_code())
+    wait_event(phone, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+    phone.get_contact_by_addr(addr_of(bob)).set_name("Bobby")
+    phone.stop_io()
+    phone.export_backup(str(tmp_path), "")
+    phone.start_io()
+
+    set_passphrase(page)
+    page.locator('.import input[type="file"]').set_input_files(str(next(tmp_path.glob("*.tar"))))
+    expect(page.locator(".status.ok")).to_be_visible()
+    open_chat(page, "Bobby")
+    bob.get_contact_by_addr(addr_of(phone)).create_chat().send_text("hello after the import")
+    expect(page.locator(".msg.in", has_text="hello after the import")).to_be_visible()
+    expect(page.locator(".chathead strong")).to_have_text("Bobby")
+    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    expect(page.locator("dialog input")).to_have_value("Bobby")
+    expect(page.locator("dialog")).to_contain_text("“Bob”")
