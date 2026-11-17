@@ -215,10 +215,12 @@ def test_chat_deletion_syncs_between_devices(imported):
         assert time.monotonic() < deadline, "the phone kept the deleted group"
         time.sleep(0.2)
 
-    saved = page.locator(".chatlist li[data-chat]", has_text="Saved messages")
-    expect(saved).to_have_count(1)
+    open_chat(page, "Saved messages")
+    note = page.locator(".msg", has_text="note before export")
+    expect(note).to_be_visible()
     imported.phone_saved.delete()
-    expect(saved).to_have_count(0)
+    expect(note).to_have_count(0)
+    expect(page.locator(".chatlist li[data-chat]", has_text="Saved messages")).to_have_count(1)
 
 
 def wait_contact_name(contact, name):

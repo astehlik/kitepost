@@ -513,7 +513,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
             h('strong', {}, client.chatTitle(chat) || '…'),
             chat.visibility === 'pinned' ? metaMark(ICONS.pin, 'mark.pinnedChat') : null,
             chat.unread ? h('span', { class: 'badge' }, String(chat.unread)) : null),
-          h('small', {}, chat.isRequest ? t('list.request') : last ? `${last.from === 'self' && !last.info ? t('list.mePrefix') : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : ''))));
+          h('small', {}, chat.isRequest ? t('list.request') : last ? `${last.from === 'self' && !last.info ? t('list.mePrefix') : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : chat.type === 'self' ? t('chat.savedSubtitle') : ''))));
     }
     if (!showArchived && archived.length) {
       const archivedUnread = archived.reduce((n, c) => n + c.unread, 0);
@@ -1519,7 +1519,7 @@ function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
   const dlg = dialog(client.chatTitle(chat), h('div', { class: 'chat-settings' },
     nickname && c ? field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })) : null,
     h('section', {}, h('h3', {}, t('e2e.title')), ...encryption),
-    h('section', {}, h('h3', {}, t('chat.deleteChat')),
+    chat.type === 'self' ? null : h('section', {}, h('h3', {}, t('chat.deleteChat')),
       h('p', {}, [t(client.config.bccSelf ? 'chat.deleteEverywhere' : 'chat.deleteHere'), consequence].filter(Boolean).join(' ')),
       h('button', { class: 'danger', onclick: confirmDelete }, t('chat.deleteChat')))),
   nickname && c

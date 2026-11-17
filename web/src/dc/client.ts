@@ -120,7 +120,9 @@ export class DcClient extends EventTarget {
       fingerprint: keys.fingerprint, inviteNumber: createId(), uidValidity: 0, lastUid: 0, bridgeUrl: p.bridgeUrl,
     };
     await store.put('config', config);
-    return new DcClient(store, config);
+    const client = new DcClient(store, config);
+    await client.selfChat();
+    return client;
   }
 
   static async importBackup(store: Store, b: BackupProfile, bridgeUrl: string): Promise<DcClient> {
@@ -162,6 +164,8 @@ export class DcClient extends EventTarget {
     for (const id of (await store.get<string[]>('seen')) ?? []) c.seen.add(id);
     for (const uid of (await store.get<number[]>('seenQueue')) ?? []) c.seenQueue.add(uid);
     for (const uid of (await store.get<number[]>('deleteQueue')) ?? []) c.deleteQueue.add(uid);
+    // Kitepost has no contact list to start a chat with oneself, so "Saved messages" always exists.
+    await c.selfChat();
     return c;
   }
 
@@ -395,7 +399,7 @@ export class DcClient extends EventTarget {
   /** Like core's ChatId::delete(): here and, through a sync message, on the own other devices. */
   async deleteChat(chatId: string) {
     const chat = this.chats.get(chatId);
-    if (!chat) return;
+    if (!chat || chat.type === 'self') return;
     const id = this.syncId(chat);
     await this.removeChat(chatId);
     if (this.config.bccSelf && id) await this.sendSync({ AlterChat: { id, action: 'Delete' } });
@@ -1086,7 +1090,10 @@ export class DcClient extends EventTarget {
     for (const { data } of items) {
       const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: string | { SetVisibility?: string; Rename?: unknown } } | undefined;
       const deleted = alter?.action === 'Delete' && this.chatBySyncId(alter.id);
-      if (deleted) await this.removeChat(deleted.id);
+      if (deleted) {
+        await this.removeChat(deleted.id);
+        if (deleted.type === 'self') await this.selfChat();
+      }
       const action = typeof alter?.action === 'object' ? alter.action : undefined;
       const visibility = action?.SetVisibility;
       const target = visibility && this.chatBySyncId(alter?.id);

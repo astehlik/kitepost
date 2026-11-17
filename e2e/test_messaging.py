@@ -986,27 +986,27 @@ def chat_menu(page, title, action):
 def test_archive_and_pin_chats(web, dora):
     page = web.page
     entries = page.locator(".chatlist li[data-chat] strong")
-    expect(entries).to_have_text(["Dora", "Phone"])
+    expect(entries).to_have_text(["Dora", "Phone", "Saved messages"])
     chat_menu(page, "Phone", "Pin chat")
-    expect(entries).to_have_text(["Phone", "Dora"])
+    expect(entries).to_have_text(["Phone", "Dora", "Saved messages"])
     expect(page.locator(".chatlist li", has_text="Phone").get_by_role("img", name="Pinned chat")).to_be_visible()
 
     chat_menu(page, "Dora", "Archive")
-    expect(entries).to_have_text(["Phone"])
+    expect(entries).to_have_text(["Phone", "Saved messages"])
     archive = page.locator(".chatlist li.archive-link")
     expect(archive).to_contain_text("Archived chats1")
     archive.click()
     expect(entries).to_have_text(["Dora"])
     chat_menu(page, "Dora", "Unarchive")
-    expect(entries).to_have_text(["Phone", "Dora"])
+    expect(entries).to_have_text(["Phone", "Dora", "Saved messages"])
     expect(archive).to_have_count(0)
 
     chat_menu(page, "Dora", "Archive")
-    expect(entries).to_have_text(["Phone"])
+    expect(entries).to_have_text(["Phone", "Saved messages"])
     dora.chat.send_text("back from the archive")
-    expect(entries).to_have_text(["Phone", "Dora"])
+    expect(entries).to_have_text(["Phone", "Dora", "Saved messages"])
     chat_menu(page, "Phone", "Unpin chat")
-    expect(entries).to_have_text(["Dora", "Phone"])
+    expect(entries).to_have_text(["Dora", "Phone", "Saved messages"])
 
 
 def set_nickname(page, name):
@@ -1058,12 +1058,20 @@ def test_chat_settings_explain_deletion(web, dora):
 
     dora.chat.send_text("still there?")
     entry.click()
-    incoming = page.locator(".msg.in", has_text="still there?")
-    message_action(page, incoming, "Save")
+    expect(page.locator(".msg.in", has_text="still there?")).to_be_visible()
+
+
+def test_saved_messages_exist_from_the_start(web):
+    page = web.page
+    expect(page.locator(".chatlist li", has_text="Saved messages")).to_contain_text("Notes, synced with your other devices")
     open_chat(page, "Saved messages")
+    web_send(page, "first note to myself")
+    expect(page.locator(".msg.out", has_text="first note to myself")).to_be_visible()
+    settings = page.locator("dialog")
     page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     expect(settings).to_contain_text("encrypted with your own key")
     expect(settings.locator("input")).to_have_count(0)
+    expect(settings.get_by_role("button", name="Delete chat")).to_have_count(0)
     settings.get_by_role("button", name="Close").click()
     expect(settings).to_have_count(0)
 
