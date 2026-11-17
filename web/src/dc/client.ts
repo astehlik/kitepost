@@ -9,7 +9,7 @@ import {
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
 } from '../wasm';
 import { buildContactInvite, buildGroupInvite, parseInvite, type Invite } from './invite';
-import { byChatOrder, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
+import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
 
 export function createId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -239,7 +239,18 @@ export class DcClient extends EventTarget {
   contactName(fp: string): string {
     if (fp === 'self') return this.config.displayName || t('me');
     const c = this.contacts.get(fp);
-    return c ? c.name || c.addr : fp.slice(0, 8);
+    return c ? contactName(c) : fp.slice(0, 8);
+  }
+
+  /** An empty nickname shows the contact's own name again, like core's Contact::set_name(). */
+  async setNickname(fp: string, nickname: string) {
+    const c = this.contacts.get(fp);
+    if (!c) throw new Error('unknown contact');
+    const name = cleanName(nickname);
+    if (name === (c.nickname ?? '')) return;
+    await this.saveContact({ ...c, nickname: name || undefined });
+    this.changed('contacts');
+    if (this.config.bccSelf) await this.sendSync({ AlterChat: { id: { ContactFingerprint: fp }, action: { Rename: name } } });
   }
 
   private async upsertContact(fp: string, addr: string, key: string, name?: string): Promise<Contact> {
@@ -254,6 +265,7 @@ export class DcClient extends EventTarget {
       relays: info.relays?.length ? info.relays : [addr.toLowerCase()],
       verified: existing?.verified ?? false,
       blocked: existing?.blocked ?? false,
+      nickname: existing?.nickname,
     };
     await this.saveContact(contact);
     return contact;
@@ -334,6 +346,10 @@ export class DcClient extends EventTarget {
     if (visibility === 'archived') chat.unread = 0;
     await this.saveChat(chat);
     if (visibility === 'archived') await this.startTimers(this.messages.get(chat.id) ?? []);
+  }
+
+  private contactByFingerprint(fp: string): Contact | undefined {
+    return this.contacts.get(fp) ?? [...this.contacts.values()].find(c => c.fingerprint.toUpperCase() === fp.toUpperCase());
   }
 
   /** Like core's Chat::get_sync_id(). */
@@ -1012,10 +1028,16 @@ export class DcClient extends EventTarget {
       return;
     }
     for (const { data } of items) {
-      const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: { SetVisibility?: string } } | undefined;
+      const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: { SetVisibility?: string; Rename?: unknown } } | undefined;
       const visibility = alter?.action?.SetVisibility;
       const target = visibility && this.chatBySyncId(alter.id);
       if (target) await this.applyVisibility(target, visibility === 'Archived' ? 'archived' : visibility === 'Pinned' ? 'pinned' : undefined);
+      const rename = alter?.action?.Rename;
+      const renamed = typeof rename === 'string' && typeof alter?.id?.ContactFingerprint === 'string' ? this.contactByFingerprint(alter.id.ContactFingerprint) : undefined;
+      if (renamed && typeof rename === 'string') {
+        await this.saveContact({ ...renamed, nickname: cleanName(rename) || undefined });
+        this.changed('contacts');
+      }
       const save = data?.SaveMessage as { src?: string; dest?: string } | undefined;
       const del = data?.DeleteMessages as { msgs?: string[] } | undefined;
       if (save?.src && save.dest && !this.messageById(save.dest)) {

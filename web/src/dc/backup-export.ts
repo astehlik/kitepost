@@ -1,7 +1,7 @@
 import type { SqlValue } from 'sql.js';
 import schema from './backup-schema.sql?raw';
 import { openDatabase } from './backup';
-import { byChatOrder, SELF_CHAT, type AuthToken, type Chat, type Config, type Contact, type Message } from './types';
+import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type Chat, type Config, type Contact, type Message } from './types';
 
 // Writes a backup that Delta Chat imports with "Restore from backup" (see core src/imex.rs).
 // The schema is a fresh profile of core; core migrates it to its own version on import.
@@ -135,8 +135,8 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       const id = nextId++;
       contactIds.set(c.fingerprint, id);
       run(`INSERT INTO contacts (id, name, addr, origin, blocked, authname, fingerprint, verifier, last_seen)
-        VALUES (?, '', ?, ?, ?, ?, ?, ?, ?)`,
-      [id, c.addr, ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0, Math.floor((c.lastSeen ?? 0) / 1000)]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, c.nickname ?? '', c.addr, ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0, Math.floor((c.lastSeen ?? 0) / 1000)]);
       run('INSERT OR IGNORE INTO public_keys (fingerprint, public_key) VALUES (?, ?)', [c.fingerprint, fromBase64(c.publicKey)]);
     }
 
@@ -158,7 +158,7 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       const msgs = (messagesByChat.get(chat.id) ?? []).sort(byChatOrder);
       const created = Math.floor((msgs[0]?.timestamp ?? Date.now()) / 1000);
       const name = chat.type === 'self' ? 'Saved messages'
-        : single ? (src.contacts.find(c => c.fingerprint === chat.contact)?.name || src.contacts.find(c => c.fingerprint === chat.contact)?.addr || '')
+        : single ? contactName(src.contacts.find(c => c.fingerprint === chat.contact))
         : chat.name;
       run(`INSERT INTO chats (id, type, name, blocked, grpid, param, created_timestamp, archived, ephemeral_timer)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

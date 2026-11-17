@@ -31,7 +31,10 @@ export interface Config {
 export interface Contact {
   fingerprint: string;
   addr: string;
+  /** The name the contact chose (core's authname); outgoing mail uses only this one. */
   name: string;
+  /** Set on this profile and synced to the own devices, like core's name. */
+  nickname?: string;
   publicKey: string;
   relays: string[];
   /** Connected via SecureJoin in Kitepost; current core no longer records this, so imports lack it. */
@@ -39,6 +42,10 @@ export interface Contact {
   blocked: boolean;
   /** Date of the newest message from the contact, like core's last_seen. */
   lastSeen?: number;
+}
+
+export function contactName(c: Contact | undefined): string {
+  return c ? c.nickname || c.name || c.addr : '';
 }
 
 export type ChatType = 'single' | 'group' | 'self';

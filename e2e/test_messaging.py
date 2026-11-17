@@ -777,6 +777,38 @@ def test_archive_and_pin_chats(web, dora):
     expect(entries).to_have_text(["Dora", "Phone"])
 
 
+def set_nickname(page, name):
+    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator("dialog input").fill(name)
+    page.get_by_role("button", name="Save").click()
+
+
+def test_contact_nickname(web, dora):
+    page = web.page
+    title = page.locator(".chathead strong")
+    expect(title).to_have_text("Dora")
+    set_nickname(page, "Dora from work")
+    expect(title).to_have_text("Dora from work")
+    expect(page.locator(".chatlist li[data-chat] strong", has_text="Dora")).to_have_text("Dora from work")
+
+    dora.acc.set_config("displayname", "Dora Renamed")
+    dora.chat.send_text("with a new name")
+    expect(page.locator(".msg.in", has_text="with a new name")).to_be_visible()
+    expect(title).to_have_text("Dora from work")
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(page.locator(".chathead").get_by_role("button", name="Edit name")).to_be_hidden()
+    title.click()
+    expect(page.locator("dialog")).to_contain_text("“Dora Renamed”")
+    page.locator("dialog input").fill("")
+    page.get_by_role("button", name="Save").click()
+    expect(title).to_have_text("Dora Renamed")
+
+    reload_and_unlock(page)
+    open_chat(page, "Dora")
+    expect(title).to_have_text("Dora Renamed")
+
+
 def test_last_seen(web, dora):
     page = web.page
     entry = page.locator(".chatlist li[data-chat]", has_text="Dora")

@@ -224,6 +224,8 @@ export const de: Record<keyof typeof en, string> = {
   'group.enterName': 'Bitte gib einen Namen ein',
   'group.default': 'Gruppe',
 
+  'contact.editName': 'Namen ändern',
+  'contact.nicknameHint': 'Nur du siehst diesen Namen, auf allen deinen Geräten. Leer lassen, um wieder „{name}“ zu verwenden.',
   'e2e.title': 'Ende-zu-Ende-Verschlüsselung',
   'e2e.invite': '✔ Über einen Einladungslink verbunden, der beide Schlüssel geprüft hat.',
   'e2e.compare': 'Nachrichten werden mit diesem Schlüssel Ende-zu-Ende-verschlüsselt. Zum Prüfen vergleicht ihr die Fingerabdrücke persönlich.',

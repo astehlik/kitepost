@@ -205,7 +205,7 @@ export async function readBackup(
         if (!info.can_encrypt || info.fingerprint === self.fingerprint) continue;
         fpById.set(num(r.id), info.fingerprint);
         contacts.push({
-          fingerprint: info.fingerprint, addr: str(r.addr).toLowerCase(), name: str(r.name) || str(r.authname),
+          fingerprint: info.fingerprint, addr: str(r.addr).toLowerCase(), name: str(r.authname), nickname: str(r.name) || undefined,
           publicKey: info.key, relays: info.relays?.length ? info.relays : [str(r.addr).toLowerCase()],
           verified: num(r.verifier) !== 0, blocked: num(r.blocked) === BLOCKED_YES,
           lastSeen: num(r.last_seen) * 1000 || undefined,

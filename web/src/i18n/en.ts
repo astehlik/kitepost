@@ -222,6 +222,8 @@ export const en = {
   'group.enterName': 'Please enter a name',
   'group.default': 'Group',
 
+  'contact.editName': 'Edit name',
+  'contact.nicknameHint': 'Only you see this name, on all your devices. Leave it empty to use “{name}” again.',
   'e2e.title': 'End-to-end encryption',
   'e2e.invite': '✔ Connected through an invite link, which checked both keys.',
   'e2e.compare': 'Messages are end-to-end encrypted with this key. To check it, compare the fingerprints in person.',

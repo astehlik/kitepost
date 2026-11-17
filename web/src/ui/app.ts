@@ -823,9 +823,12 @@ function startMain(client: DcClient, initialChat?: string) {
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
-      h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
+      contact
+        ? h('button', { type: 'button', class: 'who', title: t('contact.editName'), onclick: () => nicknameDialog(client, contact.fingerprint) }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle))
+        : h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
       chat.ephemeralTimer ? h('button', { class: 'icon-button', title: timerLabel, 'aria-label': timerLabel, onclick: () => timerDialog(chat) }, icon(ICONS.timer)) : null,
       chat.type === 'group' ? h('button', { onclick: busyClick(() => showInvite(client, chat.id)) }, t('invite.link')) : null,
+      contact ? h('button', { class: 'icon-button edit-name', title: t('contact.editName'), 'aria-label': t('contact.editName'), onclick: () => nicknameDialog(client, contact.fingerprint) }, icon(ICONS.edit)) : null,
       contact ? h('button', { onclick: () => fingerprintDialog(client, contact.fingerprint) }, t('chat.encryption')) : null,
       h('button', { onclick: () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteText')), [
         { label: t('cancel') },
@@ -1327,7 +1330,7 @@ function groupDialog(client: DcClient, open: (id: string) => void) {
   const name = h('input', { type: 'text', maxlength: '100', placeholder: t('group.namePlaceholder') });
   const boxes = [...client.contacts.values()]
     .filter(c => c.publicKey && !c.blocked)
-    .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: c.name || c.addr }));
+    .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: client.contactName(c.fingerprint) }));
   const list = h('div', { class: 'members' }, ...boxes.map(b => h('label', { class: 'check' }, b.box, b.label)));
   if (!boxes.length) list.append(h('p', {}, t('group.addContactsFirst')));
   dialog(t('group.title'), h('div', {}, field(t('group.name'), name), list), [
@@ -1344,6 +1347,17 @@ function groupDialog(client: DcClient, open: (id: string) => void) {
 
 function formatFingerprint(fp: string): string {
   return (fp.match(/.{1,4}/g) ?? []).join(' ');
+}
+
+function nicknameDialog(client: DcClient, fp: string) {
+  const c = client.contacts.get(fp);
+  if (!c) return;
+  const input = h('input', { type: 'text', maxlength: '100', value: c.nickname ?? '', placeholder: c.name || c.addr });
+  dialog(t('contact.editName'), h('div', {}, field(t('group.name'), input, t('contact.nicknameHint', { name: c.name || c.addr }))), [
+    { label: t('cancel') },
+    { label: t('save'), primary: true, onClick: () => client.setNickname(fp, input.value) },
+  ]);
+  input.select();
 }
 
 function fingerprintDialog(client: DcClient, fp: string) {

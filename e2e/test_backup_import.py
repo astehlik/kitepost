@@ -178,6 +178,34 @@ def test_chat_visibility_syncs_between_devices(imported):
     expect(entry.get_by_role("img", name="Pinned chat")).to_be_visible()
 
 
+def test_nicknames_sync_between_devices(imported):
+    page, phone = imported.page, imported.phone
+    bob = phone.get_contact_by_addr(addr_of(imported.bob))
+    bob.set_name("Bobby")
+    entry = page.locator(".chatlist li[data-chat] strong", has_text="Bob")
+    expect(entry).to_have_text("Bobby")
+
+    open_chat(page, "Bobby")
+    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator("dialog input").fill("Bob from work")
+    page.get_by_role("button", name="Save").click()
+    expect(entry).to_have_text("Bob from work")
+    wait_contact_name(bob, "Bob from work")
+
+    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator("dialog input").fill("")
+    page.get_by_role("button", name="Save").click()
+    expect(entry).to_have_text("Bob")
+    wait_contact_name(bob, "")
+
+
+def wait_contact_name(contact, name):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while contact.get_snapshot().name != name:
+        assert time.monotonic() < deadline, f"the phone did not rename the contact to {name!r}"
+        time.sleep(0.2)
+
+
 def saved_on_phone(phone, msg_id, saved):
     deadline = time.monotonic() + EVENT_TIMEOUT
     while (phone.get_message_by_id(msg_id).get_snapshot().saved_message_id is not None) != saved:
