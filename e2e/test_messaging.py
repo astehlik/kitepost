@@ -958,7 +958,7 @@ def test_archive_and_pin_chats(web, dora):
 
 
 def set_nickname(page, name):
-    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     page.locator("dialog input").fill(name)
     page.get_by_role("button", name="Save").click()
 
@@ -977,7 +977,7 @@ def test_contact_nickname(web, dora):
     expect(title).to_have_text("Dora from work")
 
     page.set_viewport_size({"width": 390, "height": 844})
-    expect(page.locator(".chathead").get_by_role("button", name="Edit name")).to_be_hidden()
+    expect(page.locator(".chathead").get_by_role("button", name="Edit chat")).to_be_hidden()
     title.click()
     expect(page.locator("dialog")).to_contain_text("“Dora Renamed”")
     page.locator("dialog input").fill("")
@@ -987,6 +987,33 @@ def test_contact_nickname(web, dora):
     reload_and_unlock(page)
     open_chat(page, "Dora")
     expect(title).to_have_text("Dora Renamed")
+
+
+def test_chat_settings_explain_deletion(web, dora):
+    page = web.page
+    settings = page.locator("dialog")
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    expect(settings.locator(".fingerprints code")).to_have_count(2)
+    expect(settings).to_contain_text("Deletes the chat and all its messages in this browser. Dora keeps the messages")
+    settings.get_by_role("button", name="Delete chat").click()
+    page.locator("dialog", has_text="This cannot be undone.").get_by_role("button", name="Cancel").click()
+    expect(settings).to_have_count(1)
+    settings.get_by_role("button", name="Delete chat").click()
+    page.locator("dialog", has_text="This cannot be undone.").get_by_role("button", name="Delete").click()
+    expect(settings).to_have_count(0)
+    entry = page.locator(".chatlist li[data-chat]", has_text="Dora")
+    expect(entry).to_have_count(0)
+
+    dora.chat.send_text("still there?")
+    entry.click()
+    incoming = page.locator(".msg.in", has_text="still there?")
+    message_action(page, incoming, "Save")
+    open_chat(page, "Saved messages")
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    expect(settings).to_contain_text("encrypted with your own key")
+    expect(settings.locator("input")).to_have_count(0)
+    settings.get_by_role("button", name="Close").click()
+    expect(settings).to_have_count(0)
 
 
 def test_last_seen(web, dora):

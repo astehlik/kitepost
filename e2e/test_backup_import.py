@@ -186,17 +186,39 @@ def test_nicknames_sync_between_devices(imported):
     expect(entry).to_have_text("Bobby")
 
     open_chat(page, "Bobby")
-    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     page.locator("dialog input").fill("Bob from work")
     page.get_by_role("button", name="Save").click()
     expect(entry).to_have_text("Bob from work")
     wait_contact_name(bob, "Bob from work")
 
-    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     page.locator("dialog input").fill("")
     page.get_by_role("button", name="Save").click()
     expect(entry).to_have_text("Bob")
     wait_contact_name(bob, "")
+
+
+def test_chat_deletion_syncs_between_devices(imported):
+    page, phone = imported.page, imported.phone
+    open_chat(page, "Backup group")
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = page.locator("dialog")
+    expect(settings).to_contain_text("Messages are end-to-end encrypted for every member of the group.")
+    expect(settings).to_contain_text("here and on your other devices")
+    settings.get_by_role("button", name="Delete chat").click()
+    page.locator("dialog", has_text="This cannot be undone.").get_by_role("button", name="Delete").click()
+    expect(page.locator("dialog")).to_have_count(0)
+    expect(page.locator(".chatlist li[data-chat]", has_text="Backup group")).to_have_count(0)
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while any(c.get_basic_snapshot().name == "Backup group" for c in phone.get_chatlist()):
+        assert time.monotonic() < deadline, "the phone kept the deleted group"
+        time.sleep(0.2)
+
+    saved = page.locator(".chatlist li[data-chat]", has_text="Saved messages")
+    expect(saved).to_have_count(1)
+    imported.phone_saved.delete()
+    expect(saved).to_have_count(0)
 
 
 def wait_contact_name(contact, name):
@@ -359,6 +381,6 @@ def test_nicknames_are_imported(page, make_account, tmp_path):
     bob.get_contact_by_addr(addr_of(phone)).create_chat().send_text("hello after the import")
     expect(page.locator(".msg.in", has_text="hello after the import")).to_be_visible()
     expect(page.locator(".chathead strong")).to_have_text("Bobby")
-    page.locator(".chathead").get_by_role("button", name="Edit name").click()
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
     expect(page.locator("dialog input")).to_have_value("Bobby")
     expect(page.locator("dialog")).to_contain_text("“Bob”")

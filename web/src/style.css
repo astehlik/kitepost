@@ -225,13 +225,17 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .phone-setup .hint { color: var(--muted); font-size: .9rem; }
 .members { display: flex; flex-direction: column; gap: .4rem; margin-top: .8rem; max-height: 40vh; overflow-y: auto; }
 .fingerprints code { display: block; font-size: .85rem; word-spacing: .2rem; }
+.fingerprints strong { display: block; margin-top: .6rem; font-size: .9rem; }
+.chat-settings section { margin-top: 1.2rem; }
+.chat-settings h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.chat-settings p { margin: 0 0 .6rem; }
 
 @media (max-width: 720px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
   .layout.chat-open .sidebar { display: none; }
   .layout:not(.chat-open) .pane { display: none; }
   .back { display: inline-block; }
-  .chathead .edit-name { display: none; }
+  .chathead .edit-chat { display: none; }
   .msg { max-width: 88%; }
 }
 .card .import { margin-top: 1rem; }

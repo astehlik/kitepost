@@ -830,20 +830,14 @@ function startMain(client: DcClient, initialChat?: string) {
       : contact ? [contact.lastSeen && t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }), contact.addr].filter(Boolean).join(' · ') : '';
     const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact && client.freshness(contact), chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
+    const settings = () => chatDialog(client, chat, () => { current = undefined; renderAll(); });
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
-      contact
-        ? h('button', { type: 'button', class: 'who', title: t('contact.editName'), onclick: () => nicknameDialog(client, contact.fingerprint) }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle))
-        : h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
+      h('button', { type: 'button', class: 'who', title: t('chat.settings'), onclick: settings }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
       chat.ephemeralTimer ? h('button', { class: 'icon-button', title: timerLabel, 'aria-label': timerLabel, onclick: () => timerDialog(chat) }, icon(ICONS.timer)) : null,
       chat.type === 'group' ? h('button', { onclick: busyClick(() => showInvite(client, chat.id)) }, t('invite.link')) : null,
-      contact ? h('button', { class: 'icon-button edit-name', title: t('contact.editName'), 'aria-label': t('contact.editName'), onclick: () => nicknameDialog(client, contact.fingerprint) }, icon(ICONS.edit)) : null,
-      contact ? h('button', { onclick: () => fingerprintDialog(client, contact.fingerprint) }, t('chat.encryption')) : null,
-      h('button', { onclick: () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteText')), [
-        { label: t('cancel') },
-        { label: t('delete'), primary: true, onClick: async () => { await client.deleteChat(chat.id); current = undefined; renderAll(); } },
-      ]) }, t('delete')))];
+      h('button', { class: 'icon-button edit-chat', title: t('chat.settings'), 'aria-label': t('chat.settings'), onclick: settings }, icon(ICONS.edit)))];
   }
 
   const footerKey = (chat: Chat) => JSON.stringify([chat.isRequest, chat.left]);
@@ -1428,23 +1422,29 @@ function formatFingerprint(fp: string): string {
   return (fp.match(/.{1,4}/g) ?? []).join(' ');
 }
 
-function nicknameDialog(client: DcClient, fp: string) {
-  const c = client.contacts.get(fp);
-  if (!c) return;
-  const input = h('input', { type: 'text', maxlength: '100', value: c.nickname ?? '', placeholder: c.name || c.addr });
-  dialog(t('contact.editName'), h('div', {}, field(t('group.name'), input, t('contact.nicknameHint', { name: c.name || c.addr }))), [
+function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
+  const c = chat.contact ? client.contacts.get(chat.contact) : undefined;
+  const nickname = c && h('input', { type: 'text', maxlength: '100', value: c.nickname ?? '', placeholder: c.name || c.addr });
+  const fingerprint = (name: string, fp: string) => [h('strong', {}, name), h('code', {}, formatFingerprint(fp))];
+  const encryption = c
+    ? [h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), h('div', { class: 'fingerprints' },
+      ...fingerprint(client.config.displayName || t('me'), client.config.fingerprint), ...fingerprint(client.contactName(c.fingerprint), c.fingerprint))]
+    : [h('p', {}, t(chat.type === 'self' ? 'e2e.self' : 'e2e.group'))];
+  const consequence = c ? t('chat.deleteKeepContact', { name: client.contactName(c.fingerprint) }) : chat.type === 'group' ? t('chat.deleteKeepGroup') : '';
+  const confirmDelete = () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteUndo')), [
     { label: t('cancel') },
-    { label: t('save'), primary: true, onClick: () => client.setNickname(fp, input.value) },
+    { label: t('delete'), primary: true, onClick: async () => { await client.deleteChat(chat.id); dlg.close(); deleted(); } },
   ]);
-  input.select();
-}
-
-function fingerprintDialog(client: DcClient, fp: string) {
-  const c = client.contacts.get(fp);
-  dialog(t('e2e.title'), h('div', { class: 'fingerprints' },
-    h('p', {}, t(c?.verified ? 'e2e.invite' : 'e2e.compare')),
-    h('h3', {}, client.config.displayName || t('me')), h('code', {}, formatFingerprint(client.config.fingerprint)),
-    h('h3', {}, client.contactName(fp)), h('code', {}, formatFingerprint(fp))), [{ label: t('close'), primary: true }]);
+  const dlg = dialog(client.chatTitle(chat), h('div', { class: 'chat-settings' },
+    nickname && c ? field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })) : null,
+    h('section', {}, h('h3', {}, t('e2e.title')), ...encryption),
+    h('section', {}, h('h3', {}, t('chat.deleteChat')),
+      h('p', {}, [t(client.config.bccSelf ? 'chat.deleteEverywhere' : 'chat.deleteHere'), consequence].filter(Boolean).join(' ')),
+      h('button', { class: 'danger', onclick: confirmDelete }, t('chat.deleteChat')))),
+  nickname && c
+    ? [{ label: t('cancel') }, { label: t('save'), primary: true, onClick: () => client.setNickname(c.fingerprint, nickname.value) }]
+    : [{ label: t('close'), primary: true }]);
+  nickname?.select();
 }
 
 function exportDialog(client: DcClient, done?: () => void) {

@@ -37,7 +37,9 @@ def test_web_client_in_german(german, make_account):
     wait_event(phone, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
     expect(page.locator(".nav-actions")).to_contain_text("Meine Einladung")
     page.locator(".chatlist li", has_text="Phone").click()
-    expect(page.locator(".chathead")).to_contain_text("Verschlüsselung")
+    page.locator(".chathead").get_by_role("button", name="Chat bearbeiten").click()
+    expect(page.locator("dialog")).to_contain_text("Ende-zu-Ende-Verschlüsselung")
+    page.locator("dialog").get_by_role("button", name="Abbrechen").click()
 
     page.get_by_role("button", name="Profil bearbeiten").click()
     page.locator("dialog").get_by_label("Sprache").select_option("en")

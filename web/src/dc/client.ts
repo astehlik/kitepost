@@ -389,10 +389,19 @@ export class DcClient extends EventTarget {
       const c = this.contacts.get(chat.contact);
       if (c) await this.saveContact({ ...c, blocked: true });
     }
-    await this.deleteChat(chatId);
+    await this.removeChat(chatId);
   }
 
+  /** Like core's ChatId::delete(): here and, through a sync message, on the own other devices. */
   async deleteChat(chatId: string) {
+    const chat = this.chats.get(chatId);
+    if (!chat) return;
+    const id = this.syncId(chat);
+    await this.removeChat(chatId);
+    if (this.config.bccSelf && id) await this.sendSync({ AlterChat: { id, action: 'Delete' } });
+  }
+
+  private async removeChat(chatId: string) {
     for (const m of this.messages.get(chatId) ?? []) await this.store.delete(`msg/${chatId}/${m.id}`);
     this.messages.delete(chatId);
     this.chats.delete(chatId);
@@ -1070,11 +1079,14 @@ export class DcClient extends EventTarget {
       return;
     }
     for (const { data } of items) {
-      const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: { SetVisibility?: string; Rename?: unknown } } | undefined;
-      const visibility = alter?.action?.SetVisibility;
-      const target = visibility && this.chatBySyncId(alter.id);
+      const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: string | { SetVisibility?: string; Rename?: unknown } } | undefined;
+      const deleted = alter?.action === 'Delete' && this.chatBySyncId(alter.id);
+      if (deleted) await this.removeChat(deleted.id);
+      const action = typeof alter?.action === 'object' ? alter.action : undefined;
+      const visibility = action?.SetVisibility;
+      const target = visibility && this.chatBySyncId(alter?.id);
       if (target) await this.applyVisibility(target, visibility === 'Archived' ? 'archived' : visibility === 'Pinned' ? 'pinned' : undefined);
-      const rename = alter?.action?.Rename;
+      const rename = action?.Rename;
       const renamed = typeof rename === 'string' && typeof alter?.id?.ContactFingerprint === 'string' ? this.contactByFingerprint(alter.id.ContactFingerprint) : undefined;
       if (renamed && typeof rename === 'string') {
         await this.saveContact({ ...renamed, nickname: cleanName(rename) || undefined });
