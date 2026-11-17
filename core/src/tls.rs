@@ -66,6 +66,7 @@ impl ServerCertVerifier for Verifier {
 #[wasm_bindgen]
 pub struct TlsClient {
     conn: ClientConnection,
+    plaintext: Vec<u8>,
 }
 
 fn js_err(e: impl std::fmt::Display) -> JsError {
@@ -91,43 +92,22 @@ impl TlsClient {
             .with_no_client_auth();
         let name = ServerName::try_from(server_name.to_string()).map_err(js_err)?;
         let conn = ClientConnection::new(Arc::new(config), name).map_err(js_err)?;
-        Ok(TlsClient { conn })
+        Ok(TlsClient { conn, plaintext: Vec::new() })
     }
 
     /// Feeds ciphertext received from the network.
-    pub fn feed(&mut self, mut data: &[u8]) -> Result<(), JsError> {
-        while !data.is_empty() {
-            let n = self.conn.read_tls(&mut data).map_err(js_err)?;
-            if n == 0 {
-                break;
-            }
-            self.conn.process_new_packets().map_err(js_err)?;
-        }
-        Ok(())
+    pub fn feed(&mut self, data: &[u8]) -> Result<(), JsError> {
+        self.try_feed(data).map_err(js_err)
     }
 
     /// Returns ciphertext that must be sent to the network.
     pub fn take_outgoing(&mut self) -> Result<Vec<u8>, JsError> {
-        let mut out = Vec::new();
-        while self.conn.wants_write() {
-            self.conn.write_tls(&mut out).map_err(js_err)?;
-        }
-        Ok(out)
+        self.try_take_outgoing().map_err(js_err)
     }
 
     /// Returns decrypted application data.
     pub fn take_plaintext(&mut self) -> Result<Vec<u8>, JsError> {
-        let mut out = Vec::new();
-        let mut buf = [0u8; 16384];
-        loop {
-            match self.conn.reader().read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => out.extend_from_slice(&buf[..n]),
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                Err(e) => return Err(js_err(e)),
-            }
-        }
-        Ok(out)
+        self.try_take_plaintext().map_err(js_err)
     }
 
     pub fn write_plaintext(&mut self, data: &[u8]) -> Result<(), JsError> {
@@ -140,5 +120,94 @@ impl TlsClient {
 
     pub fn close(&mut self) {
         self.conn.send_close_notify();
+    }
+}
+
+impl TlsClient {
+    fn try_feed(&mut self, mut data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        while !data.is_empty() {
+            if self.conn.read_tls(&mut data)? == 0 {
+                break;
+            }
+            self.conn.process_new_packets()?;
+            // rustls refuses more ciphertext while 16 KiB of plaintext are unread.
+            self.drain_plaintext()?;
+        }
+        Ok(())
+    }
+
+    fn try_take_outgoing(&mut self) -> std::io::Result<Vec<u8>> {
+        let mut out = Vec::new();
+        while self.conn.wants_write() {
+            self.conn.write_tls(&mut out)?;
+        }
+        Ok(out)
+    }
+
+    fn try_take_plaintext(&mut self) -> std::io::Result<Vec<u8>> {
+        self.drain_plaintext()?;
+        Ok(std::mem::take(&mut self.plaintext))
+    }
+
+    fn drain_plaintext(&mut self) -> std::io::Result<()> {
+        let mut buf = [0u8; 16384];
+        loop {
+            match self.conn.reader().read(&mut buf) {
+                Ok(0) => return Ok(()),
+                Ok(n) => self.plaintext.extend_from_slice(&buf[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
+                Err(e) => return Err(e),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustls::ServerConnection;
+    use rustls::pki_types::PrivateKeyDer;
+
+    const HOST: &str = "_kitepost.test";
+
+    fn server() -> ServerConnection {
+        let cert = rcgen::generate_simple_self_signed(vec![HOST.into()]).unwrap();
+        let key = PrivateKeyDer::try_from(cert.key_pair.serialize_der()).unwrap();
+        let config = rustls::ServerConfig::builder_with_provider(Arc::new(rustls_rustcrypto::provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert.cert.der().clone()], key)
+            .unwrap();
+        ServerConnection::new(Arc::new(config)).unwrap()
+    }
+
+    fn server_output(server: &mut ServerConnection) -> Vec<u8> {
+        let mut out = Vec::new();
+        while server.wants_write() {
+            server.write_tls(&mut out).unwrap();
+        }
+        out
+    }
+
+    #[test]
+    fn feeds_more_plaintext_than_rustls_buffers_at_once() {
+        let mut client = TlsClient::new(HOST).unwrap();
+        let mut server = server();
+        while client.is_handshaking() || server.is_handshaking() {
+            let out = client.try_take_outgoing().unwrap();
+            server.read_tls(&mut out.as_slice()).unwrap();
+            server.process_new_packets().unwrap();
+            client.try_feed(&server_output(&mut server)).unwrap();
+        }
+
+        let sent: Vec<u8> = (0..200_000u32).map(|i| i as u8).collect();
+        let mut frame = Vec::new();
+        for chunk in sent.chunks(16_384) {
+            server.writer().write_all(chunk).unwrap();
+            frame.extend(server_output(&mut server));
+        }
+        client.try_feed(&frame).unwrap();
+        assert!(client.try_take_plaintext().unwrap() == sent);
     }
 }
