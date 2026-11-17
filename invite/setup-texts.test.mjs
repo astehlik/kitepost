@@ -24,8 +24,8 @@ const deltaChat = {
 for (const [lang, web] of Object.entries({ en, de })) {
   const { exportBackup, restoreBackup } = deltaChat[lang];
   const label = key => plain(web[key]);
-  const setUpPhone = path(label('nav.editProfile'), label('profile.phone'));
-  const exportFromWeb = path(label('nav.editProfile'), label('profile.export'));
+  const setUpPhone = path(label('nav.settings'), label('profile.phone'));
+  const exportFromWeb = path(label('nav.settings'), label('profile.export'));
   const importFile = label('import.file');
   const deltaChatWay = path(label('way.deltaChat'), importFile);
 

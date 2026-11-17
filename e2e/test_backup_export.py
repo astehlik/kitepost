@@ -48,7 +48,7 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
 
     unsecured = page.locator(".profile .icon-button.attention")
     expect(unsecured).to_be_visible()
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     expect(page.locator(".settings")).to_contain_text("only in this browser")
     page.get_by_role("button", name="Export backup").click()
     with page.expect_download() as download:
@@ -111,7 +111,7 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
 
 def test_nicknames_sync_between_browsers(web, dora, browser, tmp_path):
     page = web.page
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     page.get_by_role("button", name="Export backup").click()
     with page.expect_download() as download:
         page.get_by_role("button", name="Download").click()

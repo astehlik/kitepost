@@ -56,7 +56,7 @@ def test_read_receipts_both_ways(web, dora):
 def test_settings_page(web):
     page = web.page
     open_chat(page, "Phone")
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     settings = page.locator(".settings")
     expect(settings.get_by_role("heading", name="Settings")).to_be_visible()
     expect(page.locator(".chathead strong")).to_have_count(0)
@@ -67,7 +67,7 @@ def test_settings_page(web):
 
     page.set_viewport_size({"width": 390, "height": 844})
     page.locator(".chathead .back").click()
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     expect(page.locator(".chatlist")).to_be_hidden()
     settings.locator(".back").click()
     expect(page.locator(".chatlist")).to_be_visible()
@@ -78,13 +78,13 @@ def test_dark_mode_can_be_chosen(web):
     page.emulate_media(color_scheme="light")
     background = lambda: page.evaluate("getComputedStyle(document.body).backgroundColor")
     light = background()
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     page.get_by_label("Theme").select_option("dark")
     dark = background()
     assert dark != light
     reload_and_unlock(page)
     assert background() == dark
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     expect(page.get_by_label("Theme")).to_have_value("dark")
     page.get_by_label("Theme").select_option("auto")
     assert background() == light
@@ -93,7 +93,7 @@ def test_dark_mode_can_be_chosen(web):
 
 
 def test_read_receipts_can_be_turned_off(web, dora):
-    web.page.get_by_role("button", name="Edit profile").click()
+    web.page.get_by_role("button", name="Settings").click()
     web.page.get_by_label("Send read receipts").uncheck()
     open_chat(web.page, "Dora")
 
@@ -819,13 +819,13 @@ def test_notifications_show_sender_and_content(web, dora, tmp_path):
     note = next_note(page, 4)
     assert (note["title"], note["body"]) == ("Notify group", "Dora: hello group"), note
 
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     page.get_by_label("Notifications show").select_option(label="Sender only")
     group.send_text("secret in the group")
     note = next_note(page, 5)
     assert (note["title"], note["body"]) == ("Notify group", "Dora: New message"), note
 
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     page.get_by_label("Notifications show").select_option(label="No details")
     dora.chat.send_text("secret")
     note = next_note(page, 6)
@@ -856,13 +856,13 @@ def test_notification_permission_is_asked_on_request(web):
     expect(bar).to_be_hidden()
 
     page.evaluate(PERMISSION, "denied")
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     expect(page.locator(".settings")).to_contain_text("Blocked in this browser")
 
     page.evaluate("localStorage.removeItem('kitepost-notify-later')")
     reload_and_unlock(page)
     expect(bar).to_be_visible()
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     page.locator(".settings").get_by_role("button", name="Turn on notifications").click()
     expect(page.locator(".settings")).to_contain_text("Allowed in this browser.")
     expect(bar).to_be_hidden()
@@ -1179,7 +1179,7 @@ def test_date_format(web, dora):
     expect(msg).to_be_visible()
 
     def choose(value):
-        page.get_by_role("button", name="Edit profile").click()
+        page.get_by_role("button", name="Settings").click()
         page.get_by_label("Date format").select_option(value)
         open_chat(page, "Dora")
 
@@ -1202,7 +1202,7 @@ def test_date_format(web, dora):
 
 
 def test_rename_updates_header(web):
-    web.page.get_by_role("button", name="Edit profile").click()
+    web.page.get_by_role("button", name="Settings").click()
     web.page.get_by_label("Display name").fill("Webby Renamed")
     web.page.get_by_label("Display name").press("Enter")
     expect(web.page.locator(".profile strong")).to_have_text("Webby Renamed")
@@ -1215,7 +1215,7 @@ def test_storage_unlock_and_stay_unlocked(web):
 
     page.reload()
     expect(page.locator(".chatlist li", has_text="Phone")).to_be_visible()
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     expect(page.get_by_label("Stay unlocked in this browser")).to_be_checked()
     page.get_by_role("button", name="Lock").click()
     expect(page.get_by_role("heading", name="Unlock Kitepost")).to_be_visible()

@@ -103,7 +103,7 @@ def test_handoff_from_profile_keeps_contacts(page, context, rpc, make_account, t
     ev = wait_event(dora, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
     dora_chat = dora.get_chat_by_contact(ev.contact_id)
 
-    page.get_by_role("button", name="Edit profile").click()
+    page.get_by_role("button", name="Settings").click()
     page.get_by_role("button", name="Set up phone").click()
     url = page.locator("dialog").get_by_role("link", name="Open the link instead").get_attribute("href")
     _, backup = save_on_phone(context, url, tmp_path)

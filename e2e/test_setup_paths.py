@@ -20,5 +20,5 @@ def test_start_page_offers_three_ways(page):
     expect(way.get_by_role("button", name="Import backup file")).to_be_visible()
 
     page.get_by_role("radio", name="I already use Kitepost in another browser").check()
-    expect(way).to_contain_text("Edit profile → Export backup")
+    expect(way).to_contain_text("Settings → Export backup")
     expect(way.get_by_role("button", name="Import backup file")).to_be_visible()

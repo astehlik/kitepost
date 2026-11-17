@@ -136,7 +136,7 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
   phone-only use: a QR code to the download page `/join/install` (Google Play, F-Droid,
   get.delta.chat) and a `dclogin:` QR code and button for the app. Set `INVITE_PUBLIC_URL` if the
   service is not reachable at `https://<host>/join/`.
-- **Handoff to the phone**: after creating a profile, and later under *Edit profile → Set up phone*,
+- **Handoff to the phone**: after creating a profile, and later under *Settings → Set up phone*,
   the web client encrypts a backup with a random AES-GCM key, uploads the ciphertext to
   `/join/handoff` (authenticated with the account's password, so only accounts of this relay can
   store anything) and shows a QR code for `/join/h/<id>#<key>`. The phone page decrypts it locally,

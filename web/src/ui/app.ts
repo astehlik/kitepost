@@ -440,10 +440,10 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   const keyWarning = h('div', { class: 'key-warning', role: 'alert', hidden: true });
   const notifyBar = h('div', { class: 'notify-bar', hidden: true });
   const edit = h('button', {
-    class: 'icon-button', title: t('nav.editProfile'), 'aria-label': t('nav.editProfile'),
+    class: 'icon-button', title: t('nav.settings'), 'aria-label': t('nav.settings'),
     onclick: () => { settingsOpen = true; current = undefined; renderAll(); },
   });
-  edit.append(icon(ICONS.edit));
+  edit.append(icon(ICONS.settings));
   const sidebar = h('aside', { class: 'sidebar' },
     h('header', { class: 'profile' }, me, status, edit),
     keyWarning,
@@ -477,7 +477,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
         h('button', { onclick: busyClick(() => client.hideForeignKeyWarning()) }, t('key.hide')))]);
     const unsecured = !client.config.secured;
     edit.classList.toggle('attention', unsecured);
-    const label = unsecured ? `${t('nav.editProfile')} – ${t('backup.attention')}` : t('nav.editProfile');
+    const label = unsecured ? `${t('nav.settings')} – ${t('backup.attention')}` : t('nav.settings');
     edit.title = label;
     edit.setAttribute('aria-label', label);
     const name = client.config.displayName || t('me');
@@ -1248,6 +1248,7 @@ const ICONS = {
   qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z',
   addContact: 'M15 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 8v6M22 11h-6',
   edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z',
+  settings: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
   reply: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
   info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01',

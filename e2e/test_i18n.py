@@ -41,7 +41,7 @@ def test_web_client_in_german(german, make_account):
     expect(page.locator("dialog")).to_contain_text("Ende-zu-Ende-Verschlüsselung")
     page.locator("dialog").get_by_role("button", name="Abbrechen").click()
 
-    page.get_by_role("button", name="Profil bearbeiten").click()
+    page.get_by_role("button", name="Einstellungen").click()
     page.locator(".settings").get_by_label("Sprache").select_option("en")
     expect(page.locator(".nav-actions")).to_contain_text("My invite")
     expect(page.locator(".settings h2")).to_have_text("Settings")
