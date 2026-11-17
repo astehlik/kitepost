@@ -472,6 +472,26 @@ def test_emoji_completion_and_picker(web, dora):
     wait_text(dora.acc, "Emoji test 👍🚀")
 
 
+def test_emoji_suggestions_open_above_the_colon(web):
+    page = web.page
+    open_chat(page, "Phone")
+    box = page.locator(".composer textarea")
+    suggest = page.locator(".emoji-suggest")
+
+    def place(text):
+        box.fill(text)
+        expect(suggest.locator("li").first).to_be_visible()
+        s, b = suggest.bounding_box(), box.bounding_box()
+        assert b["x"] - 0.5 <= s["x"] and s["x"] + s["width"] <= b["x"] + b["width"] + 0.5, (s, b)
+        return s["x"] - b["x"], b["x"] + b["width"] - (s["x"] + s["width"])
+
+    assert place(":smil")[0] < 1
+    assert place("Hello there, how are you :smil")[0] > 100
+    assert place("x" * 70 + " :smil")[1] < 1
+    page.set_viewport_size({"width": 390, "height": 844})
+    place("Hello there, how are you :smil")
+
+
 # Independent of the client's detection: a colored glyph no wider than one emoji.
 RENDERS_AS_EMOJI = """emoji => {
     const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });

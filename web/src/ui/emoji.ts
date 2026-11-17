@@ -191,6 +191,25 @@ export function insertAtCursor(input: HTMLTextAreaElement, text: string, from = 
  * Suggests emojis while typing `:query` (at the start or after whitespace, so times and URLs
  * do not trigger it). Arrow keys choose, Enter or Tab insert, Escape closes.
  */
+const MIRRORED = ['box-sizing', 'width', 'padding-left', 'padding-right', 'border-left-width', 'border-right-width', 'border-style',
+  'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant', 'font-feature-settings', 'letter-spacing', 'word-spacing',
+  'line-height', 'text-transform', 'text-indent', 'tab-size'];
+
+/** Left edge of the character at `index`, relative to `input`: a textarea reports no caret coordinates, so a copy is measured. */
+function charLeft(input: HTMLTextAreaElement, index: number): number {
+  const style = getComputedStyle(input);
+  const mirror = document.createElement('div');
+  for (const prop of MIRRORED) mirror.style.setProperty(prop, style.getPropertyValue(prop));
+  Object.assign(mirror.style, { position: 'absolute', top: '0', left: '-9999px', visibility: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'break-word' });
+  const marker = document.createElement('span');
+  marker.textContent = input.value[index] ?? '.';
+  mirror.append(input.value.slice(0, index), marker);
+  document.body.append(mirror);
+  const left = marker.offsetLeft;
+  mirror.remove();
+  return left - input.scrollLeft;
+}
+
 export function attachEmojiCompletion(input: HTMLTextAreaElement, container: HTMLElement) {
   const list = h('ul', { class: 'emoji-suggest', role: 'listbox', hidden: true });
   container.append(list);
@@ -209,6 +228,14 @@ export function attachEmojiCompletion(input: HTMLTextAreaElement, container: HTM
       onpointerdown: (ev: Event) => { ev.preventDefault(); pick(e); },
     }, h('span', { class: 'emoji' }, e.unicode), h('span', {}, e.shortcodes[0] ? `:${e.shortcodes[0]}:` : e.label))));
     list.hidden = !matches.length;
+    if (!list.hidden) place();
+  };
+  // Above the colon, within the input's width; a list wider than the input starts at its left edge.
+  const place = () => {
+    const emoji = list.querySelector<HTMLElement>('.emoji');
+    const x = input.offsetLeft + charLeft(input, start) - (emoji?.offsetLeft ?? 0);
+    const max = input.offsetLeft + input.offsetWidth - list.offsetWidth;
+    list.style.left = `${Math.max(input.offsetLeft, Math.min(x, max))}px`;
   };
 
   input.addEventListener('input', async () => {
