@@ -4,7 +4,7 @@ export default defineConfig({
   base: './',
   server: {
     proxy: {
-      '/bridge': { target: 'ws://127.0.0.1:8080', ws: true, changeOrigin: true },
+      '/bridge': { target: 'ws://127.0.0.1:8080', ws: true },
     },
   },
   build: {

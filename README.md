@@ -176,7 +176,7 @@ messages), broadcast channels, webxdc, calls, read receipts to contacts, ephemer
 
 ```sh
 ./build-wasm.sh                          # needs the wasm32-unknown-unknown target, clang and llvm-ar
-(cd bridge && pnpm install && node server.mjs) &
+(cd bridge && pnpm install && HOST_MAP=_chatmail.test=172.30.99.10 node server.mjs) &
 cd web && pnpm install && pnpm dev       # Vite proxies /bridge to the bridge on :8080
 ```
 
