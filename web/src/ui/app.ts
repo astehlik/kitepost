@@ -7,6 +7,7 @@ import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale, dialog, flashLabel, formatAgo, formatDateTime, formatTime, getDateLocale, setDateLocale, type DateLocale, h, trustedSvg, whileBusy } from './dom';
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
+import { splitLinks } from './links';
 import { sendErrorKind } from './send-error';
 import { checkForUpdate } from './update';
 
@@ -595,7 +596,7 @@ function startMain(client: DcClient, initialChat?: string) {
       !out && chat.type === 'group' ? h('div', { class: 'sender' }, client.contactName(m.from)) : null,
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
-      m.text ? h('div', { class: 'text' }, m.text) : null,
+      m.text ? h('div', { class: 'text' }, ...linkified(m.text)) : null,
       h('div', { class: 'meta' }, m.ephemeralTimer ? metaMark(ICONS.timer, 'mark.ephemeral') : null, client.savedCopy(m) ? metaMark(ICONS.star, 'mark.saved') : null, m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
@@ -765,14 +766,16 @@ function startMain(client: DcClient, initialChat?: string) {
       const msg = msgOf(ev.target);
       const chat = current ? client.chats.get(current) : undefined;
       const m = msg && chat && client.messages.get(chat.id)?.find(x => x.id === msg.dataset.id);
-      if (!m || !chat || window.getSelection()?.toString()) return;
+      if (!m || !chat || window.getSelection()?.toString() || (ev.target as Element).closest('a.link')) return;
       ev.preventDefault();
       if (!touch && !selected.size) openMenu(chat, m, msg, new DOMRect(ev.clientX, ev.clientY, 0, 0));
     });
     // Capturing, so that in selection mode a tap on a quote or reaction selects instead.
     list.addEventListener('click', ev => {
       const msg = msgOf(ev.target);
-      if (longPressed || (msg && !(ev.target as Element).closest('a') && (selected.size || ev.ctrlKey || ev.metaKey))) {
+      const link = (ev.target as Element).closest('a');
+      const selects = selected.size ? !link?.hasAttribute('download') : !link && (ev.ctrlKey || ev.metaKey);
+      if (longPressed || (msg && selects)) {
         ev.preventDefault();
         ev.stopPropagation();
         if (!longPressed && msg) toggleSelected(msg.dataset.id!);
@@ -1343,6 +1346,23 @@ function groupDialog(client: DcClient, open: (id: string) => void) {
     },
   ]);
   name.focus();
+}
+
+function linkified(text: string): (string | Node)[] {
+  return splitLinks(text).map(({ text, href, suspicious }) => !href ? text : h('a', {
+    class: 'link', href, target: '_blank', rel: 'noopener noreferrer',
+    onclick: suspicious ? ev => { ev.preventDefault(); confirmLink(href); } : undefined,
+  }, text));
+}
+
+/** Shows where a link that can imitate another address really leads, like Delta Chat Desktop. */
+function confirmLink(href: string) {
+  dialog(t('link.title'), h('div', {},
+    h('p', {}, t('link.suspicious', { host: new URL(href).hostname })),
+    h('code', { class: 'link-target' }, href)), [
+    { label: t('cancel') },
+    { label: t('link.open'), primary: true, onClick: () => { window.open(href, '_blank', 'noopener,noreferrer'); } },
+  ]);
 }
 
 function formatFingerprint(fp: string): string {

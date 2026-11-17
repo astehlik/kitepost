@@ -226,6 +226,9 @@ export const de: Record<keyof typeof en, string> = {
 
   'contact.editName': 'Namen ändern',
   'contact.nicknameHint': 'Nur du siehst diesen Namen, auf allen deinen Geräten. Leer lassen, um wieder „{name}“ zu verwenden.',
+  'link.title': 'Link öffnen?',
+  'link.suspicious': 'Dieser Link führt zu {host}. Seine Adresse kann wie eine andere aussehen; öffne ihn nur, wenn du ihm vertraust.',
+  'link.open': 'Öffnen',
   'e2e.title': 'Ende-zu-Ende-Verschlüsselung',
   'e2e.invite': '✔ Über einen Einladungslink verbunden, der beide Schlüssel geprüft hat.',
   'e2e.compare': 'Nachrichten werden mit diesem Schlüssel Ende-zu-Ende-verschlüsselt. Zum Prüfen vergleicht ihr die Fingerabdrücke persönlich.',

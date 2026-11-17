@@ -144,6 +144,8 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .msg { max-width: min(75%, 640px); padding: .45rem .7rem; border-radius: 12px; background: var(--in); box-shadow: 0 1px 1px rgba(0,0,0,.06); overflow-wrap: anywhere; }
 .msg.out { align-self: flex-end; background: var(--out); }
 .msg .text { white-space: pre-wrap; }
+.msg .text a { color: inherit; text-decoration: underline; }
+.link-target { display: block; overflow-wrap: anywhere; font-size: .85rem; }
 .msg .sender { font-size: .8rem; font-weight: 600; color: var(--accent); }
 .msg .meta { font-size: .72rem; color: var(--muted); text-align: right; }
 .msg .meta .state { display: inline-flex; margin-left: .25rem; vertical-align: -.2em; }

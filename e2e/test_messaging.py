@@ -576,6 +576,39 @@ def next_note(page, count):
     return page.evaluate(f"(({{ title, body, tag, icon, renotify }}) => ({{ title, body, tag, icon: !!icon, renotify }}))(window.notes[{count - 1}])")
 
 
+def test_links(web, dora):
+    page = web.page
+    page.context.route("https://*.test/**", lambda route: route.fulfill(body="<title>target</title>", content_type="text/html"))
+    dora.chat.send_text("see https://kitepost.test/a_(b). or https://bank.test@evil.test/ but not javascript:alert(1)")
+    msg = page.locator(".msg.in", has_text="see https://kitepost.test")
+    links = msg.locator(".text a")
+    expect(links).to_have_text(["https://kitepost.test/a_(b)", "https://bank.test@evil.test/"])
+    expect(links.first).to_have_attribute("href", "https://kitepost.test/a_(b)")
+    for i in range(2):
+        expect(links.nth(i)).to_have_attribute("target", "_blank")
+        expect(links.nth(i)).to_have_attribute("rel", "noopener noreferrer")
+
+    with page.expect_popup() as popup:
+        links.first.click()
+    assert popup.value.evaluate("window.opener") is None
+    popup.value.close()
+
+    links.nth(1).click()
+    dialog = page.locator("dialog")
+    expect(dialog).to_contain_text("This link leads to evil.test.")
+    with page.expect_popup() as popup:
+        dialog.get_by_role("button", name="Open").click()
+    assert popup.value.evaluate("window.opener") is None
+    assert popup.value.url == "https://bank.test@evil.test/"
+    popup.value.close()
+
+    message_action(page, msg, "Select")
+    expect(msg).to_have_class(re.compile(r"\bselected\b"))
+    links.first.click()
+    expect(msg).not_to_have_class(re.compile(r"\bselected\b"))
+    assert len(page.context.pages) == 1
+
+
 def test_notifications_show_sender_and_content(web, dora, tmp_path):
     page = web.page
     page.evaluate(NOTIFICATIONS)
