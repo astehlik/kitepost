@@ -609,7 +609,7 @@ def test_resend(web, dora):
 
 def test_sends_large_attachments(web, dora, tmp_path):
     big = tmp_path / "big.bin"
-    data = random.randbytes(300_000)
+    data = random.randbytes(3_000_000)
     big.write_bytes(data)
     web.page.locator('.composer input[type="file"]').set_input_files(str(big))
     web_send(web.page, "a large file")

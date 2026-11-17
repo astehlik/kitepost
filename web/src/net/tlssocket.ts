@@ -2,6 +2,7 @@ import { TlsClient } from '../wasm';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const FRAME_SIZE = 64 * 1024;
 
 /** A TLS stream to `host:port`, tunnelled through the WebSocket bridge. */
 export class TlsSocket {
@@ -66,7 +67,8 @@ export class TlsSocket {
   private flush() {
     if (this.closed || this.ws.readyState !== WebSocket.OPEN) return;
     const out = this.tls.take_outgoing();
-    if (out.length) this.ws.send(out as Uint8Array<ArrayBuffer>);
+    // The bridge closes the connection on WebSocket messages above 1 MiB (maxPayload).
+    for (let i = 0; i < out.length; i += FRAME_SIZE) this.ws.send(out.subarray(i, i + FRAME_SIZE) as Uint8Array<ArrayBuffer>);
   }
 
   private append(data: Uint8Array) {
