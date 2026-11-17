@@ -978,6 +978,28 @@ def test_web_group_and_group_invite(web, dora, make_account):
     assert dora.acc.get_chat_by_id(snap.chat_id).get_basic_snapshot().name == "Web group"
 
 
+def test_group_without_members_accepts_messages(web, make_account):
+    page = web.page
+    page.get_by_role("button", name="New group").click()
+    page.locator("dialog .field input").fill("Solo group")
+    page.get_by_role("button", name="Create", exact=True).click()
+    expect(page.locator(".info", has_text="Group created")).to_be_visible()
+    web_send(page, "just me so far")
+    expect(page.locator(".msg.out", has_text="just me so far").locator(".meta")).not_to_contain_text("failed")
+    expect(page.locator("dialog")).to_have_count(0)
+
+    erin = make_account("Erin")
+    page.get_by_role("button", name="Invite link").click()
+    link = page.locator("dialog input").input_value()
+    page.get_by_role("button", name="Close").click()
+    erin.secure_join(link)
+    wait_event(erin, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
+    expect(page.locator(".info", has_text="joined the group")).to_be_visible()
+    web_send(page, "welcome, Erin")
+    snap = wait_text(erin, "welcome, Erin")
+    assert erin.get_chat_by_id(snap.chat_id).get_basic_snapshot().name == "Solo group"
+
+
 def chat_menu(page, title, action):
     page.locator(".chatlist li[data-chat]", has_text=title).first.click(button="right")
     page.locator(".menu").get_by_role("menuitem", name=action).click()

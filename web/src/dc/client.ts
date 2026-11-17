@@ -712,7 +712,7 @@ export class DcClient extends EventTarget {
     if (chat.left) throw new Error(t('error.notMember'));
     const self = chat.type === 'self';
     const members = self ? [] : this.memberContacts(chat);
-    if (!self && !members.length) throw new Error(t('error.noKey'));
+    if (chat.type === 'single' && !members.length) throw new Error(t('error.noKey'));
 
     const msgs = this.messages.get(chatId) ?? [];
     const last = [...msgs].reverse().find(m => !m.info && m.state !== 'failed');
@@ -761,7 +761,7 @@ export class DcClient extends EventTarget {
     if (!chat || msgs.some(m => !m) || !canResend(chat, msgs as Message[])) throw new Error('cannot resend');
     const self = chat.type === 'self';
     const members = self ? [] : this.memberContacts(chat);
-    if (!self && !members.length) throw new Error(t('error.noKey'));
+    if (chat.type === 'single' && !members.length) throw new Error(t('error.noKey'));
     for (const m of msgs as Message[]) {
       await this.saveMessage({ ...m, state: 'pending', error: undefined });
       try {
@@ -786,9 +786,9 @@ export class DcClient extends EventTarget {
 
   /** Sends to the chat's members and returns the Message-ID. */
   private async sendToChat(chat: Chat, members: Contact[], msg: Partial<OutgoingMessage> & Pick<OutgoingMessage, 'text' | 'headers'>): Promise<string> {
-    const self = chat.type === 'self';
+    // Like core, a chat without other members only goes to the server when another own device needs it.
+    const self = chat.type === 'self' || !members.length;
     if (chat.ephemeralTimer) msg = { ...msg, headers: [...msg.headers, { name: 'Ephemeral-Timer', value: String(chat.ephemeralTimer), kind: 'raw' }] };
-    // Like core, notes to self only go to the server when another device needs them.
     if (self && !this.config.bccSelf) return msg.rfc724_mid ?? createMid();
     return this.send({
       to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
@@ -808,7 +808,7 @@ export class DcClient extends EventTarget {
     if (chat.left) throw new Error(t('error.notMember'));
     const self = chat.type === 'self';
     const members = self ? [] : this.memberContacts(chat);
-    if (!self && !members.length) throw new Error(t('error.noKey'));
+    if (chat.type === 'single' && !members.length) throw new Error(t('error.noKey'));
     const headers: OutgoingMessage['headers'] = [
       { name: 'Chat-Version', value: '1.0', kind: 'raw' },
       { name: 'In-Reply-To', value: msgId, kind: 'messageid' },
@@ -833,7 +833,7 @@ export class DcClient extends EventTarget {
       if (!canDeleteForAll(chat, msgs as Message[])) throw new Error('unknown message');
       const self = chat.type === 'self';
       const members = self ? [] : this.memberContacts(chat);
-      if (!self && !members.length) throw new Error(t('error.noKey'));
+      if (chat.type === 'single' && !members.length) throw new Error(t('error.noKey'));
       const headers: OutgoingMessage['headers'] = [
         { name: 'Chat-Version', value: '1.0', kind: 'raw' },
         { name: 'Chat-Delete', value: msgIds.join(' '), kind: 'messageid' },
@@ -900,7 +900,7 @@ export class DcClient extends EventTarget {
     if (chat.left) throw new Error(t('error.notMember'));
     const self = chat.type === 'self';
     const members = self ? [] : this.memberContacts(chat);
-    if (!self && !members.length) throw new Error(t('error.noKey'));
+    if (chat.type === 'single' && !members.length) throw new Error(t('error.noKey'));
     const headers: OutgoingMessage['headers'] = [
       { name: 'Chat-Version', value: '1.0', kind: 'raw' },
       { name: 'In-Reply-To', value: msgId, kind: 'messageid' },
@@ -923,7 +923,7 @@ export class DcClient extends EventTarget {
     if (!chat || !target || target.info || !msgId.includes('@')) throw new Error('unknown message');
     const self = chat.type === 'self';
     const members = self ? [] : this.memberContacts(chat);
-    if (!self && !members.length) throw new Error(t('error.noKey'));
+    if (chat.type === 'single' && !members.length) throw new Error(t('error.noKey'));
     const headers: OutgoingMessage['headers'] = [
       { name: 'Chat-Version', value: '1.0', kind: 'raw' },
       { name: 'In-Reply-To', value: msgId, kind: 'messageid' },
@@ -1539,7 +1539,7 @@ export class DcClient extends EventTarget {
     if (chat.left) throw new Error(t('error.notMember'));
     const self = chat.type === 'self';
     const members = self ? [] : this.memberContacts(chat);
-    if (!self && !members.length) throw new Error(t('error.noKey'));
+    if (chat.type === 'single' && !members.length) throw new Error(t('error.noKey'));
     // Set first, so that the system message carries the new Ephemeral-Timer header.
     chat.ephemeralTimer = seconds || undefined;
     chat.ephemeralSetAt = Date.now();
