@@ -47,6 +47,5 @@ def test_bar_follows_the_language(web):
     expect(page.locator(".update-bar")).to_contain_text("A new version")
     page.get_by_role("button", name="Edit profile").click()
     page.get_by_label("Language").select_option("de")
-    page.get_by_role("button", name="Speichern").click()
     expect(page.locator(".update-bar")).to_contain_text("Eine neue Version von Kitepost ist verfügbar.")
     expect(page.locator(".update-bar").get_by_role("button", name="Neu laden")).to_be_visible()

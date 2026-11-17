@@ -42,9 +42,9 @@ def test_web_client_in_german(german, make_account):
     page.locator("dialog").get_by_role("button", name="Abbrechen").click()
 
     page.get_by_role("button", name="Profil bearbeiten").click()
-    page.locator("dialog").get_by_label("Sprache").select_option("en")
+    page.locator(".settings").get_by_label("Sprache").select_option("en")
     expect(page.locator(".nav-actions")).to_contain_text("My invite")
-    expect(page.locator(".chathead strong")).to_have_text("Phone")
+    expect(page.locator(".settings h2")).to_have_text("Settings")
     page.reload()
     expect(page.get_by_role("heading", name="Unlock Kitepost")).to_be_visible()
 

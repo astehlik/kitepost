@@ -49,13 +49,14 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     unsecured = page.locator(".profile .icon-button.attention")
     expect(unsecured).to_be_visible()
     page.get_by_role("button", name="Edit profile").click()
-    expect(page.locator("dialog")).to_contain_text("only in this browser")
+    expect(page.locator(".settings")).to_contain_text("only in this browser")
     page.get_by_role("button", name="Export backup").click()
     with page.expect_download() as download:
         page.get_by_role("button", name="Download").click()
     backup = tmp_path / download.value.suggested_filename
     download.value.save_as(backup)
     expect(unsecured).to_have_count(0)
+    expect(page.locator(".settings")).not_to_contain_text("only in this browser")
     assert backup.name.startswith("delta-chat-backup-") and backup.suffix == ".tar", backup.name
 
     restored = DeltaChat(rpc).add_account()
@@ -117,6 +118,7 @@ def test_nicknames_sync_between_browsers(web, dora, browser, tmp_path):
     backup = tmp_path / download.value.suggested_filename
     download.value.save_as(backup)
     page.keyboard.press("Escape")
+    open_chat(page, "Dora")
 
     other = browser.new_context().new_page()
     set_passphrase(other)

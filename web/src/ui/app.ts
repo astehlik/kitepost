@@ -399,11 +399,13 @@ let canHandoff = false;
 // Listeners of the previous main view, removed when it is rebuilt, e.g. after a language change.
 let mainListeners: AbortController | undefined;
 
-function startMain(client: DcClient, initialChat?: string) {
+function startMain(client: DcClient, initialChat?: string, initialSettings = false) {
   mainListeners?.abort();
   mainListeners = new AbortController();
   const { signal } = mainListeners;
   let current = initialChat;
+  let settingsOpen = initialSettings;
+  let settings: { key: string; el: Element } | undefined;
   let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement; pinbar: HTMLButtonElement; pinnedIds?: string; pinnedAt?: string } | undefined;
   const rendered = new Map<string, { node: Element; key: string; urls: string[] }>();
   let startReply: ((m: Message) => void) | undefined;
@@ -438,7 +440,7 @@ function startMain(client: DcClient, initialChat?: string) {
   const notifyBar = h('div', { class: 'notify-bar', hidden: true });
   const edit = h('button', {
     class: 'icon-button', title: t('nav.editProfile'), 'aria-label': t('nav.editProfile'),
-    onclick: () => profileDialog(client, () => startMain(client, current)),
+    onclick: () => { settingsOpen = true; current = undefined; renderAll(); },
   });
   edit.append(icon(ICONS.edit));
   const sidebar = h('aside', { class: 'sidebar' },
@@ -898,6 +900,13 @@ function startMain(client: DcClient, initialChat?: string) {
     dialog(t('chat.saved'), h('div', {}, ...(['saved.notes', 'saved.copies', 'saved.sync'] as const).map(k => h('p', {}, t(k)))), [{ label: t('close') }]);
   }
 
+  function leaveChat() {
+    shown = undefined;
+    selected.clear();
+    pane.classList.remove('selecting');
+    forgetMessages();
+  }
+
   const footerKey = (chat: Chat) => JSON.stringify([chat.isRequest, chat.left]);
 
   function chatFooter(chat: Chat): Element {
@@ -911,11 +920,16 @@ function startMain(client: DcClient, initialChat?: string) {
 
   function renderPane() {
     const chat = current ? client.chats.get(current) : undefined;
+    if (settingsOpen) {
+      const key = JSON.stringify([client.config.secured, canHandoff]);
+      if (settings?.key === key && pane.contains(settings.el)) return;
+      leaveChat();
+      settings = { key, el: settingsView(client, () => startMain(client, undefined, true), () => { settingsOpen = false; renderAll(); }) };
+      pane.replaceChildren(settings.el);
+      return;
+    }
     if (!chat) {
-      shown = undefined;
-      selected.clear();
-      pane.classList.remove('selecting');
-      forgetMessages();
+      leaveChat();
       pane.replaceChildren(h('div', { class: 'placeholder' }, h('p', {}, t('pane.select')), h('p', {}, t('pane.e2e'))));
       return;
     }
@@ -1139,11 +1153,12 @@ function startMain(client: DcClient, initialChat?: string) {
 
   function open(chatId: string) {
     current = chatId;
+    settingsOpen = false;
     renderAll();
   }
 
   function renderAll() {
-    root().querySelector('.layout')?.classList.toggle('chat-open', !!current);
+    root().querySelector('.layout')?.classList.toggle('chat-open', !!current || settingsOpen);
     renderProfile();
     renderList();
     renderPane();
@@ -1530,17 +1545,25 @@ function exportDialog(client: DcClient, done?: () => void) {
 }
 
 /** `rebuild` redraws the main view after the language changed. */
-function profileDialog(client: DcClient, rebuild: () => void) {
+/** The profile and the settings of this browser, saved as soon as they change. */
+function settingsView(client: DcClient, rebuild: () => void, close: () => void): Element {
+  const save = (f: () => unknown) => () => { void Promise.resolve().then(f).catch(errorDialog); };
   const name = h('input', { type: 'text', maxlength: '100', value: client.config.displayName });
-  const remember = rememberField();
-  void client.isRemembered().then(on => { remember.box.checked = on; });
+  name.addEventListener('change', save(() => client.setDisplayName(name.value)));
+
+  const lang = languageSelect(rebuild);
+  const example = new Date();
+  const dateFormat = h('select', {},
+    ...DATE_LOCALES.map(l => h('option', { value: l, selected: getDateLocale() === l },
+      `${t(`date.${l}`)} – ${example.toLocaleString(dateLocale(l), { dateStyle: 'short', timeStyle: 'short' })}`)));
+  dateFormat.addEventListener('change', () => { setDateLocale(dateFormat.value as DateLocale); rebuild(); });
+
   const receipts = h('input', { type: 'checkbox', checked: client.readReceipts });
-  const receiptsField = h('div', { class: 'remember' },
-    h('label', { class: 'check' }, receipts, t('profile.readReceipts')),
-    h('small', { class: 'hint' }, t('profile.readReceiptsHint')));
+  receipts.addEventListener('change', save(() => client.setReadReceipts(receipts.checked)));
   const notifyDetails = h('select', {},
     ...(['all', 'sender', 'none'] as const).map(v => h('option', { value: v, selected: client.notifyDetails === v },
       t(v === 'all' ? 'profile.notifyAll' : v === 'sender' ? 'profile.notifySender' : 'profile.notifyNone'))));
+  notifyDetails.addEventListener('change', save(() => client.setNotifyDetails(notifyDetails.value as 'all' | 'sender' | 'none')));
   const permission = h('div', { class: 'notify-permission' });
   const renderPermission = () => {
     const state = notificationState();
@@ -1549,42 +1572,39 @@ function profileDialog(client: DcClient, rebuild: () => void) {
         : state === 'unsupported' ? '' : h('small', { class: 'hint' }, t(state === 'denied' ? 'notify.denied' : 'notify.granted')));
   };
   renderPermission();
-  const notifyField = h('div', {}, field(t('profile.notify'), notifyDetails), permission, h('small', { class: 'hint' }, t('profile.notifyHint')));
-  const example = new Date();
-  const dateFormat = h('select', {},
-    ...DATE_LOCALES.map(l => h('option', { value: l, selected: getDateLocale() === l },
-      `${t(`date.${l}`)} – ${example.toLocaleString(dateLocale(l), { dateStyle: 'short', timeStyle: 'short' })}`)));
-  const lang = languageSelect(() => {
-    document.querySelector('dialog')?.close();
-    rebuild();
-    profileDialog(client, rebuild);
-  });
-  dialog(t('profile.title'), h('div', {},
-    client.config.secured ? null : h('p', { class: 'warning' }, t('backup.unsecured')),
-    field(t('setup.displayName'), name),
-    field(t('language'), lang),
-    field(t('profile.dateFormat'), dateFormat),
-    receiptsField,
-    notifyField,
-    remember.el,
-    h('div', { class: 'profile-info' },
-      h('small', {}, t('profile.address', { addr: client.config.addr })),
-      h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))), [
-    ...(canHandoff ? [{ label: t('profile.phone'), onClick: () => { phoneDialog(client); } }] : []),
-    { label: t('profile.export'), onClick: () => { exportDialog(client); } },
-    { label: t('profile.lock'), onClick: async () => { await client.setRemembered(false); location.reload(); } },
-    { label: t('cancel') },
-    {
-      label: t('save'), primary: true, onClick: async () => {
-        await client.setDisplayName(name.value);
-        await client.setRemembered(remember.box.checked);
-        await client.setReadReceipts(receipts.checked);
-        await client.setNotifyDetails(notifyDetails.value as 'all' | 'sender' | 'none');
-        if (dateFormat.value !== getDateLocale()) {
-          setDateLocale(dateFormat.value as DateLocale);
-          rebuild();
-        }
-      },
-    },
-  ]);
+
+  const remember = rememberField();
+  void client.isRemembered().then(on => { remember.box.checked = on; });
+  remember.box.addEventListener('change', save(() => client.setRemembered(remember.box.checked)));
+
+  const section = (title: string, ...content: (Node | null)[]) => h('section', {}, h('h3', {}, title), ...content);
+  const check = (box: HTMLInputElement, label: string, hint: string) =>
+    h('div', { class: 'remember' }, h('label', { class: 'check' }, box, label), h('small', { class: 'hint' }, hint));
+  return h('div', { class: 'settings' },
+    h('header', { class: 'chathead' },
+      h('button', { class: 'back', onclick: close }, '‹'),
+      h('h2', { class: 'who' }, t('settings.title')),
+      Object.assign(iconButton(ICONS.close, t('close'), close), { className: 'icon-button close' })),
+    h('div', { class: 'settings-body' },
+      section(t('settings.profile'),
+        field(t('setup.displayName'), name),
+        h('div', { class: 'profile-info' },
+          h('small', {}, t('profile.address', { addr: client.config.addr })),
+          h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))),
+      section(t('settings.appearance'),
+        field(t('language'), lang),
+        field(t('profile.dateFormat'), dateFormat)),
+      section(t('settings.chats'),
+        check(receipts, t('profile.readReceipts'), t('profile.readReceiptsHint')),
+        field(t('profile.notify'), notifyDetails, t('profile.notifyHint')),
+        permission),
+      section(t('settings.devices'),
+        client.config.secured ? null : h('p', { class: 'warning' }, t('backup.unsecured')),
+        h('div', { class: 'row' },
+          canHandoff ? h('button', { onclick: () => phoneDialog(client) }, t('profile.phone')) : null,
+          h('button', { onclick: () => exportDialog(client) }, t('profile.export')))),
+      section(t('settings.browser'),
+        remember.el,
+        h('div', { class: 'row' },
+          h('button', { onclick: busyClick(async () => { await client.setRemembered(false); location.reload(); }) }, t('profile.lock'))))));
 }

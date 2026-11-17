@@ -108,7 +108,7 @@ def test_handoff_from_profile_keeps_contacts(page, context, rpc, make_account, t
     url = page.locator("dialog").get_by_role("link", name="Open the link instead").get_attribute("href")
     _, backup = save_on_phone(context, url, tmp_path)
     expect(page.locator("dialog .phone-setup .ok")).to_be_visible()
-    page.get_by_role("button", name="Close").click()
+    page.locator("dialog").get_by_role("button", name="Close").click()
     expect(unsecured).to_have_count(0)
 
     restored = restore(rpc, backup, page.locator(".profile small").inner_text())

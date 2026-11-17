@@ -231,6 +231,14 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .members { display: flex; flex-direction: column; gap: .4rem; margin-top: .8rem; max-height: 40vh; overflow-y: auto; }
 .fingerprints code { display: block; font-size: .85rem; word-spacing: .2rem; }
 .fingerprints strong { display: block; margin-top: .6rem; font-size: .9rem; }
+.settings { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.settings .chathead .who { flex: 1; margin: 0; font-size: 1.05rem; }
+.settings-body { flex: 1; overflow-y: auto; padding: 1rem; }
+.settings-body section { display: flex; flex-direction: column; gap: .9rem; max-width: 560px; margin: 0 auto 1rem; padding: 1rem 1.2rem; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+.settings-body h3 { margin: 0; font-size: 1rem; }
+.settings-body p, .settings-body .profile-info, .settings-body .notify-permission { margin: 0; }
+.settings-body .notify-permission:empty { display: none; }
+.settings-body .row { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .5rem; }
 .chat-settings section { margin-top: 1.2rem; }
 .chat-settings h3 { margin: 0 0 .4rem; font-size: 1rem; }
 .chat-settings p { margin: 0 0 .6rem; }
@@ -240,7 +248,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
   .layout.chat-open .sidebar { display: none; }
   .layout:not(.chat-open) .pane { display: none; }
   .back { display: inline-block; }
-  .chathead .edit-chat { display: none; }
+  .chathead .edit-chat, .settings .close { display: none; }
   .msg { max-width: 88%; }
 }
 .card .import { margin-top: 1rem; }

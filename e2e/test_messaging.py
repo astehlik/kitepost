@@ -53,21 +53,30 @@ def test_read_receipts_both_ways(web, dora):
     wait_state(dora.acc, msg.id, MessageState.OUT_MDN_RCVD)
 
 
-def test_profile_dialog_can_be_cancelled(web):
+def test_settings_page(web):
     page = web.page
+    open_chat(page, "Phone")
     page.get_by_role("button", name="Edit profile").click()
-    page.locator("dialog .field", has_text="Display name").locator("input").fill("Not saved")
-    page.locator("dialog").get_by_role("button", name="Cancel").click()
-    expect(page.locator("dialog")).to_have_count(0)
-    expect(page.locator(".profile strong")).to_have_text("Webby")
+    settings = page.locator(".settings")
+    expect(settings.get_by_role("heading", name="Settings")).to_be_visible()
+    expect(page.locator(".chathead strong")).to_have_count(0)
+    settings.get_by_role("button", name="Close").click()
+    expect(settings).to_have_count(0)
+    open_chat(page, "Phone")
+    expect(page.locator(".chathead strong")).to_have_text("Phone")
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.locator(".chathead .back").click()
     page.get_by_role("button", name="Edit profile").click()
-    expect(page.locator("dialog .field", has_text="Display name").locator("input")).to_have_value("Webby")
+    expect(page.locator(".chatlist")).to_be_hidden()
+    settings.locator(".back").click()
+    expect(page.locator(".chatlist")).to_be_visible()
 
 
 def test_read_receipts_can_be_turned_off(web, dora):
     web.page.get_by_role("button", name="Edit profile").click()
     web.page.get_by_label("Send read receipts").uncheck()
-    web.page.get_by_role("button", name="Save", exact=True).click()
+    open_chat(web.page, "Dora")
 
     msg = dora.chat.send_text("read silently")
     expect(web.page.locator(".msg.in", has_text="read silently")).to_be_visible()
@@ -792,15 +801,13 @@ def test_notifications_show_sender_and_content(web, dora, tmp_path):
     assert (note["title"], note["body"]) == ("Notify group", "Dora: hello group"), note
 
     page.get_by_role("button", name="Edit profile").click()
-    page.locator("dialog").get_by_label("Notifications show").select_option(label="Sender only")
-    page.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_label("Notifications show").select_option(label="Sender only")
     group.send_text("secret in the group")
     note = next_note(page, 5)
     assert (note["title"], note["body"]) == ("Notify group", "Dora: New message"), note
 
     page.get_by_role("button", name="Edit profile").click()
-    page.locator("dialog").get_by_label("Notifications show").select_option(label="No details")
-    page.get_by_role("button", name="Save", exact=True).click()
+    page.get_by_label("Notifications show").select_option(label="No details")
     dora.chat.send_text("secret")
     note = next_note(page, 6)
     assert note == {"title": "Kitepost", "body": "New message", "tag": note["tag"], "icon": False, "renotify": True}, note
@@ -831,15 +838,14 @@ def test_notification_permission_is_asked_on_request(web):
 
     page.evaluate(PERMISSION, "denied")
     page.get_by_role("button", name="Edit profile").click()
-    expect(page.locator("dialog")).to_contain_text("Blocked in this browser")
-    page.keyboard.press("Escape")
+    expect(page.locator(".settings")).to_contain_text("Blocked in this browser")
 
     page.evaluate("localStorage.removeItem('kitepost-notify-later')")
     reload_and_unlock(page)
     expect(bar).to_be_visible()
     page.get_by_role("button", name="Edit profile").click()
-    page.locator("dialog").get_by_role("button", name="Turn on notifications").click()
-    expect(page.locator("dialog")).to_contain_text("Allowed in this browser.")
+    page.locator(".settings").get_by_role("button", name="Turn on notifications").click()
+    expect(page.locator(".settings")).to_contain_text("Allowed in this browser.")
     expect(bar).to_be_hidden()
 
 
@@ -1155,8 +1161,7 @@ def test_date_format(web, dora):
 
     def choose(value):
         page.get_by_role("button", name="Edit profile").click()
-        page.locator("dialog").get_by_label("Date format").select_option(value)
-        page.get_by_role("button", name="Save", exact=True).click()
+        page.get_by_label("Date format").select_option(value)
         open_chat(page, "Dora")
 
     def sent():
@@ -1179,8 +1184,8 @@ def test_date_format(web, dora):
 
 def test_rename_updates_header(web):
     web.page.get_by_role("button", name="Edit profile").click()
-    web.page.locator("dialog .field input").first.fill("Webby Renamed")
-    web.page.get_by_role("button", name="Save", exact=True).click()
+    web.page.get_by_label("Display name").fill("Webby Renamed")
+    web.page.get_by_label("Display name").press("Enter")
     expect(web.page.locator(".profile strong")).to_have_text("Webby Renamed")
 
 
