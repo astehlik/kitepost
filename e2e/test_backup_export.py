@@ -34,6 +34,11 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     page.locator(".chatlist li[data-chat]", has_text="Export group").click(button="right")
     page.locator(".menu").get_by_role("menuitem", name="Pin chat").click()
     expect(page.locator(".chatlist li", has_text="Export group").get_by_role("img", name="Pinned chat")).to_be_visible()
+    page.locator(".chatlist li[data-chat]", has_text="Export group").click(button="right")
+    page.locator(".menu").get_by_role("menuitem", name="Disappearing messages").click()
+    page.locator("dialog select").select_option(label="1 week")
+    page.get_by_role("button", name="Save").click()
+    expect(page.locator(".messages .info", has_text="You set disappearing messages to 1 week.")).to_be_visible()
     dora_group = dora.acc.get_chat_by_id(wait_text(dora.acc, "group from web").chat_id)
 
     unsecured = page.locator(".profile .icon-button.attention")
@@ -60,6 +65,7 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         chats = {c.get_basic_snapshot().name: c for c in restored.get_chatlist()}
         assert {"Dora", "Export group", "Phone", "Saved messages"} <= set(chats), list(chats)
         assert chats["Export group"].get_basic_snapshot().pinned
+        assert rpc.get_chat_ephemeral_timer(restored.id, chats["Export group"].id) == 604_800
         assert restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot().last_seen > 0
         snaps = [m.get_snapshot() for m in chats["Dora"].get_messages()]
         assert {"hello web", "hello dora"} <= {s.text for s in snaps}

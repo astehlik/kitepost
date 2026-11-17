@@ -1,4 +1,4 @@
-import { t, type Key } from '../i18n';
+import { getLanguage, t, type Key } from '../i18n';
 import { ImapClient } from '../net/imap';
 import { SmtpClient, SmtpError } from '../net/smtp';
 import type { Store } from '../store';
@@ -46,6 +46,18 @@ export function pinnable(m: Message): boolean {
   return !m.info && m.state !== 'failed' && m.state !== 'pending' && m.id.includes('@');
 }
 
+function ephemeralTimer(p: ParsedMessage): number {
+  const v = Number(p.headers['ephemeral-timer']);
+  return Number.isInteger(v) && v > 0 && v < 2 ** 32 ? v : 0;
+}
+
+/** "5 minutes", "1 week" … in the UI language, in the largest unit that fits exactly. */
+export function formatDuration(seconds: number): string {
+  const units: [Intl.NumberFormatOptions['unit'], number][] = [['year', 31_536_000], ['week', 604_800], ['day', 86_400], ['hour', 3600], ['minute', 60]];
+  const [unit, size] = units.find(([, s]) => seconds % s === 0) ?? ['second', 1];
+  return new Intl.NumberFormat(getLanguage(), { style: 'unit', unit, unitDisplay: 'long' }).format(seconds / size);
+}
+
 function addrEq(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
@@ -75,6 +87,8 @@ export class DcClient extends EventTarget {
   private bob = new Map<string, BobState>();
   private seen = new Set<string>();
   private seenQueue = new Set<number>();
+  private deleteQueue = new Set<number>();
+  private ephemeralTimeout: ReturnType<typeof setTimeout> | undefined;
   private currentUid: number | undefined;
   private abort: AbortController | undefined;
   private wakeImap: (() => void) | undefined;
@@ -142,6 +156,7 @@ export class DcClient extends EventTarget {
     for (const list of c.messages.values()) list.sort(byChatOrder);
     for (const id of (await store.get<string[]>('seen')) ?? []) c.seen.add(id);
     for (const uid of (await store.get<number[]>('seenQueue')) ?? []) c.seenQueue.add(uid);
+    for (const uid of (await store.get<number[]>('deleteQueue')) ?? []) c.deleteQueue.add(uid);
     return c;
   }
 
@@ -180,6 +195,18 @@ export class DcClient extends EventTarget {
     this.seen.add(m.id);
     await this.store.put(`msg/${m.chatId}/${m.id}`, m);
     this.changed(`messages:${m.chatId}`);
+    if (m.ephemeralAt) this.scheduleEphemeral();
+  }
+
+  private ephemeralFields(p: ParsedMessage, own: boolean): Partial<Message> {
+    const timer = ephemeralTimer(p);
+    if (!timer) return {};
+    return {
+      ephemeralTimer: timer,
+      // Own messages from other devices count as seen, like core's OutDelivered.
+      ephemeralAt: own ? Date.now() + timer * 1000 : undefined,
+      serverUid: this.currentUid ? { uid: this.currentUid, validity: this.config.uidValidity } : undefined,
+    };
   }
 
   private async markSeen(mid: string) {
@@ -306,6 +333,7 @@ export class DcClient extends EventTarget {
     // Like core, archiving marks fresh messages as noticed, without read receipts.
     if (visibility === 'archived') chat.unread = 0;
     await this.saveChat(chat);
+    if (visibility === 'archived') await this.startTimers(this.messages.get(chat.id) ?? []);
   }
 
   /** Like core's Chat::get_sync_id(). */
@@ -352,6 +380,7 @@ export class DcClient extends EventTarget {
   }
 
   async markRead(chatId: string) {
+    await this.startTimers(this.messages.get(chatId) ?? []);
     const chat = this.chats.get(chatId);
     if (chat && chat.unread) {
       chat.unread = 0;
@@ -423,6 +452,7 @@ export class DcClient extends EventTarget {
       for (const m of list.slice(0, lastRead + 1)) {
         if (m.unseenUid) await this.saveMessage({ ...m, unseenUid: undefined });
       }
+      await this.startTimers(list.slice(0, lastRead + 1));
       const chat = this.chats.get(chatId);
       const unread = list.slice(lastRead + 1).filter(m => m.from !== 'self' && !m.info).length;
       if (chat && chat.unread !== unread) await this.saveChat({ ...chat, unread });
@@ -662,7 +692,7 @@ export class DcClient extends EventTarget {
 
     const local: Message = {
       id: `pending-${createId()}`, chatId, from: 'self', text, timestamp: Date.now(), addedAt: Date.now(), state: 'pending',
-      quote, replyTo: quoted?.id, attachments: attachment ? [attachment] : [], reactions: {},
+      quote, replyTo: quoted?.id, attachments: attachment ? [attachment] : [], reactions: {}, ephemeralTimer: chat.ephemeralTimer,
     };
     await this.saveMessage(local);
     if (chat.isRequest) await this.acceptChat(chatId);
@@ -673,7 +703,7 @@ export class DcClient extends EventTarget {
       });
       await this.store.delete(`msg/${chatId}/${local.id}`);
       this.messages.set(chatId, (this.messages.get(chatId) ?? []).filter(m => m.id !== local.id));
-      await this.saveMessage({ ...local, id: mid, state: 'sent' });
+      await this.saveMessage({ ...local, id: mid, state: 'sent', ephemeralAt: local.ephemeralTimer && Date.now() + local.ephemeralTimer * 1000 });
     } catch (e) {
       await this.saveMessage({ ...local, state: 'failed', error: e instanceof Error ? e.message : String(e) });
       throw e;
@@ -686,6 +716,7 @@ export class DcClient extends EventTarget {
   /** Sends to the chat's members and returns the Message-ID. */
   private async sendToChat(chat: Chat, members: Contact[], msg: Partial<OutgoingMessage> & Pick<OutgoingMessage, 'text' | 'headers'>): Promise<string> {
     const self = chat.type === 'self';
+    if (chat.ephemeralTimer) msg = { ...msg, headers: [...msg.headers, { name: 'Ephemeral-Timer', value: String(chat.ephemeralTimer), kind: 'raw' }] };
     // Like core, notes to self only go to the server when another device needs them.
     if (self && !this.config.bccSelf) return createMid();
     return this.send({
@@ -873,6 +904,11 @@ export class DcClient extends EventTarget {
       return false;
     }
     const mid = stripMid(p.headers['message-id']);
+    if (mid && this.seen.has(mid)) {
+      // The copy of an own disappearing message, which has to go from the server as well.
+      const own = this.messageById(mid);
+      if (own?.ephemeralTimer && !own.serverUid && this.currentUid) await this.saveMessage({ ...own, serverUid: { uid: this.currentUid, validity: this.config.uidValidity } });
+    }
     if (!mid || this.seen.has(mid)) return false;
     await this.markSeen(mid);
     if (addrEq(p.from.addr, this.config.addr)) {
@@ -1031,6 +1067,7 @@ export class DcClient extends EventTarget {
   }
 
   private async applyMessage(p: ParsedMessage, mid: string, chat: Chat, from: string) {
+    await this.applyTimer(p, chat, from);
     const edit = stripMid(p.headers['chat-edit']);
     const del = p.headers['chat-delete'];
     if (edit) {
@@ -1094,6 +1131,7 @@ export class DcClient extends EventTarget {
       state: own ? 'sent' : 'received', attachments: p.attachments, reactions: {},
       unseenUid: !own && this.currentUid ? { uid: this.currentUid, validity: this.config.uidValidity } : undefined,
       wantsMdn: !own && p.encrypted && !!p.headers['chat-disposition-notification-to'] || undefined,
+      ...this.ephemeralFields(p, own),
     });
     chat.lastActivity = Date.now();
     if (!own) chat.unread += 1;
@@ -1113,7 +1151,7 @@ export class DcClient extends EventTarget {
         case 'message-pinned': return say('info.pinned', 'info.youPinned');
         case 'message-unpinned': return say('info.unpinned', 'info.youUnpinned');
         case 'group-avatar-changed': return say('info.groupImage', 'info.youGroupImage');
-        case 'ephemeral-timer-changed': return say('info.timer', 'info.youTimer');
+        case 'ephemeral-timer-changed': return this.timerInfo(ephemeralTimer(p), from);
         case 'location-streaming-enabled': return say('info.location', 'info.youLocation');
         case 'protection-enabled': case 'protection-disabled': case 'call-accepted': case 'call-ended': return null;
         default: return undefined;
@@ -1312,16 +1350,114 @@ export class DcClient extends EventTarget {
     if (this.abort) return;
     this.abort = new AbortController();
     void this.run(this.abort.signal);
+    this.scheduleEphemeral();
   }
 
   stop() {
     this.abort?.abort();
     this.abort = undefined;
+    clearTimeout(this.ephemeralTimeout);
   }
 
   /** Interrupts IDLE so new messages are fetched immediately. */
   poke() {
     this.wakeImap?.();
+  }
+
+  private async flushDeletes(imap: ImapClient) {
+    if (!this.deleteQueue.size) return;
+    const uids = [...this.deleteQueue].sort((a, b) => a - b);
+    await imap.deleteUids(uids);
+    for (const uid of uids) this.deleteQueue.delete(uid);
+    await this.store.put('deleteQueue', [...this.deleteQueue]);
+  }
+
+  /** Like core's ephemeral_loop: wakes up for the next message that expires. */
+  private scheduleEphemeral() {
+    clearTimeout(this.ephemeralTimeout);
+    if (!this.abort) return;
+    let next = Infinity;
+    for (const list of this.messages.values()) for (const m of list) if (m.ephemeralAt && m.ephemeralAt < next) next = m.ephemeralAt;
+    if (next === Infinity) return;
+    // setTimeout overflows above 2^31 ms; a timer of a year just wakes up earlier and reschedules.
+    this.ephemeralTimeout = setTimeout(() => void this.deleteExpired(), Math.min(Math.max(0, next - Date.now()), 2 ** 31 - 1));
+  }
+
+  /** Like core's delete_expired_messages(): here and, for messages still on the server, there. */
+  private async deleteExpired() {
+    const now = Date.now();
+    const expired = [...this.messages.values()].flat().filter(m => m.ephemeralAt && m.ephemeralAt <= now);
+    for (const m of expired) {
+      if (m.serverUid?.validity === this.config.uidValidity) this.deleteQueue.add(m.serverUid.uid);
+      await this.deleteLocally(m.id);
+    }
+    if (expired.some(m => m.serverUid)) {
+      await this.store.put('deleteQueue', [...this.deleteQueue]);
+      this.poke();
+    }
+    this.scheduleEphemeral();
+  }
+
+  /** Like core's start_ephemeral_timer(): the countdown starts once a message was seen. */
+  private async startTimers(msgs: Message[]) {
+    const now = Date.now();
+    for (const m of msgs) if (m.ephemeralTimer && !m.ephemeralAt) await this.saveMessage({ ...m, ephemeralAt: now + m.ephemeralTimer * 1000 });
+  }
+
+  /** Sets disappearing messages for everyone in the chat, like core's set_ephemeral_timer(). */
+  async setEphemeralTimer(chatId: string, seconds: number) {
+    const chat = this.chats.get(chatId);
+    if (!chat) throw new Error('unknown chat');
+    if ((chat.ephemeralTimer ?? 0) === seconds) return;
+    if (chat.left) throw new Error(t('error.notMember'));
+    const self = chat.type === 'self';
+    const members = self ? [] : this.memberContacts(chat);
+    if (!self && !members.length) throw new Error(t('error.noKey'));
+    // Set first, so that the system message carries the new Ephemeral-Timer header.
+    chat.ephemeralTimer = seconds || undefined;
+    chat.ephemeralSetAt = Date.now();
+    await this.saveChat(chat);
+    const headers: OutgoingMessage['headers'] = [
+      { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+      { name: 'Chat-Content', value: 'ephemeral-timer-changed', kind: 'raw' },
+    ];
+    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
+    const text = this.timerInfo(seconds, 'self');
+    const mid = await this.sendToChat(chat, members, { text, headers });
+    await this.saveMessage({
+      id: mid, chatId, from: 'self', text, timestamp: Date.now(), addedAt: Date.now(), state: 'sent', info: true, attachments: [], reactions: {},
+    });
+  }
+
+  /** Like core's stock_ephemeral_timer_changed(). */
+  private timerInfo(seconds: number, from: string): string {
+    const own = from === 'self';
+    if (!seconds) return t(own ? 'info.youTimerOff' : 'info.timerOff', { name: this.contactName(from) });
+    return t(own ? 'info.youTimer' : 'info.timer', { name: this.contactName(from), duration: formatDuration(seconds) });
+  }
+
+  /**
+   * Applies the Ephemeral-Timer of a received message to its chat, like core's receive_imf(): only
+   * from members and only if newer than the last change. Core's check against the sender's
+   * previous message, which prevents rollbacks by senders who missed a change, needs References
+   * and is left out.
+   */
+  private async applyTimer(p: ParsedMessage, chat: Chat, from: string) {
+    const timer = ephemeralTimer(p);
+    const visible = p.text || p.attachments.length || p.is_reaction || p.headers['chat-content'];
+    if (!visible || (chat.ephemeralTimer ?? 0) === timer) return;
+    const member = from === 'self' || chat.left || chat.type !== 'group' || chat.members.includes(from);
+    const ts = this.timestamp(p);
+    if (!member || ts < (chat.ephemeralSetAt ?? 0)) return;
+    chat.ephemeralTimer = timer || undefined;
+    chat.ephemeralSetAt = ts;
+    await this.saveChat(chat);
+    if (p.headers['chat-content'] !== 'ephemeral-timer-changed') {
+      await this.saveMessage({
+        id: `timer-${createId()}`, chatId: chat.id, from, text: this.timerInfo(timer, from), timestamp: ts,
+        state: 'received', info: true, attachments: [], reactions: {},
+      });
+    }
   }
 
   private async flushSeen(imap: ImapClient) {
@@ -1352,6 +1488,7 @@ export class DcClient extends EventTarget {
         while (!signal.aborted) {
           const toDelete: number[] = [];
           await this.flushSeen(imap);
+          await this.flushDeletes(imap);
           await imap.fetchNewer(this.config.lastUid, async m => {
             this.currentUid = m.uid;
             try {

@@ -9,7 +9,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, capture_clipboard, message_action, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, RELAY, addr_of, capture_clipboard, message_action, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -767,6 +767,66 @@ def test_last_seen(web, dora):
     page.clock.fast_forward("11:00")
     expect(entry.locator(".avatar.seen")).to_have_count(0)
     expect(page.locator(".chathead small")).to_contain_text("Last seen 11 minutes ago")
+
+
+def mailbox_size(addr):
+    out = subprocess.run(["docker", "exec", "kitepost-test-chatmail", "sh", "-c", f"ls /home/vmail/mail/{RELAY}/{addr}/cur /home/vmail/mail/{RELAY}/{addr}/new | grep -c ."],
+                         capture_output=True, text=True)
+    return int(out.stdout.strip() or 0)
+
+
+def core_timer(acc, msg_id):
+    return acc._rpc.get_message_info_object(acc.id, msg_id)["ephemeralTimer"]
+
+
+@pytest.mark.local_relay
+def test_disappearing_messages_set_in_web(web, dora):
+    page = web.page
+    chat_menu(page, "Dora", "Disappearing messages")
+    page.locator("dialog select").select_option(label="1 hour")
+    page.get_by_role("button", name="Save").click()
+    expect(page.locator(".messages .info", has_text="You set disappearing messages to 1 hour.")).to_be_visible()
+    expect(page.get_by_role("button", name="Disappearing messages: 1 hour")).to_be_visible()
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while dora.acc._rpc.get_chat_ephemeral_timer(dora.acc.id, dora.chat.id) != 3600:
+        assert time.monotonic() < deadline, "core did not take the timer"
+        time.sleep(0.2)
+
+    web_send(page, "vanishing")
+    assert core_timer(dora.acc, wait_text(dora.acc, "vanishing").id) == {"kind": "enabled", "duration": 3600}
+    dora.chat.send_text("vanishing reply")
+    reply = page.locator(".msg.in", has_text="vanishing reply")
+    expect(reply.get_by_role("img", name="Disappears")).to_be_visible()
+    expect(page.locator(".msg.out", has_text="vanishing").get_by_role("img", name="Disappears")).to_be_visible()
+    stored = mailbox_size(web.addr)
+
+    page.clock.install()
+    reload_and_unlock(page)
+    open_chat(page, "Dora")
+    expect(reply).to_be_visible()
+    page.clock.fast_forward("01:00:05")
+    expect(reply).to_have_count(0)
+    expect(page.locator(".msg.out", has_text="vanishing")).to_have_count(0)
+    expect(page.locator(".messages .info", has_text="You set disappearing messages to 1 hour.")).to_be_visible()
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while mailbox_size(web.addr) >= stored:
+        assert time.monotonic() < deadline, "the reply stayed on the server"
+        time.sleep(0.2)
+
+
+def test_disappearing_messages_set_in_core(web, dora):
+    page = web.page
+    dora.chat.set_ephemeral_timer(60)
+    expect(page.locator(".messages .info", has_text="Dora set disappearing messages to 1 minute.")).to_be_visible()
+    expect(page.get_by_role("button", name="Disappearing messages: 1 minute")).to_be_visible()
+    web_send(page, "under the core timer")
+    assert core_timer(dora.acc, wait_text(dora.acc, "under the core timer").id) == {"kind": "enabled", "duration": 60}
+
+    dora.chat.set_ephemeral_timer(0)
+    expect(page.locator(".messages .info", has_text="Dora turned off disappearing messages.")).to_be_visible()
+    expect(page.get_by_role("button", name="Disappearing messages: 1 minute")).to_have_count(0)
+    web_send(page, "no timer any more")
+    assert core_timer(dora.acc, wait_text(dora.acc, "no timer any more").id) == {"kind": "disabled"}
 
 
 def test_rename_updates_header(web):

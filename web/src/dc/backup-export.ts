@@ -160,10 +160,10 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       const name = chat.type === 'self' ? 'Saved messages'
         : single ? (src.contacts.find(c => c.fingerprint === chat.contact)?.name || src.contacts.find(c => c.fingerprint === chat.contact)?.addr || '')
         : chat.name;
-      run(`INSERT INTO chats (id, type, name, blocked, grpid, param, created_timestamp, archived)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      run(`INSERT INTO chats (id, type, name, blocked, grpid, param, created_timestamp, archived, ephemeral_timer)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [chatId, chat.type === 'group' ? CHAT_GROUP : CHAT_SINGLE, name, chat.isRequest ? BLOCKED_REQUEST : 0,
-        chat.grpid ?? '', chat.id === SELF_CHAT ? 'K=1' : '', created, chat.visibility === 'archived' ? 1 : chat.visibility === 'pinned' ? 2 : 0]);
+        chat.grpid ?? '', chat.id === SELF_CHAT ? 'K=1' : '', created, chat.visibility === 'archived' ? 1 : chat.visibility === 'pinned' ? 2 : 0, chat.ephemeralTimer ?? 0]);
       const members: [number, number, number][] = chat.type === 'self' ? [[CONTACT_SELF, created, 0]]
         : single ? [[single, created, 0]]
         : [
@@ -196,14 +196,16 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
         const ts = Math.floor(m.timestamp / 1000);
         const id = msgId++;
         run(`INSERT INTO msgs (id, rfc724_mid, chat_id, from_id, to_id, timestamp, type, state, msgrmsg, bytes, txt, param,
-            timestamp_sent, timestamp_rcvd, hidden, error, mime_headers, mime_in_reply_to, mime_references, subject, hop_info, pinned)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 0, ?, '', ?, '', '', '', ?)`,
+            timestamp_sent, timestamp_rcvd, hidden, error, mime_headers, mime_in_reply_to, mime_references, subject, hop_info, pinned,
+            ephemeral_timer, ephemeral_timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 0, ?, '', ?, '', '', '', ?, ?, ?)`,
         [id, m.id.includes('@') ? m.id : `${crypto.randomUUID()}@localhost`, chatId, from,
           m.info ? CONTACT_INFO : out ? (single ?? (chat.type === 'self' ? CONTACT_SELF : 0)) : CONTACT_SELF,
           ts, att ? viewtype(att.mime) : 10, state, att ? att.data_b64.length * 3 / 4 : m.text.length, m.text,
           params([['f', file && `$BLOBDIR/${file}`], ['m', att?.mime], ['v', att?.filename], ['c', m.info ? undefined : 1],
             ['q', m.quote]]),
-          ts, !out && m.addedAt ? Math.floor(m.addedAt / 1000) : ts, m.error ?? '', m.replyTo ? `<${m.replyTo}>` : '', m.pinned ? 1 : 0]);
+          ts, !out && m.addedAt ? Math.floor(m.addedAt / 1000) : ts, m.error ?? '', m.replyTo ? `<${m.replyTo}>` : '', m.pinned ? 1 : 0,
+          m.ephemeralTimer ?? 0, m.ephemeralAt ? Math.ceil(m.ephemeralAt / 1000) : 0]);
         for (const [fp, readAt] of Object.entries(m.readBy ?? {})) {
           const contact = contactIds.get(fp);
           if (contact) run('INSERT INTO msgs_mdns (msg_id, contact_id, timestamp_sent) VALUES (?, ?, ?)', [id, contact, Math.floor(readAt / 1000)]);

@@ -59,6 +59,9 @@ export interface Chat {
   unread: number;
   /** Like core's ChatVisibility; normal when unset. */
   visibility?: 'archived' | 'pinned';
+  /** Disappearing messages in seconds, and the Date of the message that set it (core's EphemeralSettingsTimestamp). */
+  ephemeralTimer?: number;
+  ephemeralSetAt?: number;
 }
 
 export type MessageState = 'pending' | 'sent' | 'failed' | 'received' | 'read';
@@ -84,6 +87,11 @@ export interface Message {
   attachments: AttachmentData[];
   reactions: Record<string, string>;
   pinned?: boolean;
+  /** Like core's msgs.ephemeral_timer (seconds) and ephemeral_timestamp (here ms), set once the message was read. */
+  ephemeralTimer?: number;
+  ephemeralAt?: number;
+  /** INBOX UID of a disappearing message, to delete it on the server too. */
+  serverUid?: { uid: number; validity: number };
   /** A copy in "Saved messages": the Message-ID of the original, like core's `starred` column. */
   savedFrom?: string;
   /** INBOX UID while `\Seen` still has to be set on the server. */

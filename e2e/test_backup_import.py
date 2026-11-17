@@ -41,6 +41,7 @@ def imported(page, make_account, tmp_path):
     group = phone.create_group("Backup group")
     group.add_contact(phone.get_contact_by_addr(addr_of(bob)))
     group.send_text("group hello")
+    group.set_ephemeral_timer(604_800)
     bob_group = bob.get_chat_by_id(wait_text(bob, "group hello").chat_id)
 
     backup_dir = tmp_path / "backup"
@@ -239,6 +240,12 @@ def test_pins_are_imported(imported):
 def test_last_seen_is_imported(imported):
     page = imported.page
     expect(page.locator(".chatlist li[data-chat]", has_text="Bob").first.locator(".avatar.seen")).to_be_visible()
+
+
+def test_disappearing_messages_are_imported(imported):
+    page = imported.page
+    open_chat(page, "Backup group")
+    expect(page.get_by_role("button", name="Disappearing messages: 1 week")).to_be_visible()
 
 
 def test_saved_copies_are_imported(imported):

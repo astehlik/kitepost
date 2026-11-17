@@ -222,12 +222,15 @@ export async function readBackup(
     for (const r of rows(db, 'SELECT chat_id, contact_id FROM chats_contacts WHERE add_timestamp >= remove_timestamp')) {
       members.set(num(r.chat_id), [...(members.get(num(r.chat_id)) ?? []), num(r.contact_id)]);
     }
-    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked, param, archived FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
+    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked, param, archived, ephemeral_timer FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
     for (const r of chatRows) {
       const ids = members.get(num(r.id)) ?? [];
       const fps = ids.map(id => fpById.get(id)).filter((fp): fp is string => !!fp && fp !== 'self');
       const visibility = num(r.archived) === 1 ? 'archived' as const : num(r.archived) === 2 ? 'pinned' as const : undefined;
-      const base = { name: str(r.name), isRequest: num(r.blocked) === BLOCKED_REQUEST, lastActivity: 0, unread: 0, visibility };
+      const base = {
+        name: str(r.name), isRequest: num(r.blocked) === BLOCKED_REQUEST, lastActivity: 0, unread: 0, visibility,
+        ephemeralTimer: num(r.ephemeral_timer) || undefined,
+      };
       if (num(r.type) === CHAT_SINGLE && params(r.param).get('K') === '1') {
         chats.push({ ...base, id: SELF_CHAT, type: 'self', name: '', members: [], left: false });
         chatIdMap.set(num(r.id), SELF_CHAT);
@@ -263,7 +266,7 @@ export async function readBackup(
     const pinned = rows(db, "SELECT 1 FROM pragma_table_info('msgs') WHERE name = 'pinned'").length ? 'pinned' : '0 AS pinned';
     for (const [dcId, chatId] of chatIdMap) {
       const chat = chatById.get(chatId)!;
-      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, timestamp_rcvd, state, txt, param, mime_in_reply_to, ${pinned},
+      const msgRows = rows(db, `SELECT id, rfc724_mid, from_id, timestamp, timestamp_rcvd, state, txt, param, mime_in_reply_to, ${pinned}, ephemeral_timer, ephemeral_timestamp,
         (SELECT o.rfc724_mid FROM msgs o WHERE o.id = msgs.starred AND msgs.starred > 0) AS saved_from FROM msgs
         WHERE chat_id = ? AND hidden = 0 AND state != ? ORDER BY timestamp DESC, id DESC LIMIT ?`, [dcId, STATE_OUT_DRAFT, MAX_MESSAGES_PER_CHAT]);
       for (const r of msgRows.reverse()) {
@@ -295,6 +298,8 @@ export async function readBackup(
           addedAt: incoming && num(r.timestamp_rcvd) ? num(r.timestamp_rcvd) * 1000 : undefined,
           readBy: readBy.get(num(r.id)),
           pinned: num(r.pinned) === 1 || undefined,
+          ephemeralTimer: num(r.ephemeral_timer) || undefined,
+          ephemeralAt: num(r.ephemeral_timestamp) * 1000 || undefined,
           savedFrom: chatId === SELF_CHAT ? str(r.saved_from) || undefined : undefined,
         });
         chat.lastActivity = Math.max(chat.lastActivity, timestamp);

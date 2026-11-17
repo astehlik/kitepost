@@ -1,5 +1,5 @@
 import { fileReader, readBackup } from '../dc/backup';
-import { canDeleteForAll, DcClient, pinnable, savable } from '../dc/client';
+import { canDeleteForAll, DcClient, formatDuration, pinnable, savable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
 import type { Chat, Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
@@ -518,7 +518,7 @@ function startMain(client: DcClient, initialChat?: string) {
   /** Everything `messageView` shows, so that unchanged messages keep their nodes. */
   function messageKey(chat: Chat, m: Message): string {
     const parent = m.quote !== undefined ? repliedTo(chat, m) : undefined;
-    return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.pinned, !!client.savedCopy(m), m.reactions, formatTime(m.timestamp),
+    return JSON.stringify([m.text, m.info, m.state, m.error, m.edited, m.pinned, !!client.savedCopy(m), m.ephemeralTimer, m.reactions, formatTime(m.timestamp),
       m.attachments.map(a => [a.filename, a.mime, a.data_b64.length]), m.quote, parent && authorName(parent.from),
       chat.left, chat.isRequest, chat.type === 'group' && m.from !== 'self' ? client.contactName(m.from) : '']);
   }
@@ -594,7 +594,7 @@ function startMain(client: DcClient, initialChat?: string) {
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, m.text) : null,
-      h('div', { class: 'meta' }, client.savedCopy(m) ? metaMark(ICONS.star, 'mark.saved') : null, m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
+      h('div', { class: 'meta' }, m.ephemeralTimer ? metaMark(ICONS.timer, 'mark.ephemeral') : null, client.savedCopy(m) ? metaMark(ICONS.star, 'mark.saved') : null, m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
       }, n > 1 ? `${r} ${n}` : r))) : null,
@@ -698,6 +698,7 @@ function startMain(client: DcClient, initialChat?: string) {
         return b;
       };
       const box = h('div', { class: 'menu', role: 'menu' },
+        chat.left || chat.isRequest ? null : item(t('timer.title'), ICONS.timer, () => timerDialog(chat)),
         chat.visibility === 'pinned' ? item(t('chat.unpinChat'), ICONS.pin, set(undefined)) : item(t('chat.pinChat'), ICONS.pin, set('pinned')),
         chat.visibility === 'archived' ? item(t('chat.unarchive'), ICONS.archive, set(undefined)) : item(t('chat.archive'), ICONS.archive, set('archived')));
       const close = popover(li, box, at);
@@ -815,11 +816,13 @@ function startMain(client: DcClient, initialChat?: string) {
       : chat.type === 'group'
       ? t('chat.members', { n: chat.members.length + 1 })
       : contact ? [contact.lastSeen && t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }), contact.addr].filter(Boolean).join(' · ') : '';
-    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact && client.freshness(contact)]);
+    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact && client.freshness(contact), chat.ephemeralTimer]);
+    const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
       h('div', { class: 'who' }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
+      chat.ephemeralTimer ? h('button', { class: 'icon-button', title: timerLabel, 'aria-label': timerLabel, onclick: () => timerDialog(chat) }, icon(ICONS.timer)) : null,
       chat.type === 'group' ? h('button', { onclick: busyClick(() => showInvite(client, chat.id)) }, t('invite.link')) : null,
       contact ? h('button', { onclick: () => fingerprintDialog(client, contact.fingerprint) }, t('chat.encryption')) : null,
       h('button', { onclick: () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteText')), [
@@ -1089,6 +1092,19 @@ function startMain(client: DcClient, initialChat?: string) {
     if (document.hidden && chat && !chat.isRequest && 'Notification' in window && Notification.permission === 'granted') notify(chat, d);
   }, { signal });
 
+  /** Like Delta Chat's ephemeral timer dialog; the choices of Delta Chat Desktop. */
+  function timerDialog(chat: Chat) {
+    const current = chat.ephemeralTimer ?? 0;
+    const choices = [0, 300, 1800, 3600, 86_400, 604_800, 3_024_000, 31_536_000];
+    if (!choices.includes(current)) choices.push(current);
+    const select = h('select', { 'aria-label': t('timer.title') },
+      ...choices.sort((a, b) => a - b).map(s => h('option', { value: String(s), selected: s === current }, s ? formatDuration(s) : t('timer.off'))));
+    dialog(t('timer.title'), h('div', {}, h('p', {}, t('timer.text')), select), [
+      { label: t('cancel') },
+      { label: t('save'), primary: true, onClick: () => client.setEphemeralTimer(chat.id, Number(select.value)) },
+    ]);
+  }
+
   /** Like Delta Chat's notifications: one per chat, replaced by the next one. */
   function notify(chat: Chat, d: Incoming) {
     const details = client.notifyDetails;
@@ -1147,6 +1163,7 @@ const ICONS = {
   select: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6',
   pin: 'M12 17v5M9 4h6M10 4v6l-3.5 4v3h11v-3L14 10V4',
   archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
+  timer: 'M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9',
   back: 'M15 18l-6-6 6-6',
   close: 'M6 6l12 12M18 6 6 18',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
@@ -1160,7 +1177,7 @@ function stateMark(state: Exclude<Message['state'], 'received'>): Element {
   return mark;
 }
 
-function metaMark(d: string, key: 'mark.pinned' | 'mark.saved' | 'mark.pinnedChat'): Element {
+function metaMark(d: string, key: 'mark.pinned' | 'mark.saved' | 'mark.pinnedChat' | 'mark.ephemeral'): Element {
   const label = t(key);
   const mark = h('span', { class: 'mark', role: 'img', 'aria-label': label, title: label });
   mark.append(icon(d));
