@@ -1,8 +1,10 @@
 """Messaging between the web client and Delta Chat core."""
 
+import random
 import re
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 from deltachat_rpc_client import EventType
@@ -518,6 +520,17 @@ def test_attachment_by_file_picker(web, dora, tmp_path):
     web.page.locator('.composer input[type="file"]').set_input_files(str(png))
     web_send(web.page, "a picture")
     assert wait_text(dora.acc, "a picture").file_name == "dot.png"
+
+
+def test_sends_large_attachments(web, dora, tmp_path):
+    big = tmp_path / "big.bin"
+    data = random.randbytes(300_000)
+    big.write_bytes(data)
+    web.page.locator('.composer input[type="file"]').set_input_files(str(big))
+    web_send(web.page, "a large file")
+    snap = wait_text(dora.acc, "a large file")
+    assert snap.file_name == "big.bin" and Path(snap.file).read_bytes() == data, snap
+    expect(own_state(web.page, "a large file")).to_have_attribute("data-state", "sent")
 
 
 def test_attachment_by_paste(web, dora, browser_name):

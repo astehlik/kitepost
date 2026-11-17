@@ -91,7 +91,9 @@ impl TlsClient {
             .with_custom_certificate_verifier(Arc::new(Verifier { webpki, provider }))
             .with_no_client_auth();
         let name = ServerName::try_from(server_name.to_string()).map_err(js_err)?;
-        let conn = ClientConnection::new(Arc::new(config), name).map_err(js_err)?;
+        let mut conn = ClientConnection::new(Arc::new(config), name).map_err(js_err)?;
+        // Outgoing messages are written whole and taken right after; the default 64 KiB fail larger ones.
+        conn.set_buffer_limit(None);
         Ok(TlsClient { conn, plaintext: Vec::new() })
     }
 
@@ -111,7 +113,7 @@ impl TlsClient {
     }
 
     pub fn write_plaintext(&mut self, data: &[u8]) -> Result<(), JsError> {
-        self.conn.writer().write_all(data).map_err(js_err)
+        self.try_write_plaintext(data).map_err(js_err)
     }
 
     pub fn is_handshaking(&self) -> bool {
@@ -134,6 +136,10 @@ impl TlsClient {
             self.drain_plaintext()?;
         }
         Ok(())
+    }
+
+    fn try_write_plaintext(&mut self, data: &[u8]) -> std::io::Result<()> {
+        self.conn.writer().write_all(data)
     }
 
     fn try_take_outgoing(&mut self) -> std::io::Result<Vec<u8>> {
@@ -190,8 +196,7 @@ mod tests {
         out
     }
 
-    #[test]
-    fn feeds_more_plaintext_than_rustls_buffers_at_once() {
+    fn connected() -> (TlsClient, ServerConnection) {
         let mut client = TlsClient::new(HOST).unwrap();
         let mut server = server();
         while client.is_handshaking() || server.is_handshaking() {
@@ -200,8 +205,34 @@ mod tests {
             server.process_new_packets().unwrap();
             client.try_feed(&server_output(&mut server)).unwrap();
         }
+        (client, server)
+    }
 
-        let sent: Vec<u8> = (0..200_000u32).map(|i| i as u8).collect();
+    fn large() -> Vec<u8> {
+        (0..200_000u32).map(|i| i as u8).collect()
+    }
+
+    #[test]
+    fn writes_more_plaintext_than_rustls_buffers_at_once() {
+        let (mut client, mut server) = connected();
+        let sent = large();
+        client.try_write_plaintext(&sent).unwrap();
+        let out = client.try_take_outgoing().unwrap();
+        let mut received = Vec::new();
+        let mut rd = out.as_slice();
+        while !rd.is_empty() {
+            server.read_tls(&mut rd).unwrap();
+            server.process_new_packets().unwrap();
+            server.reader().read_to_end(&mut received).ok();
+        }
+        assert!(received == sent);
+    }
+
+    #[test]
+    fn feeds_more_plaintext_than_rustls_buffers_at_once() {
+        let (mut client, mut server) = connected();
+
+        let sent = large();
         let mut frame = Vec::new();
         for chunk in sent.chunks(16_384) {
             server.writer().write_all(chunk).unwrap();
