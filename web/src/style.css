@@ -213,7 +213,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .dialog { border: none; border-radius: 14px; padding: 1.3rem; width: min(480px, calc(100% - 2rem)); background: var(--panel); color: var(--text); }
 .dialog::backdrop { background: rgba(0,0,0,.4); }
 .dialog h2 { margin-top: 0; font-size: 1.2rem; }
-.dialog .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+.dialog .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 /* Same rhythm as the onboarding forms. */
 .dialog .field + .field, .dialog .field + .remember, .dialog .remember + .remember { margin-top: .9rem; }
 .profile-info { display: flex; flex-direction: column; gap: .2rem; margin-top: 1.2rem; }
@@ -227,7 +227,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .fingerprints code { display: block; font-size: .85rem; word-spacing: .2rem; }
 
 @media (max-width: 720px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .layout.chat-open .sidebar { display: none; }
   .layout:not(.chat-open) .pane { display: none; }
   .back { display: inline-block; }

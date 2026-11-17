@@ -1507,6 +1507,7 @@ function profileDialog(client: DcClient, rebuild: () => void) {
     ...(canHandoff ? [{ label: t('profile.phone'), onClick: () => { phoneDialog(client); } }] : []),
     { label: t('profile.export'), onClick: () => { exportDialog(client); } },
     { label: t('profile.lock'), onClick: async () => { await client.setRemembered(false); location.reload(); } },
+    { label: t('cancel') },
     {
       label: t('save'), primary: true, onClick: async () => {
         await client.setDisplayName(name.value);

@@ -53,6 +53,17 @@ def test_read_receipts_both_ways(web, dora):
     wait_state(dora.acc, msg.id, MessageState.OUT_MDN_RCVD)
 
 
+def test_profile_dialog_can_be_cancelled(web):
+    page = web.page
+    page.get_by_role("button", name="Edit profile").click()
+    page.locator("dialog .field", has_text="Display name").locator("input").fill("Not saved")
+    page.locator("dialog").get_by_role("button", name="Cancel").click()
+    expect(page.locator("dialog")).to_have_count(0)
+    expect(page.locator(".profile strong")).to_have_text("Webby")
+    page.get_by_role("button", name="Edit profile").click()
+    expect(page.locator("dialog .field", has_text="Display name").locator("input")).to_have_value("Webby")
+
+
 def test_read_receipts_can_be_turned_off(web, dora):
     web.page.get_by_role("button", name="Edit profile").click()
     web.page.get_by_label("Send read receipts").uncheck()
