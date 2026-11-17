@@ -41,6 +41,11 @@ export function canDeleteForAll(chat: Chat, msgs: Message[]): boolean {
   return !chat.left && !chat.isRequest && chat.type !== 'self' && msgs.every(m => m.from === 'self' && !m.info && m.id.includes('@'));
 }
 
+/** Like core's resend_msgs(): own messages that are not info messages, in a chat that can send. */
+export function canResend(chat: Chat, msgs: Message[]): boolean {
+  return !chat.left && !chat.isRequest && msgs.length > 0 && msgs.every(m => m.from === 'self' && !m.info);
+}
+
 /** Like core's is_pinnable(): a failed message did not reach everyone, pinning it raises wrong expectations. */
 export function pinnable(m: Message): boolean {
   return !m.info && m.state !== 'failed' && m.state !== 'pending' && m.id.includes('@');
@@ -698,13 +703,9 @@ export class DcClient extends EventTarget {
 
     const msgs = this.messages.get(chatId) ?? [];
     const last = [...msgs].reverse().find(m => !m.info && m.state !== 'failed');
-    const headers: OutgoingMessage['headers'] = [{ name: 'Chat-Version', value: '1.0', kind: 'raw' }];
-    const replyTo = quoted?.id ?? last?.id;
-    if (replyTo) headers.push({ name: 'In-Reply-To', value: replyTo, kind: 'messageid' });
+    const headers = this.chatHeaders(chat, members, quoted?.id ?? last?.id);
     // Like core's set_quote(): a message without text is quoted by its attachment's name.
     const quote = quoted ? quoted.text || quoted.attachments[0]?.filename || '' : undefined;
-    if (!self && this.readReceipts) headers.push({ name: 'Chat-Disposition-Notification-To', value: this.config.addr, kind: 'raw' });
-    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
 
     const local: Message = {
       id: `pending-${createId()}`, chatId, from: 'self', text, timestamp: Date.now(), addedAt: Date.now(), state: 'pending',
@@ -729,12 +730,53 @@ export class DcClient extends EventTarget {
     await this.saveChat(chat);
   }
 
+  private chatHeaders(chat: Chat, members: Contact[], replyTo?: string): OutgoingMessage['headers'] {
+    const headers: OutgoingMessage['headers'] = [{ name: 'Chat-Version', value: '1.0', kind: 'raw' }];
+    if (replyTo) headers.push({ name: 'In-Reply-To', value: replyTo, kind: 'messageid' });
+    if (chat.type !== 'self' && this.readReceipts) headers.push({ name: 'Chat-Disposition-Notification-To', value: this.config.addr, kind: 'raw' });
+    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
+    return headers;
+  }
+
+  /**
+   * Sends own messages again, like core's resend_msgs(): with their Message-ID and date, so that
+   * recipients that have them already drop the copy. A failed message gets its first Message-ID here.
+   */
+  async resend(chatId: string, msgIds: string[]) {
+    const chat = this.chats.get(chatId);
+    const msgs = msgIds.map(id => this.messages.get(chatId)?.find(m => m.id === id));
+    if (!chat || msgs.some(m => !m) || !canResend(chat, msgs as Message[])) throw new Error('cannot resend');
+    const self = chat.type === 'self';
+    const members = self ? [] : this.memberContacts(chat);
+    if (!self && !members.length) throw new Error(t('error.noKey'));
+    for (const m of msgs as Message[]) {
+      await this.saveMessage({ ...m, state: 'pending', error: undefined });
+      try {
+        const mid = await this.sendToChat(chat, members, {
+          rfc724_mid: m.id.includes('@') ? m.id : createMid(),
+          timestamp: Math.floor(m.timestamp / 1000),
+          text: m.text, quote: m.quote, headers: this.chatHeaders(chat, members, m.replyTo), attachment: m.attachments[0],
+          gossip: members.length > 1 ? members.map(c => ({ addr: c.addr, key: c.publicKey })) : [],
+        });
+        const state = m.state === 'read' ? 'read' : 'sent';
+        if (mid !== m.id) {
+          await this.store.delete(`msg/${chatId}/${m.id}`);
+          this.messages.set(chatId, (this.messages.get(chatId) ?? []).filter(x => x.id !== m.id));
+        }
+        await this.saveMessage({ ...m, id: mid, state, error: undefined, ephemeralAt: m.ephemeralAt ?? (m.ephemeralTimer && Date.now() + m.ephemeralTimer * 1000) });
+      } catch (e) {
+        await this.saveMessage({ ...m, state: 'failed', error: e instanceof Error ? e.message : String(e) });
+        throw e;
+      }
+    }
+  }
+
   /** Sends to the chat's members and returns the Message-ID. */
   private async sendToChat(chat: Chat, members: Contact[], msg: Partial<OutgoingMessage> & Pick<OutgoingMessage, 'text' | 'headers'>): Promise<string> {
     const self = chat.type === 'self';
     if (chat.ephemeralTimer) msg = { ...msg, headers: [...msg.headers, { name: 'Ephemeral-Timer', value: String(chat.ephemeralTimer), kind: 'raw' }] };
     // Like core, notes to self only go to the server when another device needs them.
-    if (self && !this.config.bccSelf) return createMid();
+    if (self && !this.config.bccSelf) return msg.rfc724_mid ?? createMid();
     return this.send({
       to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
       subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,

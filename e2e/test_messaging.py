@@ -555,6 +555,38 @@ def test_attachment_by_file_picker(web, dora, tmp_path):
     assert received_files(dora.acc, snap.chat_id, 2) == [("two pictures", "one.png"), ("", "three.png")]
 
 
+def test_resend(web, dora):
+    page = web.page
+    smtp = {"blocked": True, "connections": 0}
+
+    def route(ws):
+        smtp["connections"] += 1
+        ws.close() if smtp["blocked"] else ws.connect_to_server()
+
+    page.route_web_socket(re.compile(r"port=465"), route)
+    page.locator(".composer textarea").fill("try again later")
+    page.locator(".composer textarea").press("Enter")
+    expect(own_state(page, "try again later")).to_have_attribute("data-state", "failed")
+
+    smtp["blocked"] = False
+    message_action(page, page.locator(".msg.out", has_text="try again later"), "Resend")
+    expect(own_state(page, "try again later")).to_have_attribute("data-state", "sent")
+    snap = wait_text(dora.acc, "try again later")
+
+    connections = smtp["connections"]
+    message_action(page, page.locator(".msg.out", has_text="try again later"), "Resend")
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while smtp["connections"] == connections:
+        assert time.monotonic() < deadline, "the message was not sent again"
+        page.wait_for_timeout(100)
+    expect(own_state(page, "try again later")).to_have_attribute("data-state", "sent")
+    dora.chat.send_text("after the resend")
+    expect(page.locator(".msg.in", has_text="after the resend")).to_be_visible()
+    texts = [m.get_snapshot().text for m in dora.chat.get_messages()]
+    assert texts.count("try again later") == 1, texts
+    assert dora.acc.get_message_by_id(snap.id).get_snapshot().text == "try again later"
+
+
 def test_sends_large_attachments(web, dora, tmp_path):
     big = tmp_path / "big.bin"
     data = random.randbytes(300_000)

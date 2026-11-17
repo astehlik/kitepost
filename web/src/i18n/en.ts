@@ -161,6 +161,7 @@ export const en = {
   'chat.deleteMessageTextSelf': 'Removes it here and on your other devices.',
   'chat.messageInfo': 'Message info',
   'chat.more': 'More',
+  'chat.resend': 'Resend',
   'chat.copy': 'Copy text',
   'chat.pin': 'Pin',
   'chat.unpin': 'Unpin',

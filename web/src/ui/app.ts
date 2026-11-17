@@ -1,7 +1,7 @@
 import { fileReader, readBackup } from '../dc/backup';
-import { canDeleteForAll, DcClient, formatDuration, pinnable, savable } from '../dc/client';
+import { canDeleteForAll, canResend, DcClient, formatDuration, pinnable, savable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
-import type { Chat, Message } from '../dc/types';
+import { byChatOrder, type Chat, type Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
@@ -627,6 +627,7 @@ function startMain(client: DcClient, initialChat?: string) {
       }) },
       canReact && { label: t('chat.reply'), icon: ICONS.reply, run: done(() => startReply?.(one)) },
       one && canEdit(chat, one) && { label: t('chat.edit'), icon: ICONS.edit, run: done(() => startEdit?.(one)) },
+      canResend(chat, msgs) && { label: t('chat.resend'), icon: ICONS.resend, run: done(() => client.resend(chat.id, [...msgs].sort(byChatOrder).map(m => m.id)).catch(errorDialog)) },
       one && { label: t('chat.messageInfo'), icon: ICONS.info, run: done(() => infoDialog(one)) },
       one && pinnable(one) && !chat.left && !chat.isRequest && {
         label: t(one.pinned ? 'chat.unpin' : 'chat.pin'), icon: ICONS.pin, run: done(() => client.setPinned(chat.id, one.id, !one.pinned).catch(errorDialog)),
@@ -1186,6 +1187,7 @@ const ICONS = {
   timer: 'M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9',
   back: 'M15 18l-6-6 6-6',
   forward: 'M9 6l6 6-6 6',
+  resend: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   close: 'M6 6l12 12M18 6 6 18',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',

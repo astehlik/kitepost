@@ -163,6 +163,7 @@ export const de: Record<keyof typeof en, string> = {
   'chat.deleteMessageTextSelf': 'Entfernt sie hier und auf deinen anderen Geräten.',
   'chat.messageInfo': 'Nachrichteninfo',
   'chat.more': 'Mehr',
+  'chat.resend': 'Erneut senden',
   'chat.copy': 'Text kopieren',
   'chat.pin': 'Anheften',
   'chat.unpin': 'Loslösen',
