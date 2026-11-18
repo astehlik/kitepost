@@ -124,7 +124,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .who small, .who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status { font-size: .8rem; color: var(--muted); }
 .status.ok { color: var(--ok); }
-.nav-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: .3rem; padding: 0 .6rem .6rem; border-bottom: 1px solid var(--border); }
+.nav-actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: .3rem; padding: 0 .6rem .6rem; border-bottom: 1px solid var(--border); }
 .nav-actions button { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; line-height: 1.2; gap: .25rem; padding: .5rem .2rem; border: 0; border-radius: 10px; background: none; font-size: .8rem; color: var(--muted); }
 .nav-actions button:hover { background: var(--bg); color: var(--text); filter: none; }
 .icon-button svg, .nav-actions svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -145,6 +145,13 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .chatlist li.archive-link strong { flex: 1; font-weight: 600; }
 .chatlist li.archive-link svg { width: 20px; height: 20px; margin: 0 10px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .chatlist small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new-chat .search { padding: .6rem .9rem; border-bottom: 1px solid var(--border); }
+.new-chat .search input { width: 100%; }
+.chatlist.contacts li { padding: 0; }
+.chatlist.contacts li > button { display: flex; align-items: center; gap: .7rem; width: 100%; padding: .6rem .9rem; border: 0; border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.chatlist.contacts li > button:hover { background: var(--bg); filter: none; }
+.avatar.action { background: var(--bg); }
+.avatar.action svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .row { display: flex; justify-content: space-between; gap: .5rem; }
 .badge { background: var(--accent); color: var(--accent-text); border-radius: 10px; padding: 0 .45rem; font-size: .8rem; }
 

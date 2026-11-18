@@ -309,6 +309,23 @@ export class DcClient extends EventTarget {
     return chat;
   }
 
+  /** Like core's ChatId::create_for_contact(). */
+  async chatWith(fp: string): Promise<string> {
+    const chat = await this.singleChat(fp, false);
+    if (chat.isRequest) await this.acceptChat(chat.id);
+    return chat.id;
+  }
+
+  /** Like core's Contact::get_all(): contacts with an accepted chat first, then by last seen. */
+  knownContacts(query = ''): Contact[] {
+    const q = query.trim().toLowerCase();
+    const hasChat = (c: Contact) => this.chats.get(`c-${c.fingerprint}`)?.isRequest === false ? 1 : 0;
+    return [...this.contacts.values()]
+      .filter(c => c.publicKey && !c.blocked && c.fingerprint !== this.config.fingerprint)
+      .filter(c => !q || contactName(c).toLowerCase().includes(q) || c.addr.includes(q))
+      .sort((a, b) => hasChat(b) - hasChat(a) || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
+  }
+
   private groupByGrpid(grpid: string): Chat | undefined {
     return [...this.chats.values()].find(c => c.grpid === grpid);
   }

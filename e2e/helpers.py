@@ -131,6 +131,12 @@ def create_profile(page: Page, phone, name="Webby"):
     return page.locator(".profile small").inner_text()
 
 
+def new_chat(page: Page, entry):
+    """Opens "New chat" and picks `entry`, e.g. "Add contact", "New group" or a contact's name."""
+    page.get_by_role("button", name="New chat").click()
+    page.locator(".new-chat .chatlist li", has_text=entry).get_by_role("button").click()
+
+
 def open_chat(page: Page, title):
     page.locator(".chatlist li", has_text=title).first.click()
 

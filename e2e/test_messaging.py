@@ -13,7 +13,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, mailbox_size, addr_of, capture_clipboard, message_action, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -955,7 +955,7 @@ def test_core_joins_web_invite(web, make_account):
 
 def test_web_group_and_group_invite(web, dora, make_account):
     page = web.page
-    page.get_by_role("button", name="New group").click()
+    new_chat(page, "New group")
     page.locator("dialog .field input").fill("Web group")
     page.locator("dialog .members label", has_text="Dora").locator("input").check()
     page.get_by_role("button", name="Create", exact=True).click()
@@ -980,7 +980,7 @@ def test_web_group_and_group_invite(web, dora, make_account):
 
 def test_group_without_members_accepts_messages(web, make_account):
     page = web.page
-    page.get_by_role("button", name="New group").click()
+    new_chat(page, "New group")
     page.locator("dialog .field input").fill("Solo group")
     page.get_by_role("button", name="Create", exact=True).click()
     expect(page.locator(".info", has_text="Group created")).to_be_visible()
@@ -1013,12 +1013,12 @@ def wait_members(acc, chat_id, addrs):
 def test_manage_group_members(web, dora, make_account):
     page = web.page
     erin = make_account("Erin")
-    page.get_by_role("button", name="Add contact").click()
+    new_chat(page, "Add contact")
     page.locator("dialog textarea").fill(erin.get_qr_code())
     page.get_by_role("button", name="Connect").click()
     wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
 
-    page.get_by_role("button", name="New group").click()
+    new_chat(page, "New group")
     page.locator("dialog .field input").fill("Managed group")
     page.locator("dialog .members label", has_text="Dora").locator("input").check()
     page.get_by_role("button", name="Create", exact=True).click()
@@ -1057,11 +1057,11 @@ def test_manage_group_members(web, dora, make_account):
 def test_leave_group(web, dora, make_account):
     page = web.page
     erin = make_account("Erin")
-    page.get_by_role("button", name="Add contact").click()
+    new_chat(page, "Add contact")
     page.locator("dialog textarea").fill(erin.get_qr_code())
     page.get_by_role("button", name="Connect").click()
     wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
-    page.get_by_role("button", name="New group").click()
+    new_chat(page, "New group")
     page.locator("dialog .field input").fill("Leaving group")
     for name in ("Dora", "Erin"):
         page.locator("dialog .members label", has_text=name).locator("input").check()

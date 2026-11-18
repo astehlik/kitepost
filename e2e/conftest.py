@@ -18,7 +18,7 @@ import pytest
 from deltachat_rpc_client import DeltaChat, EventType, Rpc
 from playwright.sync_api import expect
 
-from helpers import INVITE, PORT, RELAY, RELAY_IP, ROOT, TIMEOUT, configure, create_profile, wait_event
+from helpers import INVITE, PORT, RELAY, RELAY_IP, ROOT, TIMEOUT, configure, create_profile, new_chat, wait_event
 
 expect.set_options(timeout=TIMEOUT)
 
@@ -133,7 +133,7 @@ def dora(web, make_account):
     """A core contact that the web client joined through Dora's invite link (SecureJoin v3)."""
     acc = make_account("Dora")
     page = web.page
-    page.get_by_role("button", name="Add contact").click()
+    new_chat(page, "Add contact")
     page.locator("dialog textarea").fill(acc.get_qr_code())
     page.get_by_role("button", name="Connect").click()
     ev = wait_event(acc, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)

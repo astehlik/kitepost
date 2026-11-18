@@ -405,8 +405,9 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   mainListeners = new AbortController();
   const { signal } = mainListeners;
   let current = initialChat;
-  let settingsOpen = initialSettings;
+  let view: 'settings' | 'newChat' | undefined = initialSettings ? 'settings' : undefined;
   let settings: { key: string; el: Element } | undefined;
+  let newChat: ReturnType<typeof newChatView> | undefined;
   let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement; pinbar: HTMLButtonElement; pinnedIds?: string; pinnedAt?: string } | undefined;
   const rendered = new Map<string, { node: Element; key: string; urls: string[] }>();
   let startReply: ((m: Message) => void) | undefined;
@@ -441,7 +442,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   const notifyBar = h('div', { class: 'notify-bar', hidden: true });
   const edit = h('button', {
     class: 'icon-button', title: t('nav.settings'), 'aria-label': t('nav.settings'),
-    onclick: () => { settingsOpen = true; current = undefined; renderAll(); },
+    onclick: () => { view = 'settings'; current = undefined; renderAll(); },
   });
   edit.append(icon(ICONS.settings));
   const sidebar = h('aside', { class: 'sidebar' },
@@ -450,8 +451,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     notifyBar,
     h('nav', { class: 'nav-actions' },
       action(ICONS.qr, t('nav.myInvite'), busyClick(() => showInvite(client))),
-      action(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
-      action(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))),
+      action(ICONS.newChat, t('nav.newChat'), () => { view = 'newChat'; current = undefined; renderAll(); })),
     chatList);
 
   function renderNotifyBar() {
@@ -921,11 +921,18 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
 
   function renderPane() {
     const chat = current ? client.chats.get(current) : undefined;
-    if (settingsOpen) {
+    if (view === 'newChat') {
+      if (newChat && pane.contains(newChat.el)) return newChat.refresh();
+      leaveChat();
+      newChat = newChatView(client, open, () => { view = undefined; renderAll(); });
+      pane.replaceChildren(newChat.el);
+      return;
+    }
+    if (view === 'settings') {
       const key = JSON.stringify([client.config.secured, canHandoff]);
       if (settings?.key === key && pane.contains(settings.el)) return;
       leaveChat();
-      settings = { key, el: settingsView(client, () => startMain(client, undefined, true), () => { settingsOpen = false; renderAll(); }) };
+      settings = { key, el: settingsView(client, () => startMain(client, undefined, true), () => { view = undefined; renderAll(); }) };
       pane.replaceChildren(settings.el);
       return;
     }
@@ -1154,12 +1161,12 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
 
   function open(chatId: string) {
     current = chatId;
-    settingsOpen = false;
+    view = undefined;
     renderAll();
   }
 
   function renderAll() {
-    root().querySelector('.layout')?.classList.toggle('chat-open', !!current || settingsOpen);
+    root().querySelector('.layout')?.classList.toggle('chat-open', !!current || !!view);
     renderProfile();
     renderList();
     renderPane();
@@ -1265,6 +1272,7 @@ const ICONS = {
   resend: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   close: 'M6 6l12 12M18 6 6 18',
+  newChat: 'M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12zM12 8.5v7M8.5 12h7',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
 
@@ -1437,6 +1445,49 @@ function groupDialog(client: DcClient, open: (id: string) => void) {
     },
   ]);
   name.focus();
+}
+
+/** Like Delta Chat's "New chat" screen: new contact and new group, then the contacts. */
+function newChatView(client: DcClient, open: (id: string) => void, close: () => void) {
+  const search = h('input', { type: 'search', placeholder: t('contacts.search'), 'aria-label': t('contacts.search') });
+  const list = h('ul', { class: 'chatlist contacts' });
+  const row = (attrs: Record<string, string>, onclick: () => void, badge: Element, ...text: Node[]) =>
+    h('li', attrs, h('button', { type: 'button', onclick }, badge, h('div', { class: 'item' }, ...text)));
+  const entry = (d: string, label: string, onclick: () => void) => {
+    const badge = avatar('', 'action', icon(d));
+    badge.classList.add('action');
+    badge.style.background = '';
+    return row({}, onclick, badge, h('strong', {}, label));
+  };
+  const start = (fp: string) => {
+    const existing = client.chats.get(`c-${fp}`);
+    if (existing) return open(existing.id);
+    dialog(client.contactName(fp), h('p', {}, t('contacts.chatWith', { name: client.contactName(fp) })), [
+      { label: t('cancel') },
+      { label: t('ok'), primary: true, onClick: async () => open(await client.chatWith(fp)) },
+    ]);
+  };
+  function refresh() {
+    const contacts = client.knownContacts(search.value);
+    list.replaceChildren(
+      ...search.value.trim() ? [] : [
+        entry(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
+        entry(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))],
+      ...contacts.map(c => row({ 'data-contact': c.fingerprint }, () => start(c.fingerprint),
+        avatar(client.contactName(c.fingerprint), c.addr),
+        h('strong', {}, client.contactName(c.fingerprint)), h('small', {}, c.addr))));
+    if (!contacts.length) list.append(h('li', { class: 'empty' }, t(search.value.trim() ? 'contacts.noMatch' : 'contacts.empty')));
+  }
+  search.addEventListener('input', refresh);
+  refresh();
+  const el = h('div', { class: 'settings new-chat' },
+    h('header', { class: 'chathead' },
+      h('button', { class: 'back', onclick: close }, '‹'),
+      h('h2', { class: 'who' }, t('nav.newChat')),
+      Object.assign(iconButton(ICONS.close, t('close'), close), { className: 'icon-button close' })),
+    h('div', { class: 'search' }, search),
+    list);
+  return { el, refresh };
 }
 
 function linkified(text: string): (string | Node)[] {

@@ -6,7 +6,7 @@ import pytest
 from deltachat_rpc_client import DeltaChat, EventType
 from playwright.sync_api import expect
 
-from helpers import (INVITE, RELAY, RELAY_IP, addr_of, open_chat, set_passphrase, transport, wait_event,
+from helpers import (INVITE, RELAY, RELAY_IP, addr_of, new_chat, open_chat, set_passphrase, transport, wait_event,
                      wait_own_msg, wait_text, web_send)
 
 pytestmark = pytest.mark.local_relay
@@ -97,7 +97,7 @@ def test_handoff_from_profile_keeps_contacts(page, context, rpc, make_account, t
     unsecured = page.locator(".profile .icon-button.attention")
     expect(unsecured).to_be_visible()
     dora = make_account("Dora")
-    page.get_by_role("button", name="Add contact").click()
+    new_chat(page, "Add contact")
     page.locator("dialog textarea").fill(dora.get_qr_code())
     page.get_by_role("button", name="Connect").click()
     ev = wait_event(dora, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
