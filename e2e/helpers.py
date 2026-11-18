@@ -167,6 +167,19 @@ def open_profile(page: Page):
     return profile
 
 
+def open_chat_info(page: Page):
+    """Opens the settings of the open group or Saved messages."""
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    info = page.locator(".settings.chat-info")
+    expect(info).to_be_visible()
+    return info
+
+
+def close_view(view):
+    """Leaves a view like the profile or the chat settings, by its back or close button."""
+    view.locator(".chathead :is(.back, .close):visible").click()
+
+
 def set_nickname(page: Page, name):
     """Sets the open chat contact's nickname and goes back to the chat."""
     profile = open_profile(page)

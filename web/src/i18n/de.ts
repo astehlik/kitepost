@@ -246,7 +246,7 @@ export const de: Record<keyof typeof en, string> = {
   'group.addContactsFirst': 'Füge zuerst Kontakte hinzu.',
   'group.enterName': 'Bitte gib einen Namen ein',
   'group.default': 'Gruppe',
-  'group.members': 'Mitglieder',
+  'group.searchMembers': 'Mitglieder durchsuchen',
   'group.add': 'Mitglieder hinzufügen',
   'group.addConfirm': 'Hinzufügen',
   'group.noMoreContacts': 'Alle deine Kontakte sind schon in dieser Gruppe. Andere können über den Einladungslink der Gruppe beitreten.',

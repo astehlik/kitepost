@@ -410,8 +410,10 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   const { signal } = mainListeners;
   let current = initialChat;
   // A contact's profile returns to the chat or list it was opened from.
-  let view: 'settings' | 'newChat' | { contact: string; from?: string } | undefined = initialSettings ? 'settings' : undefined;
+  type GroupView = { group: string };
+  let view: 'settings' | 'newChat' | { contact: string; from?: string | GroupView } | GroupView | undefined = initialSettings ? 'settings' : undefined;
   let contactShown: { key: string; el: Element } | undefined;
+  let groupShown: { key: string; el: Element; refresh: () => void } | undefined;
   let settings: { key: string; el: Element } | undefined;
   let newChat: ReturnType<typeof newChatView> | undefined;
   let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement; pinbar: HTMLButtonElement; pinnedIds?: string; pinnedAt?: string } | undefined;
@@ -864,9 +866,12 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       : contact?.lastSeen ? t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }) : '';
     const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatar?.slice(-24), chat.avatar?.slice(-24), contact && client.freshness(contact), chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
-    const settings = () => chat.type === 'single' && chat.contact
-      ? showContact(chat.contact, chat.id)
-      : chatDialog(client, chat, () => { current = undefined; renderAll(); });
+    const settings = () => {
+      if (chat.type === 'single' && chat.contact) return showContact(chat.contact, chat.id);
+      view = { group: chat.id };
+      current = undefined;
+      renderAll();
+    };
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
@@ -912,6 +917,19 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       pane.replaceChildren(newChat.el);
       return;
     }
+    if (typeof view === 'object' && 'group' in view) {
+      const chatId = view.group;
+      const chat = client.chats.get(chatId);
+      const back = () => chat && client.chats.has(chatId) ? open(chatId) : (view = undefined, renderAll());
+      if (!chat) return back();
+      const key = JSON.stringify([chatId, client.chatTitle(chat), chat.left, chat.avatar?.slice(-24), client.config.bccSelf]);
+      if (groupShown?.key === key && pane.contains(groupShown.el)) return groupShown.refresh();
+      leaveChat();
+      const self = view;
+      groupShown = { key, ...groupView(client, chat, fp => showContact(fp, self), back, () => { view = undefined; renderAll(); }) };
+      pane.replaceChildren(groupShown.el);
+      return;
+    }
     if (typeof view === 'object') {
       const { contact: fp, from } = view;
       const c = client.contacts.get(fp);
@@ -921,7 +939,8 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       leaveChat();
       const back = () => {
         if (from === 'newChat') view = 'newChat';
-        else if (from && client.chats.has(from)) return open(from);
+        else if (typeof from === 'object' && client.chats.has(from.group)) view = from;
+        else if (typeof from === 'string' && client.chats.has(from)) return open(from);
         else view = undefined;
         renderAll();
       };
@@ -1183,7 +1202,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     ]);
   }
 
-  function showContact(fp: string, from?: string) {
+  function showContact(fp: string, from?: string | GroupView) {
     view = { contact: fp, from };
     current = undefined;
     renderAll();
@@ -1783,60 +1802,84 @@ function blockedDialog(client: DcClient) {
   dialog(t('contact.blockedTitle'), list, [{ label: t('close'), primary: true }]);
 }
 
-function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
-  const confirmLeave = () => dialog(t('group.leaveTitle'), h('p', {}, t('group.leaveText')), [
-    { label: t('cancel') },
-    { label: t('group.leave'), primary: true, onClick: async () => { await client.leaveGroup(chat.id); dlg.close(); } },
-  ]);
+/** Like Delta Chat's group profile, in place of the chat; Saved messages use it too. */
+function groupView(client: DcClient, chat: Chat, profile: (fp: string) => void, close: () => void, deleted: () => void) {
   const active = chat.type === 'group' && !chat.left;
   const image = () => client.chats.get(chat.id)?.avatar;
-  const dlg = dialog(client.chatTitle(chat), h('div', { class: 'chat-settings' },
-    active ? h('section', {}, h('h3', {}, t('group.avatar')),
-      avatarPicker(() => avatar(client.chatTitle(chat), chatAvatarKey(client, chat), undefined, image()), image, v => client.setGroupAvatar(chat.id, v))) : null,
-    active ? membersSection(client, chat) : null,
-    h('section', {}, h('h3', {}, t('e2e.title')), h('p', {}, t(chat.type === 'self' ? 'e2e.self' : 'e2e.group'))),
-    active ? h('section', {}, h('h3', {}, t('group.leave')),
-      h('p', {}, t('group.leaveText')),
-      h('button', { class: 'danger', onclick: confirmLeave }, t('group.leave'))) : null,
-    clearChatSection(client, chat),
-    chat.type === 'self' ? null : deleteChatSection(client, chat, active ? t('chat.deleteKeepGroup') : '', () => { dlg.close(); deleted(); })),
-  [{ label: t('close'), primary: true }]);
-}
-
-function membersSection(client: DcClient, chat: Chat): Element {
-  const list = h('ul', { class: 'member-list' });
-  const addButton = h('button', { type: 'button', onclick: () => addMembersDialog(client, chat, render) }, t('group.add'));
-  function render() {
+  const confirmLeave = () => dialog(t('group.leaveTitle'), h('p', {}, t('group.leaveText')), [
+    { label: t('cancel') },
+    { label: t('group.leave'), primary: true, onClick: () => client.leaveGroup(chat.id) },
+  ]);
+  const heading = h('h3', {});
+  const search = h('input', { type: 'search', placeholder: t('group.searchMembers'), 'aria-label': t('group.searchMembers') });
+  const list = h('ul', { class: 'member-list scroll' });
+  function refresh() {
     const fps = client.chats.get(chat.id)?.members ?? [];
-    list.replaceChildren(
-      h('li', {}, h('span', {}, h('strong', {}, client.config.displayName || t('me')), h('small', {}, client.config.addr))),
-      ...fps.map(fp => {
-        const c = client.contacts.get(fp);
-        const name = client.contactName(fp);
-        const remove = iconButton(ICONS.close, t('group.remove', { name }), () => dialog(t('group.removeTitle'), h('p', {}, t('group.removeText', { name })), [
-          { label: t('cancel') },
-          { label: t('group.removeConfirm'), primary: true, onClick: async () => { await client.removeMember(chat.id, fp); render(); } },
-        ]));
-        remove.classList.add('icon-button');
-        return h('li', {}, h('span', {}, h('strong', {}, name), h('small', {}, c?.addr ?? '')), remove);
-      }));
+    heading.textContent = t('chat.members', { n: fps.length + (active ? 1 : 0) });
+    const q = search.value.trim().toLowerCase();
+    const match = (name: string, addr: string) => !q || name.toLowerCase().includes(q) || addr.toLowerCase().includes(q);
+    const rows: Element[] = [];
+    const me = client.config.displayName || t('me');
+    if (active && match(me, client.config.addr)) {
+      rows.push(h('li', {}, h('div', { class: 'member' }, avatar(me, client.config.addr, undefined, client.config.avatar),
+        h('span', { class: 'names' }, h('strong', {}, me), h('small', {}, client.config.addr)))));
+    }
+    for (const fp of fps) {
+      const c = client.contacts.get(fp);
+      const name = client.contactName(fp);
+      if (!match(name, c?.addr ?? '')) continue;
+      const remove = active ? iconButton(ICONS.close, t('group.remove', { name }), () => dialog(t('group.removeTitle'), h('p', {}, t('group.removeText', { name })), [
+        { label: t('cancel') },
+        { label: t('group.removeConfirm'), primary: true, onClick: () => client.removeMember(chat.id, fp) },
+      ])) : null;
+      remove?.classList.add('icon-button');
+      rows.push(h('li', {},
+        h('button', { type: 'button', class: 'member', title: t('contact.viewProfile'), onclick: () => profile(fp) },
+          avatar(name, c?.addr ?? fp, undefined, c?.avatar), h('span', { class: 'names' }, h('strong', {}, name), h('small', {}, c?.addr ?? ''))),
+        remove));
+    }
+    if (!rows.length) rows.push(h('li', { class: 'empty' }, t('contacts.noMatch')));
+    list.replaceChildren(...rows);
   }
-  render();
-  return h('section', {}, h('h3', {}, t('group.members')), list, addButton);
+  search.addEventListener('input', refresh);
+  refresh();
+  const section = (title: string, ...content: (Node | null)[]) => h('section', {}, h('h3', {}, title), ...content);
+  const el = h('div', { class: 'settings chat-info' },
+    h('header', { class: 'chathead' },
+      h('button', { class: 'back', onclick: close }, '‹'),
+      h('h2', { class: 'who' }, client.chatTitle(chat)),
+      Object.assign(iconButton(ICONS.close, t('close'), close), { className: 'icon-button close' })),
+    h('div', { class: 'settings-body' },
+      active ? section(t('group.avatar'),
+        avatarPicker(() => avatar(client.chatTitle(chat), chatAvatarKey(client, chat), undefined, image()), image, v => client.setGroupAvatar(chat.id, v))) : null,
+      active ? h('section', {}, heading, search, list,
+        h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => addMembersDialog(client, chat) }, t('group.add')))) : null,
+      section(t('e2e.title'), h('p', {}, t(chat.type === 'self' ? 'e2e.self' : 'e2e.group'))),
+      active ? section(t('group.leave'),
+        h('p', {}, t('group.leaveText')),
+        h('div', { class: 'row' }, h('button', { class: 'danger', onclick: confirmLeave }, t('group.leave')))) : null,
+      clearChatSection(client, chat),
+      chat.type === 'self' ? null : deleteChatSection(client, chat, active ? t('chat.deleteKeepGroup') : '', deleted)));
+  return { el, refresh };
 }
 
-function addMembersDialog(client: DcClient, chat: Chat, done: () => void) {
-  const boxes = [...client.contacts.values()]
-    .filter(c => c.publicKey && !c.blocked && !c.hidden && !chat.members.includes(c.fingerprint))
-    .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: client.contactName(c.fingerprint) }));
-  const list = h('div', { class: 'members' }, ...boxes.map(b => h('label', { class: 'check' }, b.box, b.label)));
+function addMembersDialog(client: DcClient, chat: Chat) {
+  const boxes = client.knownContacts()
+    .filter(c => !chat.members.includes(c.fingerprint))
+    .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: client.contactName(c.fingerprint), addr: c.addr }));
+  const rows = boxes.map(b => ({ b, el: h('label', { class: 'check' }, b.box, b.label) }));
+  const list = h('div', { class: 'members' }, ...rows.map(r => r.el));
+  const search = h('input', { type: 'search', placeholder: t('contacts.search'), 'aria-label': t('contacts.search') });
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    for (const { b, el } of rows) el.style.display = q && !b.label.toLowerCase().includes(q) && !b.addr.includes(q) ? 'none' : '';
+  });
   if (!boxes.length) list.append(h('p', {}, t('group.noMoreContacts')));
-  dialog(t('group.add'), list, [
+  dialog(t('group.add'), h('div', {}, boxes.length ? search : null, list), [
     { label: t('cancel') },
     ...boxes.length ? [{
       label: t('group.addConfirm'), primary: true, onClick: async () => {
         for (const b of boxes.filter(b => b.box.checked)) await client.addMember(chat.id, b.fp);
-        done();
       },
     }] : [],
   ]);

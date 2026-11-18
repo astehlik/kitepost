@@ -11,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, WEBM, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, open_profile, own_state, reload_and_unlock, set_nickname, solid_png, wait_event, wait_text, web_send
+from helpers import close_view, open_chat_info, EVENT_TIMEOUT, PNG, WEBM, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, open_profile, own_state, reload_and_unlock, set_nickname, solid_png, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -994,12 +994,13 @@ def test_group_image_from_web(web, dora, make_account, tmp_path):
     dora_group = dora.acc.get_chat_by_id(wait_text(dora.acc, "first with picture").chat_id)
     assert dora_group.get_basic_snapshot().profile_image
 
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    settings = page.locator("dialog").first
+    settings = open_chat_info(page)
     settings.get_by_role("button", name="Add members").click()
     adding = page.locator("dialog", has_text="Add members").last
     adding.locator(".members label", has_text="Erin").locator("input").check()
     adding.get_by_role("button", name="Add", exact=True).click()
+    expect(settings.locator(".member-list li", has_text="Erin")).to_be_visible()
+    close_view(settings)
     expect(page.locator(".info", has_text="You added Erin.")).to_be_visible()
 
     def erin_group():
@@ -1007,7 +1008,6 @@ def test_group_image_from_web(web, dora, make_account, tmp_path):
     wait_until(lambda: erin_group() and erin_group().get_basic_snapshot().profile_image, "Erin got no group image")
 
     fred = make_account("Fred")
-    page.get_by_role("button", name="Close").click()
     page.get_by_role("button", name="Invite link").click()
     link = page.locator("dialog input").input_value()
     page.get_by_role("button", name="Close").click()
@@ -1015,11 +1015,11 @@ def test_group_image_from_web(web, dora, make_account, tmp_path):
     wait_event(fred, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
     fred_group = next(c for c in fred.get_chatlist() if c.get_basic_snapshot().name == "Web picture group")
     assert fred_group.get_basic_snapshot().profile_image
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    settings = page.locator("dialog").first
 
+    settings = open_chat_info(page)
     settings.get_by_role("button", name="Remove", exact=True).click()
     expect(settings.locator(".avatar-row .avatar img")).to_have_count(0)
+    close_view(settings)
     expect(page.locator(".messages .info", has_text="You deleted the group image.")).to_be_visible()
     expect(page.locator(".chathead .avatar img")).to_have_count(0)
     wait_until(lambda: not dora_group.get_basic_snapshot().profile_image, "Dora still has the group image")
@@ -1116,27 +1116,39 @@ def test_manage_group_members(web, dora, make_account):
     web_send(page, "hello Dora")
     dora_chat = wait_text(dora.acc, "hello Dora").chat_id
 
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    settings = page.locator("dialog").first
-    expect(settings.locator(".member-list li")).to_have_count(2)
+    settings = open_chat_info(page)
+    members = settings.locator(".member-list li")
+    expect(members).to_have_count(2)
     settings.get_by_role("button", name="Add members").click()
     adding = page.locator("dialog", has_text="Add members").last
-    expect(adding.locator(".members label")).to_have_text(["Phone", "Erin"])
+    candidates = adding.locator(".members label")
+    expect(candidates).to_have_count(2)
+    adding.get_by_role("searchbox", name="Search contacts").fill("eri")
+    expect(candidates.filter(visible=True)).to_have_text(["Erin"])
     adding.locator(".members label", has_text="Erin").locator("input").check()
     adding.get_by_role("button", name="Add", exact=True).click()
-    expect(settings.locator(".member-list li")).to_have_count(3)
-    expect(page.locator(".info", has_text="You added Erin.")).to_be_visible()
+    expect(members).to_have_count(3)
     wait_members(dora.acc, dora_chat, [addr_of(erin), web.addr])
 
+    search = settings.get_by_role("searchbox", name="Search members")
+    search.fill("dor")
+    expect(members).to_have_count(1)
+    members.locator("button.member", has_text="Dora").click()
+    profile = page.locator(".settings.contact")
+    expect(profile.locator("h2")).to_have_text("Dora")
+    close_view(profile)
+    expect(settings).to_be_visible()
+    search.fill("")
     settings.locator(".member-list li", has_text="Dora").get_by_role("button", name="Remove Dora").click()
     page.locator("dialog", has_text="Remove member?").get_by_role("button", name="Remove", exact=True).click()
-    expect(settings.locator(".member-list li")).to_have_count(2)
-    expect(page.locator(".info", has_text="You removed Dora.")).to_be_visible()
+    expect(members).to_have_count(2)
     deadline = time.monotonic() + EVENT_TIMEOUT
     while dora.acc.get_chat_by_id(dora_chat).get_full_snapshot().self_in_group:
         assert time.monotonic() < deadline, "Dora was not removed"
         time.sleep(0.2)
-    settings.get_by_role("button", name="Close").click()
+    close_view(settings)
+    expect(page.locator(".info", has_text="You added Erin.")).to_be_visible()
+    expect(page.locator(".info", has_text="You removed Dora.")).to_be_visible()
 
     web_send(page, "only for Erin")
     snap = wait_text(erin, "only for Erin")
@@ -1165,16 +1177,16 @@ def test_leave_group(web, dora, make_account):
     expect(page.locator(".info", has_text="Erin left the group.")).to_be_visible()
     expect(page.locator(".chathead small")).to_have_text("2 members")
 
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    settings = page.locator("dialog").first
+    settings = open_chat_info(page)
     settings.get_by_role("button", name="Leave group").click()
     page.locator("dialog", has_text="Leave group?").get_by_role("button", name="Leave group").click()
-    expect(page.locator("dialog")).to_have_count(0)
+    expect(settings.get_by_role("button", name="Leave group")).to_have_count(0)
+    close_view(settings)
     expect(page.locator(".info", has_text="You left the group.")).to_be_visible()
     expect(page.locator(".composer textarea")).to_be_disabled()
     wait_members(dora.acc, dora_chat.id, [])
 
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = open_chat_info(page)
     expect(settings.get_by_role("button", name="Leave group")).to_have_count(0)
     expect(settings.locator(".member-list")).to_have_count(0)
     expect(settings).not_to_contain_text("You stay a member")
@@ -1263,12 +1275,11 @@ def test_saved_messages_exist_from_the_start(web):
     open_chat(page, "Saved messages")
     web_send(page, "first note to myself")
     expect(page.locator(".msg.out", has_text="first note to myself")).to_be_visible()
-    settings = page.locator("dialog")
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = open_chat_info(page)
     expect(settings).to_contain_text("encrypted with your own key")
     expect(settings.locator("input")).to_have_count(0)
     expect(settings.get_by_role("button", name="Delete chat")).to_have_count(0)
-    settings.get_by_role("button", name="Close").click()
+    close_view(settings)
     expect(settings).to_have_count(0)
 
 

@@ -244,7 +244,7 @@ export const en = {
   'group.addContactsFirst': 'Add contacts first.',
   'group.enterName': 'Please enter a name',
   'group.default': 'Group',
-  'group.members': 'Members',
+  'group.searchMembers': 'Search members',
   'group.add': 'Add members',
   'group.addConfirm': 'Add',
   'group.noMoreContacts': 'All your contacts are in this group already. Others can join with the group’s invite link.',

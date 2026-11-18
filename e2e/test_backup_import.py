@@ -11,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, open_profile, own_state, set_nickname, set_passphrase, solid_png, wait_event, wait_own_msg, wait_text, web_send
+from helpers import open_chat_info, EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, open_profile, own_state, set_nickname, set_passphrase, solid_png, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -268,13 +268,12 @@ def test_blocking_syncs_between_devices(imported):
 def test_chat_deletion_syncs_between_devices(imported):
     page, phone = imported.page, imported.phone
     open_chat(page, "Backup group")
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    settings = page.locator("dialog")
+    settings = open_chat_info(page)
     expect(settings).to_contain_text("Messages are end-to-end encrypted for every member of the group.")
     expect(settings).to_contain_text("here and on your other devices")
     settings.get_by_role("button", name="Delete chat").click()
     page.locator("dialog", has_text="This cannot be undone.").get_by_role("button", name="Delete").click()
-    expect(page.locator("dialog")).to_have_count(0)
+    expect(settings).to_have_count(0)
     expect(page.locator(".chatlist li[data-chat]", has_text="Backup group")).to_have_count(0)
     deadline = time.monotonic() + EVENT_TIMEOUT
     while any(c.get_basic_snapshot().name == "Backup group" for c in phone.get_chatlist()):
