@@ -151,8 +151,15 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 :is(.new-chat, .share) .search input { width: 100%; }
 .chatlist.contacts li { padding: 0; }
 .chatlist.pick { margin: 0 -1.3rem; max-height: 60vh; overflow-y: auto; border-top: 1px solid var(--border); }
-.chatlist.contacts li > button { display: flex; align-items: center; gap: .7rem; width: 100%; padding: .6rem .9rem; border: 0; border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.chatlist.contacts li > :is(button, label, div):not(.icon-button) { display: flex; align-items: center; gap: .7rem; flex: 1; min-width: 0; padding: .6rem .9rem; border: 0; border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; }
 .chatlist.contacts li > button:hover { background: var(--bg); filter: none; }
+.chatlist.contacts li > div { cursor: default; }
+.chatlist.contacts li > label { cursor: pointer; }
+.chatlist.contacts li > label > input[type=checkbox] { flex: none; width: auto; margin: 0; }
+.chatlist.contacts li > .icon-button { margin-right: .6rem; }
+.chatlist.members-pick { margin: 0 -1.2rem; max-height: min(50vh, 420px); overflow-y: auto; border-top: 1px solid var(--border); }
+.chatlist.members-pick li:last-child { border-bottom: 0; }
+.chat-info .search input { width: 100%; }
 .avatar.action { background: var(--bg); }
 .avatar.action svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .row { display: flex; justify-content: space-between; gap: .5rem; }
@@ -270,12 +277,6 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .member-list li { display: flex; align-items: center; gap: .5rem; min-height: 32px; }
 .member-list li > span { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .member-list strong, .member-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.member-list.scroll { max-height: min(50vh, 420px); overflow-y: auto; margin: 0; }
-.member-list .member { display: flex; align-items: center; gap: .6rem; flex: 1; min-width: 0; padding: .2rem 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
-.member-list button.member { cursor: pointer; }
-.member-list .member .names { display: flex; flex-direction: column; min-width: 0; }
-.member-list .member .avatar { width: 32px; height: 32px; font-size: .85rem; }
-.member-list li.empty { color: var(--muted); }
 .profile-head { display: flex; align-items: center; gap: .8rem; margin-bottom: 1rem; }
 .profile-head .names { display: flex; flex-direction: column; min-width: 0; }
 .profile-head small { color: var(--muted); overflow-wrap: anywhere; }

@@ -997,9 +997,9 @@ def test_group_image_from_web(web, dora, make_account, tmp_path):
     settings = open_chat_info(page)
     settings.get_by_role("button", name="Add members").click()
     adding = page.locator("dialog", has_text="Add members").last
-    adding.locator(".members label", has_text="Erin").locator("input").check()
+    adding.locator(".pick li", has_text="Erin").locator("input").check()
     adding.get_by_role("button", name="Add", exact=True).click()
-    expect(settings.locator(".member-list li", has_text="Erin")).to_be_visible()
+    expect(settings.locator(".members-pick li", has_text="Erin")).to_be_visible()
     close_view(settings)
     expect(page.locator(".info", has_text="You added Erin.")).to_be_visible()
 
@@ -1117,15 +1117,15 @@ def test_manage_group_members(web, dora, make_account):
     dora_chat = wait_text(dora.acc, "hello Dora").chat_id
 
     settings = open_chat_info(page)
-    members = settings.locator(".member-list li")
+    members = settings.locator(".members-pick li")
     expect(members).to_have_count(2)
     settings.get_by_role("button", name="Add members").click()
     adding = page.locator("dialog", has_text="Add members").last
-    candidates = adding.locator(".members label")
+    candidates = adding.locator(".pick li strong")
     expect(candidates).to_have_count(2)
     adding.get_by_role("searchbox", name="Search contacts").fill("eri")
-    expect(candidates.filter(visible=True)).to_have_text(["Erin"])
-    adding.locator(".members label", has_text="Erin").locator("input").check()
+    expect(candidates).to_have_text(["Erin"])
+    adding.locator(".pick li", has_text="Erin").locator("input").check()
     adding.get_by_role("button", name="Add", exact=True).click()
     expect(members).to_have_count(3)
     wait_members(dora.acc, dora_chat, [addr_of(erin), web.addr])
@@ -1133,13 +1133,13 @@ def test_manage_group_members(web, dora, make_account):
     search = settings.get_by_role("searchbox", name="Search members")
     search.fill("dor")
     expect(members).to_have_count(1)
-    members.locator("button.member", has_text="Dora").click()
+    members.filter(has_text="Dora").locator("button").first.click()
     profile = page.locator(".settings.contact")
     expect(profile.locator("h2")).to_have_text("Dora")
     close_view(profile)
     expect(settings).to_be_visible()
     search.fill("")
-    settings.locator(".member-list li", has_text="Dora").get_by_role("button", name="Remove Dora").click()
+    settings.locator(".members-pick li", has_text="Dora").get_by_role("button", name="Remove Dora").click()
     page.locator("dialog", has_text="Remove member?").get_by_role("button", name="Remove", exact=True).click()
     expect(members).to_have_count(2)
     deadline = time.monotonic() + EVENT_TIMEOUT
@@ -1188,7 +1188,7 @@ def test_leave_group(web, dora, make_account):
 
     settings = open_chat_info(page)
     expect(settings.get_by_role("button", name="Leave group")).to_have_count(0)
-    expect(settings.locator(".member-list")).to_have_count(0)
+    expect(settings.locator(".members-pick")).to_have_count(0)
     expect(settings).not_to_contain_text("You stay a member")
 
 
