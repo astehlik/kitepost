@@ -1,12 +1,11 @@
 from deltachat_rpc_client import EventType
 from playwright.sync_api import expect
 
-from helpers import new_chat, open_chat, reload_and_unlock, solid_png, wait_event, wait_text, web_send
+from helpers import new_chat, open_chat, open_profile, reload_and_unlock, solid_png, wait_event, wait_text, web_send
 
 
 def delete_chat(page):
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog").get_by_role("button", name="Delete chat").click()
+    open_profile(page).get_by_role("button", name="Delete chat").click()
     page.locator("dialog", has_text="This cannot be undone.").get_by_role("button", name="Delete").click()
 
 
@@ -35,10 +34,11 @@ def test_start_chat_from_contact_list(web, dora):
 
 
 def block_in_profile(page):
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog").get_by_role("button", name="Block contact").click()
+    profile = open_profile(page)
+    profile.get_by_role("button", name="Block contact").click()
     page.locator("dialog", has_text="Block this contact?").get_by_role("button", name="Block contact").click()
-    expect(page.locator("dialog")).to_have_count(0)
+    expect(profile.get_by_role("button", name="Unblock contact")).to_be_visible()
+    profile.locator(".chathead :is(.back, .close):visible").click()
 
 
 def test_block_and_unblock_contact(web, dora):
@@ -76,8 +76,7 @@ def test_blocked_contact_still_writes_in_groups(web, dora):
     group = dora.acc.get_chat_by_id(wait_text(dora.acc, "hello group").chat_id)
 
     page.locator(".chatlist").get_by_text("Dora", exact=True).click()
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog").get_by_role("button", name="Group with Dora").click()
+    open_profile(page).get_by_role("button", name="Group with Dora").click()
     expect(page.locator(".chathead strong")).to_have_text("Group with Dora")
     page.locator(".chatlist").get_by_text("Dora", exact=True).click()
     block_in_profile(page)
@@ -93,7 +92,11 @@ def test_profile_and_deletion_from_contact_list(web, dora):
     row = page.locator(".new-chat li[data-contact]", has_text="Dora")
     row.click(button="right")
     page.locator(".menu").get_by_role("menuitem", name="View profile").click()
-    page.locator("dialog").get_by_role("button", name="Send message").click()
+    page.locator(".settings.contact").locator(".chathead :is(.back, .close):visible").click()
+    expect(row).to_be_visible()
+    row.click(button="right")
+    page.locator(".menu").get_by_role("menuitem", name="View profile").click()
+    page.locator(".settings.contact").get_by_role("button", name="Send message").click()
     expect(page.locator(".chathead strong")).to_have_text("Dora")
 
     page.get_by_role("button", name="New chat").click()
@@ -119,9 +122,8 @@ def test_contact_avatars(web, dora, tmp_path):
     entry_avatar = page.locator(".chatlist li[data-chat]", has_text="Dora").locator(".avatar img")
     expect(entry_avatar).to_be_visible()
     expect(page.locator(".chathead .avatar img")).to_be_visible()
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    expect(page.locator("dialog .profile-head .avatar img")).to_be_visible()
-    page.locator("dialog").get_by_role("button", name="Cancel").click()
+    expect(open_profile(page).locator(".profile-head .avatar img")).to_be_visible()
+    page.locator(".settings.contact").locator(".chathead :is(.back, .close):visible").click()
 
     dora.acc.set_config("selfavatar", None)
     dora.chat.send_text("picture gone")
@@ -160,3 +162,4 @@ def test_own_avatar_reaches_contacts(web, dora, tmp_path):
     web_send(page, "picture removed")
     wait_text(dora.acc, "picture removed")
     assert not me.get_snapshot().profile_image
+

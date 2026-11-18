@@ -11,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, WEBM, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, own_state, reload_and_unlock, solid_png, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, WEBM, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, open_profile, own_state, reload_and_unlock, set_nickname, solid_png, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -1211,12 +1211,6 @@ def test_archive_and_pin_chats(web, dora):
     expect(entries).to_have_text(["Dora", "Phone", "Saved messages"])
 
 
-def set_nickname(page, name):
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog input").fill(name)
-    page.get_by_role("button", name="Save", exact=True).click()
-
-
 def test_contact_nickname(web, dora):
     page = web.page
     title = page.locator(".chathead strong")
@@ -1233,9 +1227,10 @@ def test_contact_nickname(web, dora):
     page.set_viewport_size({"width": 390, "height": 844})
     expect(page.locator(".chathead").get_by_role("button", name="Edit chat")).to_be_hidden()
     title.click()
-    expect(page.locator("dialog")).to_contain_text("“Dora Renamed”")
-    page.locator("dialog input").fill("")
-    page.get_by_role("button", name="Save", exact=True).click()
+    profile = page.locator(".settings.contact")
+    expect(profile).to_contain_text("“Dora Renamed”")
+    profile.get_by_role("textbox", name="Name").fill("")
+    profile.locator(".chathead :is(.back, .close):visible").click()
     expect(title).to_have_text("Dora Renamed")
 
     reload_and_unlock(page)
@@ -1245,8 +1240,7 @@ def test_contact_nickname(web, dora):
 
 def test_chat_settings_explain_deletion(web, dora):
     page = web.page
-    settings = page.locator("dialog")
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = open_profile(page)
     expect(settings.locator(".fingerprints code")).to_have_count(2)
     expect(settings).to_contain_text("Deletes the chat and all its messages in this browser. Dora keeps the messages")
     settings.get_by_role("button", name="Delete chat").click()

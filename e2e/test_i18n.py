@@ -38,8 +38,8 @@ def test_web_client_in_german(german, make_account):
     expect(page.locator(".nav-actions")).to_contain_text("Meine Einladung")
     page.locator(".chatlist li", has_text="Phone").click()
     page.locator(".chathead").get_by_role("button", name="Chat bearbeiten").click()
-    expect(page.locator("dialog")).to_contain_text("Ende-zu-Ende-Verschlüsselung")
-    page.locator("dialog").get_by_role("button", name="Abbrechen").click()
+    expect(page.locator(".settings.contact")).to_contain_text("Ende-zu-Ende-Verschlüsselung")
+    page.locator(".settings.contact").locator(".chathead :is(.back, .close):visible").click()
 
     page.get_by_role("button", name="Einstellungen").click()
     page.locator(".settings").get_by_label("Sprache").select_option("en")

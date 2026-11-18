@@ -5,7 +5,7 @@ from pathlib import Path
 from deltachat_rpc_client import DeltaChat, EventType
 from playwright.sync_api import expect
 
-from helpers import PNG, RELAY_IP, addr_of, message_action, new_chat, open_chat, own_state, set_passphrase, solid_png, transport, wait_event, wait_own_msg, wait_text, web_send
+from helpers import PNG, RELAY_IP, addr_of, message_action, new_chat, open_chat, open_profile, own_state, set_nickname, set_passphrase, solid_png, transport, wait_event, wait_own_msg, wait_text, web_send
 
 
 def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
@@ -45,17 +45,14 @@ def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
     expect(page.locator(".messages .info", has_text="You set disappearing messages to 1 week.")).to_be_visible()
     dora_group = dora.acc.get_chat_by_id(wait_text(dora.acc, "group from web").chat_id)
     open_chat(page, "Phone")
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog input").fill("My phone")
-    page.get_by_role("button", name="Save", exact=True).click()
+    set_nickname(page, "My phone")
     expect(page.locator(".chathead strong")).to_have_text("My phone")
     erin = make_account("Erin")
     new_chat(page, "Add contact")
     page.locator("dialog textarea").fill(erin.get_qr_code())
     page.get_by_role("button", name="Connect").click()
     wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog").get_by_role("button", name="Block contact").click()
+    open_profile(page).get_by_role("button", name="Block contact").click()
     page.locator("dialog", has_text="Block this contact?").get_by_role("button", name="Block contact").click()
     expect(page.locator(".chatlist li[data-chat]", has_text="Erin")).to_have_count(0)
 
@@ -150,15 +147,11 @@ def test_nicknames_sync_between_browsers(web, dora, browser, tmp_path):
     other_entry = other.locator(".chatlist li[data-chat] strong", has_text="Dora")
     expect(other_entry).to_have_text("Dora")
 
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog input").fill("Dora from work")
-    page.get_by_role("button", name="Save", exact=True).click()
+    set_nickname(page, "Dora from work")
     expect(other_entry).to_have_text("Dora from work")
     open_chat(other, "Dora")
     expect(other.locator(".chathead strong")).to_have_text("Dora from work")
 
-    other.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    other.locator("dialog input").fill("Dora at home")
-    other.get_by_role("button", name="Save", exact=True).click()
+    set_nickname(other, "Dora at home")
     expect(page.locator(".chatlist li[data-chat] strong", has_text="Dora")).to_have_text("Dora at home")
     expect(page.locator(".chathead strong")).to_have_text("Dora at home")

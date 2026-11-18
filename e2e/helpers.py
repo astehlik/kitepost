@@ -159,6 +159,21 @@ def new_chat(page: Page, entry):
     page.locator(".new-chat .chatlist li", has_text=entry).get_by_role("button").click()
 
 
+def open_profile(page: Page):
+    """Opens the profile of the open single chat's contact."""
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    profile = page.locator(".settings.contact")
+    expect(profile).to_be_visible()
+    return profile
+
+
+def set_nickname(page: Page, name):
+    """Sets the open chat contact's nickname and goes back to the chat."""
+    profile = open_profile(page)
+    profile.get_by_role("textbox", name="Name").fill(name)
+    profile.locator(".chathead :is(.back, .close):visible").click()
+
+
 def open_chat(page: Page, title):
     page.locator(".chatlist li", has_text=title).first.click()
 

@@ -11,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, own_state, set_passphrase, solid_png, wait_event, wait_own_msg, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, open_profile, own_state, set_nickname, set_passphrase, solid_png, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -213,15 +213,11 @@ def test_nicknames_sync_between_devices(imported):
     expect(entry).to_have_text("Bobby")
 
     open_chat(page, "Bobby")
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog input").fill("Bob from work")
-    page.get_by_role("button", name="Save", exact=True).click()
+    set_nickname(page, "Bob from work")
     expect(entry).to_have_text("Bob from work")
     wait_contact_name(bob, "Bob from work")
 
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog input").fill("")
-    page.get_by_role("button", name="Save", exact=True).click()
+    set_nickname(page, "")
     expect(entry).to_have_text("Bob")
     wait_contact_name(bob, "")
 
@@ -258,8 +254,7 @@ def test_blocking_syncs_between_devices(imported):
     bob = phone.get_contact_by_addr(addr_of(imported.bob))
     entry = page.locator(".chatlist li[data-chat]", has_text="Bob")
     open_chat(page, "Bob")
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    page.locator("dialog").get_by_role("button", name="Block contact").click()
+    open_profile(page).get_by_role("button", name="Block contact").click()
     page.locator("dialog", has_text="Block this contact?").get_by_role("button", name="Block contact").click()
     expect(entry).to_have_count(0)
     wait_blocked(bob, True)
@@ -454,6 +449,6 @@ def test_nicknames_are_imported(page, make_account, tmp_path):
     bob.get_contact_by_addr(addr_of(phone)).create_chat().send_text("hello after the import")
     expect(page.locator(".msg.in", has_text="hello after the import")).to_be_visible()
     expect(page.locator(".chathead strong")).to_have_text("Bobby")
-    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
-    expect(page.locator("dialog input")).to_have_value("Bobby")
-    expect(page.locator("dialog")).to_contain_text("“Bob”")
+    profile = open_profile(page)
+    expect(profile.get_by_role("textbox", name="Name")).to_have_value("Bobby")
+    expect(profile).to_contain_text("“Bob”")

@@ -407,7 +407,9 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   mainListeners = new AbortController();
   const { signal } = mainListeners;
   let current = initialChat;
-  let view: 'settings' | 'newChat' | undefined = initialSettings ? 'settings' : undefined;
+  // A contact's profile returns to the chat or list it was opened from.
+  let view: 'settings' | 'newChat' | { contact: string; from?: string } | undefined = initialSettings ? 'settings' : undefined;
+  let contactShown: { key: string; el: Element } | undefined;
   let settings: { key: string; el: Element } | undefined;
   let newChat: ReturnType<typeof newChatView> | undefined;
   let shown: { chatId: string; header: Element; headerKey: string; footer: Element; footerKey: string; list: HTMLElement; pinbar: HTMLButtonElement; pinnedIds?: string; pinnedAt?: string } | undefined;
@@ -853,7 +855,9 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       : contact?.lastSeen ? t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }) : '';
     const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatar?.slice(-24), chat.avatar?.slice(-24), contact && client.freshness(contact), chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
-    const settings = () => chatDialog(client, chat, open, () => { current = undefined; renderAll(); });
+    const settings = () => chat.type === 'single' && chat.contact
+      ? showContact(chat.contact, chat.id)
+      : chatDialog(client, chat, () => { current = undefined; renderAll(); });
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
@@ -895,8 +899,27 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     if (view === 'newChat') {
       if (newChat && pane.contains(newChat.el)) return newChat.refresh();
       leaveChat();
-      newChat = newChatView(client, open, () => { view = undefined; renderAll(); });
+      newChat = newChatView(client, open, fp => showContact(fp, 'newChat'), () => { view = undefined; renderAll(); });
       pane.replaceChildren(newChat.el);
+      return;
+    }
+    if (typeof view === 'object') {
+      const { contact: fp, from } = view;
+      const c = client.contacts.get(fp);
+      // The view shows nickname edits itself; rebuilding it would swallow a click in Firefox.
+      const key = JSON.stringify([fp, c && { ...c, nickname: undefined }, client.chats.has(`c-${fp}`), client.sortedChats().filter(g => g.type === 'group' && g.members.includes(fp)).map(g => [g.id, g.name, g.left])]);
+      if (contactShown?.key === key && pane.contains(contactShown.el)) return;
+      leaveChat();
+      const back = () => {
+        if (from === 'newChat') view = 'newChat';
+        else if (from && client.chats.has(from)) return open(from);
+        else view = undefined;
+        renderAll();
+      };
+      const el = contactView(client, fp, open, back);
+      if (!el) return back();
+      contactShown = { key, el };
+      pane.replaceChildren(el);
       return;
     }
     if (view === 'settings') {
@@ -1133,6 +1156,12 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   function open(chatId: string) {
     current = chatId;
     view = undefined;
+    renderAll();
+  }
+
+  function showContact(fp: string, from?: string) {
+    view = { contact: fp, from };
+    current = undefined;
     renderAll();
   }
 
@@ -1476,7 +1505,7 @@ function groupDialog(client: DcClient, open: (id: string) => void) {
 }
 
 /** Like Delta Chat's "New chat" screen: new contact and new group, then the contacts. */
-function newChatView(client: DcClient, open: (id: string) => void, close: () => void) {
+function newChatView(client: DcClient, open: (id: string) => void, profile: (fp: string) => void, close: () => void) {
   const search = h('input', { type: 'search', placeholder: t('contacts.search'), 'aria-label': t('contacts.search') });
   const list = h('ul', { class: 'chatlist contacts' });
   const row = (attrs: Record<string, string>, onclick: () => void, badge: Element, ...text: Node[]) =>
@@ -1513,7 +1542,7 @@ function newChatView(client: DcClient, open: (id: string) => void, close: () => 
   listenForItemMenu(list, 'li[data-contact]', (li, at) => {
     const fp = li.dataset.contact!;
     showMenu(li, at,
-      [t('contact.viewProfile'), ICONS.info, () => profileDialog(client, fp, open)],
+      [t('contact.viewProfile'), ICONS.info, () => profile(fp)],
       [t('contact.delete'), ICONS.trash, () => confirmDelete(fp)]);
   });
   search.addEventListener('input', refresh);
@@ -1621,36 +1650,46 @@ function deleteChatSection(client: DcClient, chat: Chat, consequence: string, de
     h('button', { class: 'danger', onclick: confirm }, t('chat.deleteChat')));
 }
 
-/** Like Delta Chat's contact profile; `chat` is the chat it was opened from. */
-function profileDialog(client: DcClient, fp: string, open: (id: string) => void, chat?: Chat, deleted?: () => void) {
+/** Like Delta Chat's contact profile, in place of a chat. */
+function contactView(client: DcClient, fp: string, open: (id: string) => void, close: () => void): Element | undefined {
   const c = client.contacts.get(fp);
-  if (!c) return;
+  if (!c) return undefined;
   const name = client.contactName(fp);
+  const chat = client.chats.get(`c-${fp}`);
   const nickname = h('input', { type: 'text', maxlength: '100', value: c.nickname ?? '', placeholder: c.name || c.addr });
-  const goTo = (id: string) => { dlg.close(); open(id); };
+  nickname.addEventListener('change', () => { void client.setNickname(fp, nickname.value).catch(errorDialog); });
+  const title = h('h2', { class: 'who' }, name);
+  const shownName = h('strong', {}, name);
+  nickname.addEventListener('input', () => { title.textContent = shownName.textContent = nickname.value.trim() || c.name || c.addr; });
   const shared = client.sortedChats().filter(g => g.type === 'group' && !g.left && g.members.includes(fp));
   const blockText = (key: 'contact.blockAsk' | 'contact.unblockAsk') => h('div', {}, ...t(key).split('\n\n').map(p => h('p', {}, p)));
   const confirmBlock = () => dialog(name, blockText(c.blocked ? 'contact.unblockAsk' : 'contact.blockAsk'), [
     { label: t('cancel') },
-    { label: t(c.blocked ? 'contact.unblock' : 'contact.block'), primary: true, onClick: async () => { await client.setBlocked(fp, !c.blocked); dlg.close(); } },
+    { label: t(c.blocked ? 'contact.unblock' : 'contact.block'), primary: true, onClick: () => client.setBlocked(fp, !c.blocked) },
   ]);
-  const dlg = dialog(name, h('div', { class: 'chat-settings' },
-    h('div', { class: 'profile-head' }, avatar(name, c.addr, undefined, c.avatar),
-      h('span', { class: 'names' }, h('strong', {}, name), h('small', {}, c.addr),
-        c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null)),
-    chat || c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => goTo(await client.chatWith(fp))) }, t('contact.sendMessage')),
-    field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })),
-    h('section', {}, h('h3', {}, t('contact.sharedChats')),
-      shared.length
-        ? h('ul', { class: 'member-list' }, ...shared.map(g => h('li', {}, h('button', { type: 'button', class: 'link', onclick: () => goTo(g.id) }, client.chatTitle(g)))))
-        : h('p', {}, t('contact.noSharedChats'))),
-    h('section', {}, h('h3', {}, t('e2e.title')), h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), fingerprintRows(client, fp)),
-    h('section', {}, h('h3', {}, t(c.blocked ? 'contact.unblock' : 'contact.block')),
-      h('p', {}, t(c.blocked ? 'contact.blockedText' : 'contact.blockText')),
-      h('button', { class: c.blocked ? '' : 'danger', onclick: confirmBlock }, t(c.blocked ? 'contact.unblock' : 'contact.block'))),
-    chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), () => { dlg.close(); deleted?.(); }) : null),
-  [{ label: t('cancel') }, { label: t('save'), primary: true, onClick: () => client.setNickname(fp, nickname.value) }]);
-  nickname.select();
+  const section = (title: string, ...content: (Node | null)[]) => h('section', {}, h('h3', {}, title), ...content);
+  return h('div', { class: 'settings contact' },
+    h('header', { class: 'chathead' },
+      h('button', { class: 'back', onclick: close }, '‹'),
+      title,
+      Object.assign(iconButton(ICONS.close, t('close'), close), { className: 'icon-button close' })),
+    h('div', { class: 'settings-body' },
+      h('section', {},
+        h('div', { class: 'profile-head' }, avatar(name, c.addr, undefined, c.avatar),
+          h('span', { class: 'names' }, shownName, h('small', {}, c.addr),
+            c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null)),
+        h('div', { class: 'row' },
+          c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => open(await client.chatWith(fp))) }, t('contact.sendMessage')))),
+      h('section', {}, field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr }))),
+      section(t('contact.sharedChats'),
+        shared.length
+          ? h('ul', { class: 'member-list' }, ...shared.map(g => h('li', {}, h('button', { type: 'button', class: 'link', onclick: () => open(g.id) }, client.chatTitle(g)))))
+          : h('p', {}, t('contact.noSharedChats'))),
+      section(t('e2e.title'), h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), fingerprintRows(client, fp)),
+      section(t(c.blocked ? 'contact.unblock' : 'contact.block'),
+        h('p', {}, t(c.blocked ? 'contact.blockedText' : 'contact.blockText')),
+        h('div', { class: 'row' }, h('button', { class: c.blocked ? '' : 'danger', onclick: confirmBlock }, t(c.blocked ? 'contact.unblock' : 'contact.block')))),
+      chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), close) : null));
 }
 
 /** Like Delta Chat's "Blocked contacts" in the chat settings. */
@@ -1672,8 +1711,7 @@ function blockedDialog(client: DcClient) {
   dialog(t('contact.blockedTitle'), list, [{ label: t('close'), primary: true }]);
 }
 
-function chatDialog(client: DcClient, chat: Chat, open: (id: string) => void, deleted: () => void) {
-  if (chat.type === 'single' && chat.contact) return profileDialog(client, chat.contact, open, chat, deleted);
+function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
   const confirmLeave = () => dialog(t('group.leaveTitle'), h('p', {}, t('group.leaveText')), [
     { label: t('cancel') },
     { label: t('group.leave'), primary: true, onClick: async () => { await client.leaveGroup(chat.id); dlg.close(); } },
