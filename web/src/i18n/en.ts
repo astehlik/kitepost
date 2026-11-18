@@ -251,6 +251,7 @@ export const en = {
   'group.leaveText': 'You no longer get its messages and cannot write in it any more. The chat and its messages stay here until you delete it, and the other members see that you left.',
 
   'contact.sendMessage': 'Send message',
+  'contact.copyAddr': 'Copy address',
   'contact.sharedChats': 'Chats in common',
   'contact.noSharedChats': 'None',
   'contact.block': 'Block contact',

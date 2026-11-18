@@ -253,6 +253,7 @@ export const de: Record<keyof typeof en, string> = {
   'group.leaveText': 'Du bekommst keine Nachrichten mehr daraus und kannst nicht mehr darin schreiben. Der Chat mit seinen Nachrichten bleibt hier, bis du ihn löschst, und die anderen Mitglieder sehen, dass du gegangen bist.',
 
   'contact.sendMessage': 'Nachricht senden',
+  'contact.copyAddr': 'Adresse kopieren',
   'contact.sharedChats': 'Gemeinsame Chats',
   'contact.noSharedChats': 'Keine',
   'contact.block': 'Kontakt blockieren',

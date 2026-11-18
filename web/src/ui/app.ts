@@ -1628,6 +1628,17 @@ function profileDialog(client: DcClient, fp: string, open: (id: string) => void,
   const name = client.contactName(fp);
   const nickname = h('input', { type: 'text', maxlength: '100', value: c.nickname ?? '', placeholder: c.name || c.addr });
   const goTo = (id: string) => { dlg.close(); open(id); };
+  const addr = h('small', {}, c.addr);
+  const copyAddr = h('button', { type: 'button', class: 'link' }, t('contact.copyAddr'));
+  copyAddr.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(c.addr);
+      flashLabel(copyAddr, t('invite.copied'));
+    } catch {
+      getSelection()?.selectAllChildren(addr);
+      flashLabel(copyAddr, t('invite.copyFailed'));
+    }
+  };
   const shared = client.sortedChats().filter(g => g.type === 'group' && !g.left && g.members.includes(fp));
   const blockText = (key: 'contact.blockAsk' | 'contact.unblockAsk') => h('div', {}, ...t(key).split('\n\n').map(p => h('p', {}, p)));
   const confirmBlock = () => dialog(name, blockText(c.blocked ? 'contact.unblockAsk' : 'contact.blockAsk'), [
@@ -1636,8 +1647,8 @@ function profileDialog(client: DcClient, fp: string, open: (id: string) => void,
   ]);
   const dlg = dialog(name, h('div', { class: 'chat-settings' },
     h('div', { class: 'profile-head' }, avatar(name, c.addr, undefined, c.avatar),
-      h('span', { class: 'names' }, h('strong', {}, name), h('small', {}, c.addr),
-        c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null)),
+      h('span', { class: 'names' }, h('strong', {}, name), addr,
+        c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null, copyAddr)),
     chat || c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => goTo(await client.chatWith(fp))) }, t('contact.sendMessage')),
     field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })),
     h('section', {}, h('h3', {}, t('contact.sharedChats')),
