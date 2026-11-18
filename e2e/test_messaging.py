@@ -13,7 +13,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, WEBM, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -734,6 +734,29 @@ def test_images_open_in_a_lightbox(web, dora, tmp_path):
     images.nth(1).click()
     expect(page.locator(".msg.selected")).to_have_count(2)
     expect(box).to_have_count(0)
+
+
+def test_videos_play_in_the_lightbox(web, dora, tmp_path):
+    page = web.page
+    (tmp_path / "pic.png").write_bytes(solid_png(64, 48))
+    dora.chat.send_file(str(tmp_path / "pic.png"))
+    (tmp_path / "clip.webm").write_bytes(WEBM)
+    dora.chat.send_file(str(tmp_path / "clip.webm"))
+    preview = page.get_by_role("button", name="Play video: clip.webm")
+    expect(preview.locator(".play")).to_be_visible()
+    preview.locator("video").evaluate("v => v.readyState >= 1 || new Promise(r => v.addEventListener('loadedmetadata', r))")
+    preview.click()
+    box = page.locator("dialog.lightbox")
+    expect(box.locator(".name")).to_have_text("clip.webm")
+    expect(box.locator("video")).to_be_visible()
+    expect(box.locator("img")).to_be_hidden()
+    page.wait_for_function("() => document.querySelector('dialog.lightbox video').duration > 0")
+    page.keyboard.press("ArrowLeft")
+    expect(box.locator(".name")).to_have_text("pic.png")
+    expect(box.locator("img")).to_be_visible()
+    expect(box.locator("video")).to_be_hidden()
+    page.keyboard.press("Escape")
+    expect(preview).to_be_focused()
 
 
 def test_core_group_with_web_member(web, dora):

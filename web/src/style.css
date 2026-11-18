@@ -188,7 +188,11 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .pinbar > span { display: grid; min-width: 0; }
 .pinbar strong { font-size: .75rem; color: var(--accent); }
 .pinbar span span { overflow: hidden; font-size: .88rem; white-space: nowrap; text-overflow: ellipsis; }
-.attachment img { max-width: 100%; max-height: 320px; border-radius: 8px; display: block; }
+.attachment :is(img, video) { max-width: 100%; max-height: 320px; border-radius: 8px; display: block; }
+.attachment .video { position: relative; }
+.attachment .video video { min-width: 200px; min-height: 112px; object-fit: contain; background: #000; }
+.attachment .play { position: absolute; inset: 0; display: grid; place-items: center; }
+.attachment .play svg { width: 48px; height: 48px; padding: 12px 10px 12px 14px; box-sizing: border-box; border-radius: 50%; background: rgba(0,0,0,.55); fill: #fff; }
 .attachment .image { display: block; padding: 0; border: 0; background: none; border-radius: 8px; cursor: zoom-in; }
 .chips { display: flex; flex-wrap: wrap; gap: .25rem .6rem; }
 .chips:empty { display: none; }
@@ -198,7 +202,9 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .lightbox::backdrop { background: transparent; }
 .lightbox .bar { justify-self: stretch; display: flex; align-items: center; gap: .5rem; padding: .6rem 1rem; }
 .lightbox .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lightbox img { max-width: 100%; max-height: calc(100dvh - 4rem); object-fit: contain; }
+.lightbox :is(img, video) { max-width: 100%; max-height: calc(100dvh - 4rem); object-fit: contain; }
+.lightbox [hidden] { display: none; }
+.lightbox video { width: 100%; height: calc(100dvh - 4rem); }
 .lightbox .icon-button svg { stroke: #fff; }
 .lightbox .icon-button:hover { background: rgba(255,255,255,.12); }
 .lightbox .icon-button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }

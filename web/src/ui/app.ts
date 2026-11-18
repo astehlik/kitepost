@@ -18,6 +18,8 @@ let DEFAULT_BRIDGE = '../bridge';
 let HANDOFF_URL = '../join/';
 const MAX_UPLOAD = 10 * 1024 * 1024;
 const INLINE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const INLINE_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/ogg']);
+const playableVideo = (mime: string) => INLINE_VIDEO_TYPES.has(mime) && document.createElement('video').canPlayType(mime) !== '';
 
 const root = () => document.getElementById('app')!;
 
@@ -527,16 +529,22 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   }
 
   function attachmentView(a: AttachmentData, urls: string[]): Node {
-    const safeImage = INLINE_IMAGE_TYPES.has(a.mime);
-    const blob = base64ToBlob(a.data_b64, safeImage ? a.mime : 'application/octet-stream');
+    const kind = INLINE_IMAGE_TYPES.has(a.mime) ? 'image' : playableVideo(a.mime) ? 'video' : undefined;
+    const blob = base64ToBlob(a.data_b64, kind ? a.mime : 'application/octet-stream');
     const url = URL.createObjectURL(blob);
     urls.push(url);
     const link = h('a', { href: url, download: a.filename, rel: 'noopener' }, `📎 ${a.filename}`);
-    if (!safeImage) return h('div', { class: 'attachment' }, link);
-    const img = h('img', { src: url, alt: a.filename });
-    imageBlobs.set(img, blob);
-    const image = h('button', { type: 'button', class: 'image', title: t('image.open'), onclick: ev => lightbox(ev.currentTarget as HTMLElement) }, img);
-    return h('div', { class: 'attachment' }, image, link);
+    if (!kind) return h('div', { class: 'attachment' }, link);
+    const media = kind === 'image'
+      ? h('img', { src: url, alt: a.filename })
+      : h('video', { src: url, preload: 'metadata', muted: true, playsinline: true, tabindex: '-1', 'aria-hidden': 'true' });
+    mediaFiles.set(media, { blob, name: a.filename });
+    const open = h('button', {
+      type: 'button', class: `image ${kind}`, title: t(kind === 'image' ? 'image.open' : 'video.play'),
+      'aria-label': kind === 'video' ? `${t('video.play')}: ${a.filename}` : undefined,
+      onclick: ev => lightbox(ev.currentTarget as HTMLElement),
+    }, media, kind === 'video' ? h('span', { class: 'play' }, icon(ICONS.play)) : null);
+    return h('div', { class: 'attachment' }, open, link);
   }
 
   const authorName = (from: string) => from === 'self' ? t('me') : client.contactName(from);
@@ -1235,6 +1243,7 @@ const ICONS = {
   resend: 'M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   close: 'M6 6l12 12M18 6 6 18',
+  play: 'M8 5.5v13l10.5-6.5z',
   newChat: 'M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12zM12 8.5v7M8.5 12h7',
   group: 'M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM22 20v-1.5a4 4 0 0 0-3-3.87M16 4.13a3.5 3.5 0 0 1 0 6.75',
 };
@@ -1519,43 +1528,57 @@ function linkified(text: string): (string | Node)[] {
   }, text));
 }
 
-const imageBlobs = new WeakMap<HTMLImageElement, Blob>();
+const mediaFiles = new WeakMap<Element, { blob: Blob; name: string }>();
 
-/** Shows the image of `opener` large, with the other images of the chat a step away. */
+/** Shows the image or video of `opener` large, with the other images and videos of the chat a step away. */
 function lightbox(opener: HTMLElement) {
-  const images = [...(opener.closest('.messages') ?? document).querySelectorAll<HTMLImageElement>('.attachment .image img')];
-  let index = Math.max(0, images.findIndex(img => opener.contains(img)));
+  const items = [...(opener.closest('.messages') ?? document).querySelectorAll<HTMLElement>('.attachment .image > :is(img, video)')];
+  let index = Math.max(0, items.findIndex(el => opener.contains(el)));
   // An own URL, because a redrawn message revokes those of its old node.
   let url = '';
   const img = h('img', { alt: '' });
+  const video = h('video', { controls: true, playsinline: true });
   const name = h('span', { class: 'name' });
   const save = h('a', { class: 'icon-button', title: t('image.download'), 'aria-label': t('image.download') }, icon(ICONS.download));
-  const step = (d: number) => images.length > 1 && show(index + d);
+  const step = (d: number) => items.length > 1 && show(index + d);
   const prev = iconButton(ICONS.back, t('image.previous'), () => step(-1));
   const next = iconButton(ICONS.forward, t('image.next'), () => step(1));
   const close = iconButton(ICONS.close, t('close'), () => dlg.close());
   const dlg = h('dialog', { class: 'lightbox', 'aria-label': t('image.title') },
-    h('div', { class: 'bar' }, name, save, close), prev, img, next);
+    h('div', { class: 'bar' }, name, save, close), prev, img, video, next);
   for (const b of [prev, next, close]) b.classList.add('icon-button');
   prev.classList.add('prev');
   next.classList.add('next');
-  prev.hidden = next.hidden = images.length < 2;
+  prev.hidden = next.hidden = items.length < 2;
   function show(i: number) {
-    index = (i + images.length) % images.length;
-    const src = images[index];
-    const blob = imageBlobs.get(src);
-    if (!blob) return;
+    index = (i + items.length) % items.length;
+    const file = mediaFiles.get(items[index]);
+    if (!file) return;
+    const isVideo = items[index] instanceof HTMLVideoElement;
+    video.pause();
     URL.revokeObjectURL(url);
-    url = URL.createObjectURL(blob);
-    img.src = save.href = url;
-    img.alt = name.textContent = save.download = src.alt;
+    url = URL.createObjectURL(file.blob);
+    img.hidden = isVideo;
+    video.hidden = !isVideo;
+    if (isVideo) {
+      video.src = url;
+      img.removeAttribute('src');
+      video.play().catch(() => undefined);
+    } else {
+      img.src = url;
+      video.removeAttribute('src');
+      video.load();
+    }
+    save.href = url;
+    img.alt = name.textContent = save.download = file.name;
   }
   dlg.addEventListener('click', ev => { if (ev.target === dlg) dlg.close(); });
   dlg.addEventListener('keydown', ev => {
+    if (ev.target === video) return;
     if (ev.key === 'ArrowLeft') step(-1);
     else if (ev.key === 'ArrowRight') step(1);
   });
-  dlg.addEventListener('close', () => { URL.revokeObjectURL(url); dlg.remove(); opener.focus(); });
+  dlg.addEventListener('close', () => { video.pause(); URL.revokeObjectURL(url); dlg.remove(); opener.focus(); });
   document.body.append(dlg);
   dlg.showModal();
   close.focus();

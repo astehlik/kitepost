@@ -269,6 +269,7 @@ export const en = {
   'link.open': 'Open',
   'image.title': 'Image',
   'image.open': 'Show large',
+  'video.play': 'Play video',
   'image.download': 'Download',
   'image.previous': 'Previous image',
   'image.next': 'Next image',

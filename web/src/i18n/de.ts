@@ -270,6 +270,7 @@ export const de: Record<keyof typeof en, string> = {
   'link.suspicious': 'Dieser Link führt zu {host}. Seine Adresse kann wie eine andere aussehen; öffne ihn nur, wenn du ihm vertraust.',
   'link.open': 'Öffnen',
   'image.title': 'Bild',
+  'video.play': 'Video abspielen',
   'image.open': 'Groß anzeigen',
   'image.download': 'Herunterladen',
   'image.previous': 'Vorheriges Bild',
