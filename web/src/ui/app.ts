@@ -851,7 +851,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       : chat.type === 'group'
       ? t('chat.members', { n: chat.members.length + 1 })
       : contact ? [contact.lastSeen && t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }), contact.addr].filter(Boolean).join(' · ') : '';
-    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatarAt, contact && client.freshness(contact), chat.ephemeralTimer]);
+    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatarAt, chat.avatar?.slice(-24), contact && client.freshness(contact), chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
     const settings = () => chatDialog(client, chat, open, () => { current = undefined; renderAll(); });
     return [key, h('header', { class: 'chathead' },
@@ -1192,7 +1192,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     const n = new Notification(title, {
       body: body.length > 200 ? `${body.slice(0, 199)}…` : body, tag: chat.id,
       icon: details === 'none' ? undefined
-        : (chat.type === 'single' && client.contacts.get(chat.contact ?? '')?.avatar) || avatarImage(client.chatTitle(chat), chatAvatarKey(client, chat)),
+        : chatImage(client, chat) || avatarImage(client.chatTitle(chat), chatAvatarKey(client, chat)),
       renotify: true,
     } as NotificationOptions);
     n.onclick = () => {
@@ -1409,10 +1409,13 @@ function attachmentKind(mime: string): string {
   return t(kind === 'image' ? 'notify.image' : kind === 'video' ? 'notify.video' : kind === 'audio' ? 'notify.audio' : 'notify.file');
 }
 
+const chatImage = (client: DcClient, chat: Chat) =>
+  chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.avatar : chat.avatar;
+
 function chatAvatar(client: DcClient, chat: Chat) {
   if (chat.type === 'self') return avatar('', 'self', icon(ICONS.star));
   const contact = chat.type === 'single' ? client.contacts.get(chat.contact ?? '') : undefined;
-  const el = avatar(client.chatTitle(chat), chatAvatarKey(client, chat), undefined, contact?.avatar);
+  const el = avatar(client.chatTitle(chat), chatAvatarKey(client, chat), undefined, chatImage(client, chat));
   if (contact && client.freshness(contact) === 'recent') el.classList.add('seen');
   return el;
 }
@@ -1458,12 +1461,14 @@ function groupDialog(client: DcClient, open: (id: string) => void) {
     .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: client.contactName(c.fingerprint) }));
   const list = h('div', { class: 'members' }, ...boxes.map(b => h('label', { class: 'check' }, b.box, b.label)));
   if (!boxes.length) list.append(h('p', {}, t('group.addContactsFirst')));
-  dialog(t('group.title'), h('div', {}, field(t('group.name'), name), list), [
+  let image: string | undefined;
+  const picker = avatarPicker(() => avatar(name.value || t('group.default'), 'new-group', undefined, image), () => image, async v => { image = v; });
+  dialog(t('group.title'), h('div', { class: 'new-group' }, picker, field(t('group.name'), name), list), [
     { label: t('cancel') },
     {
       label: t('create'), primary: true, onClick: async () => {
         if (!name.value.trim()) throw new Error(t('group.enterName'));
-        open(await client.createGroup(name.value, boxes.filter(b => b.box.checked).map(b => b.fp)));
+        open(await client.createGroup(name.value, boxes.filter(b => b.box.checked).map(b => b.fp), image));
       },
     },
   ]);
@@ -1674,7 +1679,10 @@ function chatDialog(client: DcClient, chat: Chat, open: (id: string) => void, de
     { label: t('group.leave'), primary: true, onClick: async () => { await client.leaveGroup(chat.id); dlg.close(); } },
   ]);
   const active = chat.type === 'group' && !chat.left;
+  const image = () => client.chats.get(chat.id)?.avatar;
   const dlg = dialog(client.chatTitle(chat), h('div', { class: 'chat-settings' },
+    active ? h('section', {}, h('h3', {}, t('group.avatar')),
+      avatarPicker(() => avatar(client.chatTitle(chat), chatAvatarKey(client, chat), undefined, image()), image, v => client.setGroupAvatar(chat.id, v))) : null,
     active ? membersSection(client, chat) : null,
     h('section', {}, h('h3', {}, t('e2e.title')), h('p', {}, t(chat.type === 'self' ? 'e2e.self' : 'e2e.group'))),
     active ? h('section', {}, h('h3', {}, t('group.leave')),
@@ -1741,8 +1749,6 @@ function exportDialog(client: DcClient, done?: () => void) {
   ]);
 }
 
-/** `rebuild` redraws the main view after the language changed. */
-/** The profile and the settings of this browser, saved as soon as they change. */
 /** Like core's recode_to_avatar_size(): a square of at most 512 px and 60 KB. */
 async function avatarFromFile(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file).catch(() => { throw new Error(t('profile.avatarInvalid')); });
@@ -1759,22 +1765,31 @@ async function avatarFromFile(file: File): Promise<string> {
   throw new Error(t('profile.avatarInvalid'));
 }
 
+function avatarPicker(preview: () => Element, current: () => string | undefined, set: (dataUrl: string | undefined) => Promise<unknown>): Element {
+  const picture = h('input', { type: 'file', accept: 'image/*', hidden: true, 'aria-label': t('profile.avatarChoose') });
+  const row = h('div', { class: 'avatar-row' });
+  const render = () => row.replaceChildren(preview(),
+    h('div', { class: 'row' },
+      h('button', { type: 'button', onclick: () => picture.click() }, t('profile.avatarChoose')),
+      current() ? h('button', { type: 'button', onclick: busyClick(async () => { await set(undefined); render(); }) }, t('profile.avatarRemove')) : null),
+    picture);
+  picture.addEventListener('change', () => {
+    const file = picture.files?.[0];
+    picture.value = '';
+    if (file) void avatarFromFile(file).then(set).then(render).catch(errorDialog);
+  });
+  render();
+  return row;
+}
+
+/** `rebuild` redraws the main view after the language changed. */
+/** The profile and the settings of this browser, saved as soon as they change. */
 function settingsView(client: DcClient, rebuild: () => void, close: () => void): Element {
   const save = (f: () => unknown) => () => { void Promise.resolve().then(f).catch(errorDialog); };
   const name = h('input', { type: 'text', maxlength: '100', value: client.config.displayName });
   name.addEventListener('change', save(() => client.setDisplayName(name.value)));
-  const picture = h('input', { type: 'file', accept: 'image/*', hidden: true, 'aria-label': t('profile.avatarChoose') });
-  picture.addEventListener('change', save(async () => {
-    const file = picture.files?.[0];
-    picture.value = '';
-    if (file) await client.setAvatar(await avatarFromFile(file));
-  }));
-  const avatarRow = h('div', { class: 'avatar-row' },
-    avatar(client.config.displayName || t('me'), client.config.addr, undefined, client.config.avatar),
-    h('div', { class: 'row' },
-      h('button', { type: 'button', onclick: () => picture.click() }, t('profile.avatarChoose')),
-      client.config.avatar ? h('button', { type: 'button', onclick: busyClick(() => client.setAvatar(undefined)) }, t('profile.avatarRemove')) : null),
-    picture);
+  const avatarRow = avatarPicker(() => avatar(client.config.displayName || t('me'), client.config.addr, undefined, client.config.avatar),
+    () => client.config.avatar, v => client.setAvatar(v));
 
   const lang = languageSelect(rebuild);
   const theme = h('select', {},

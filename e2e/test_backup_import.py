@@ -45,6 +45,7 @@ def imported(page, make_account, tmp_path):
     phone_saved.send_text("note before export")
     phone_saved.pin()
     group = phone.create_group("Backup group")
+    group.set_image(str(tmp_path / "alice.png"))
     group.add_contact(phone.get_contact_by_addr(addr_of(bob)))
     group.send_text("group hello")
     group.set_ephemeral_timer(604_800)
@@ -81,6 +82,7 @@ def test_history_is_imported(imported):
 def test_avatars_are_imported(imported):
     expect(imported.page.locator(".chatlist li[data-chat]", has_text="Bob").locator(".avatar img")).to_be_visible()
     expect(imported.page.locator(".profile .avatar img")).to_be_visible()
+    expect(imported.page.locator(".chatlist li[data-chat]", has_text="Backup group").locator(".avatar img")).to_be_visible()
 
 
 def test_own_avatar_syncs_between_devices(imported, tmp_path):

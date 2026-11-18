@@ -802,11 +802,12 @@ export class DcClient extends EventTarget {
       .filter((c): c is Contact => !!c && !!c.publicKey);
   }
 
-  private groupHeaders(chat: Chat, members: Contact[]): OutgoingMessage['headers'] {
+  private groupHeaders(chat: Chat, members: Contact[], avatar = false): OutgoingMessage['headers'] {
     return [
       { name: 'Chat-Group-ID', value: chat.grpid!, kind: 'raw' },
       { name: 'Chat-Group-Name', value: chat.name, kind: 'text' },
       { name: 'Chat-Group-Member-Fpr', value: members.map(m => m.fingerprint).join(' '), kind: 'raw' },
+      ...avatar ? [{ name: 'Chat-Group-Avatar', value: avatarHeader(chat.avatar), kind: 'raw' as const }] : [],
     ];
   }
 
@@ -851,7 +852,7 @@ export class DcClient extends EventTarget {
     const headers: OutgoingMessage['headers'] = [{ name: 'Chat-Version', value: '1.0', kind: 'raw' }];
     if (replyTo) headers.push({ name: 'In-Reply-To', value: replyTo, kind: 'messageid' });
     if (chat.type !== 'self' && this.readReceipts) headers.push({ name: 'Chat-Disposition-Notification-To', value: this.config.addr, kind: 'raw' });
-    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members));
+    if (chat.type === 'group') headers.push(...this.groupHeaders(chat, members, !!(chat.unpromoted && chat.avatar)));
     return headers;
   }
 
@@ -904,6 +905,10 @@ export class DcClient extends EventTarget {
       headers: [...msg.headers, ...avatar],
     }, members.flatMap(m => m.relays), true);
     if (avatar.length) await this.markAvatarSent(members);
+    if (chat.unpromoted) {
+      delete chat.unpromoted;
+      await this.saveChat(chat);
+    }
     return mid;
   }
 
@@ -1044,11 +1049,11 @@ export class DcClient extends EventTarget {
     await this.saveMessage({ ...target, reactions });
   }
 
-    async createGroup(name: string, memberFps: string[]): Promise<string> {
+    async createGroup(name: string, memberFps: string[], avatar?: string): Promise<string> {
     const chat: Chat = {
       id: `g-${createId()}`, type: 'group', name: cleanName(name) || t('group.default'), grpid: createId(),
       members: memberFps.filter(fp => this.contacts.get(fp)?.publicKey), isRequest: false, left: false,
-      lastActivity: Date.now(), unread: 0,
+      lastActivity: Date.now(), unread: 0, unpromoted: true, avatar, avatarAt: avatar ? Math.floor(Date.now() / 1000) * 1000 : undefined,
     };
     await this.saveChat(chat);
     await this.addInfo(chat.id, t('info.groupCreated'));
@@ -1069,13 +1074,45 @@ export class DcClient extends EventTarget {
       text: `Member ${c.addr} added.`,
       headers: [
         { name: 'Chat-Version', value: '1.0', kind: 'raw' },
-        ...this.groupHeaders(chat, members),
+        ...this.groupHeaders(chat, members, !!chat.avatar),
         { name: 'Chat-Group-Member-Added', value: c.addr, kind: 'raw' },
         { name: 'Chat-Group-Member-Added-Fpr', value: fp, kind: 'raw' },
       ],
       gossip: members.map(m => ({ addr: m.addr, key: m.publicKey })),
     });
     await this.addOwnInfo(chat, mid, t('info.youAdded', { addr: this.contactName(fp) }));
+  }
+
+  /** Like core's set_chat_profile_image(): a group nobody knows yet gets the image with its first message. */
+  async setGroupAvatar(chatId: string, dataUrl: string | undefined) {
+    const chat = this.chats.get(chatId);
+    if (!chat || chat.type !== 'group') throw new Error('unknown chat');
+    if (chat.left) throw new Error(t('error.notMember'));
+    if (dataUrl === chat.avatar) return;
+    chat.avatar = dataUrl;
+    chat.avatarAt = Math.floor(Date.now() / 1000) * 1000;
+    await this.saveChat(chat);
+    if (chat.unpromoted) return;
+    const members = this.memberContacts(chat);
+    const mid = await this.sendToChat(chat, members, {
+      text: 'Chat image changed.',
+      headers: [
+        { name: 'Chat-Version', value: '1.0', kind: 'raw' },
+        ...this.groupHeaders(chat, members, true),
+        { name: 'Chat-Content', value: 'group-avatar-changed', kind: 'raw' },
+      ],
+    });
+    await this.addOwnInfo(chat, mid, t(dataUrl ? 'info.youGroupImage' : 'info.youGroupImageDeleted'));
+  }
+
+  /** Like receive_imf's apply_group_changes(): only the newest message decides. */
+  private applyGroupAvatar(chat: Chat, p: ParsedMessage) {
+    const header = p.headers['chat-group-avatar'];
+    const avatar = header === undefined ? undefined : parseAvatarHeader(header);
+    const ts = this.timestamp(p);
+    if (avatar === undefined || ts < (chat.avatarAt ?? 0)) return;
+    chat.avatar = avatar ?? undefined;
+    chat.avatarAt = ts;
   }
 
   /** Removes a member like core's remove_contact_from_chat(); the removed member is told too. */
@@ -1252,6 +1289,7 @@ export class DcClient extends EventTarget {
       const name = cleanName(p.headers['chat-group-name'] ?? '');
       if (name) chat.name = name;
       if (p.headers['chat-group-member-removed'] && addrEq(p.headers['chat-group-member-removed'], this.config.addr)) chat.left = true;
+      this.applyGroupAvatar(chat, p);
       await this.saveChat(chat);
     } else {
       const toSelf = p.recipients.length > 0 && p.recipients.every(r => addrEq(r.addr, this.config.addr));
@@ -1429,7 +1467,8 @@ export class DcClient extends EventTarget {
       switch (content) {
         case 'message-pinned': return say('info.pinned', 'info.youPinned');
         case 'message-unpinned': return say('info.unpinned', 'info.youUnpinned');
-        case 'group-avatar-changed': return say('info.groupImage', 'info.youGroupImage');
+        case 'group-avatar-changed': return p.headers['chat-group-avatar']?.trim() === '0'
+          ? say('info.groupImageDeleted', 'info.youGroupImageDeleted') : say('info.groupImage', 'info.youGroupImage');
         case 'ephemeral-timer-changed': return this.timerInfo(ephemeralTimer(p), from);
         case 'location-streaming-enabled': return say('info.location', 'info.youLocation');
         case 'protection-enabled': case 'protection-disabled': case 'call-accepted': case 'call-ended': return null;
@@ -1492,6 +1531,7 @@ export class DcClient extends EventTarget {
       chat.members = [...members];
       const name = cleanName(p.headers['chat-group-name'] ?? '');
       if (name && name !== chat.name) chat.name = name;
+      this.applyGroupAvatar(chat, p);
     }
     await this.saveChat(chat);
     return chat;

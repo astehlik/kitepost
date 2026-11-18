@@ -28,6 +28,8 @@ def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
     dora.acc.mark_seen_messages([dora.acc.get_message_by_id(read.id)])
     expect(own_state(page, "hello dora")).to_have_attribute("data-state", "read")
     new_chat(page, "New group")
+    (tmp_path / "group.png").write_bytes(solid_png(64, 64))
+    page.locator("dialog input[type=file]").set_input_files(str(tmp_path / "group.png"))
     page.locator("dialog .field input").fill("Export group")
     page.locator("dialog .members label", has_text="Dora").locator("input").check()
     page.get_by_role("button", name="Create", exact=True).click()
@@ -92,6 +94,7 @@ def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
         phone = restored.get_contact_by_addr(addr_of(web.phone)).get_snapshot()
         assert (phone.name, phone.auth_name) == ("My phone", "Phone"), phone
         assert chats["Export group"].get_basic_snapshot().pinned
+        assert chats["Export group"].get_basic_snapshot().profile_image
         assert rpc.get_chat_ephemeral_timer(restored.id, chats["Export group"].id) == 604_800
         assert restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot().last_seen > 0
         assert restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot().profile_image

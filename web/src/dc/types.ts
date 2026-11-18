@@ -81,6 +81,11 @@ export interface Chat {
   /** Disappearing messages in seconds, and the Date of the message that set it (core's EphemeralSettingsTimestamp). */
   ephemeralTimer?: number;
   ephemeralSetAt?: number;
+  /** Group image as data URL and the Date of the message that set it, like the contact's. */
+  avatar?: string;
+  avatarAt?: number;
+  /** A group no member knows about yet, like core's Param::Unpromoted. */
+  unpromoted?: boolean;
 }
 
 export type MessageState = 'pending' | 'sent' | 'failed' | 'received' | 'read';

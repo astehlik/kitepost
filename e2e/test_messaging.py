@@ -947,6 +947,71 @@ def test_group_changes_in_core_show_info_messages(web, dora):
     expect(page.locator(".messages .msg")).to_have_count(0)
 
 
+def wait_until(check, what):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while not check():
+        assert time.monotonic() < deadline, what
+        time.sleep(0.2)
+
+
+def test_group_image_from_core(web, dora, tmp_path):
+    page = web.page
+    (tmp_path / "group.png").write_bytes(solid_png(64, 64))
+    group = dora.acc.create_group("Pictured")
+    group.set_image(str(tmp_path / "group.png"))
+    group.add_contact(dora.acc.get_contact_by_id(dora.contact_id))
+    group.send_text("group with a picture")
+    open_chat(page, "Pictured")
+    entry = page.locator(".chatlist li[data-chat]", has_text="Pictured").locator(".avatar img")
+    expect(entry).to_be_visible()
+    expect(page.locator(".chathead .avatar img")).to_be_visible()
+
+    group.remove_image()
+    expect(page.locator(".messages .info", has_text="Group image deleted by Dora.")).to_be_visible()
+    expect(entry).to_have_count(0)
+    group.set_image(str(tmp_path / "group.png"))
+    expect(page.locator(".messages .info", has_text="Group image changed by Dora.")).to_be_visible()
+    expect(entry).to_be_visible()
+
+
+def test_group_image_from_web(web, dora, make_account, tmp_path):
+    page = web.page
+    (tmp_path / "group.png").write_bytes(solid_png(300, 200))
+    erin = make_account("Erin")
+    new_chat(page, "Add contact")
+    page.locator("dialog textarea").fill(erin.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+
+    new_chat(page, "New group")
+    page.locator("dialog input[type=file]").set_input_files(str(tmp_path / "group.png"))
+    expect(page.locator("dialog .avatar-row .avatar img")).to_be_visible()
+    page.locator("dialog .field input").fill("Web picture group")
+    page.locator("dialog .members label", has_text="Dora").locator("input").check()
+    page.get_by_role("button", name="Create", exact=True).click()
+    expect(page.locator(".chathead .avatar img")).to_be_visible()
+    web_send(page, "first with picture")
+    dora_group = dora.acc.get_chat_by_id(wait_text(dora.acc, "first with picture").chat_id)
+    assert dora_group.get_basic_snapshot().profile_image
+
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = page.locator("dialog").first
+    settings.get_by_role("button", name="Add members").click()
+    adding = page.locator("dialog", has_text="Add members").last
+    adding.locator(".members label", has_text="Erin").locator("input").check()
+    adding.get_by_role("button", name="Add", exact=True).click()
+    expect(page.locator(".info", has_text="You added Erin.")).to_be_visible()
+
+    def erin_group():
+        return next((c for c in erin.get_chatlist() if c.get_basic_snapshot().name == "Web picture group"), None)
+    wait_until(lambda: erin_group() and erin_group().get_basic_snapshot().profile_image, "Erin got no group image")
+
+    settings.get_by_role("button", name="Remove", exact=True).click()
+    expect(settings.locator(".avatar-row .avatar img")).to_have_count(0)
+    expect(page.locator(".messages .info", has_text="You deleted the group image.")).to_be_visible()
+    expect(page.locator(".chathead .avatar img")).to_have_count(0)
+    wait_until(lambda: not dora_group.get_basic_snapshot().profile_image, "Dora still has the group image")
+
 def test_core_joins_web_invite(web, make_account):
     erin = make_account("Erin")
     web.page.get_by_role("button", name="My invite").click()

@@ -164,6 +164,11 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
     const messagesByChat = new Map<string, Message[]>();
     for (const m of src.messages) messagesByChat.set(m.chatId, [...(messagesByChat.get(m.chatId) ?? []), m]);
 
+    const chatParams = async (chat: Chat) => {
+      const image = chat.avatar && await addBlob(fromBase64(avatarBase64(chat.avatar)), `group-avatar.${avatarExtension(chat.avatar)}`);
+      return params([['i', image && `$BLOBDIR/${image}`], ['J', chat.avatarAt && Math.floor(chat.avatarAt / 1000)], ['U', chat.unpromoted ? 1 : undefined]]);
+    };
+
     nextId = FIRST_ID;
     let msgId = FIRST_ID;
     for (const chat of src.chats) {
@@ -178,7 +183,7 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       run(`INSERT INTO chats (id, type, name, blocked, grpid, param, created_timestamp, archived, ephemeral_timer)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [chatId, chat.type === 'group' ? CHAT_GROUP : CHAT_SINGLE, name, src.contacts.find(c => c.fingerprint === chat.contact)?.blocked ? BLOCKED_YES : chat.isRequest ? BLOCKED_REQUEST : 0,
-        chat.grpid ?? '', chat.id === SELF_CHAT ? 'K=1' : '', created, chat.visibility === 'archived' ? 1 : chat.visibility === 'pinned' ? 2 : 0, chat.ephemeralTimer ?? 0]);
+        chat.grpid ?? '', chat.id === SELF_CHAT ? 'K=1' : await chatParams(chat), created, chat.visibility === 'archived' ? 1 : chat.visibility === 'pinned' ? 2 : 0, chat.ephemeralTimer ?? 0]);
       const members: [number, number, number][] = chat.type === 'self' ? [[CONTACT_SELF, created, 0]]
         : single ? [[single, created, 0]]
         : [

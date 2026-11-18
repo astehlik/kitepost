@@ -200,7 +200,7 @@ export async function readBackup(
     progress(t('backup.contacts'));
     const fpById = new Map<number, string>([[CONTACT_SELF, 'self']]);
     const contacts: Contact[] = [];
-    const avatarFiles = new Map<Contact, { file: string; at: number }>();
+    const avatarFiles = new Map<Contact | Chat, { file: string; at: number }>();
     const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.origin, c.blocked, c.verifier, c.last_seen, c.param, k.public_key
       FROM contacts c JOIN public_keys k ON k.fingerprint = c.fingerprint
       WHERE c.id > 9 AND c.fingerprint != ''`);
@@ -251,7 +251,11 @@ export async function readBackup(
       } else {
         if (!str(r.grpid)) continue;
         const id = `g-${str(r.grpid)}`;
-        chats.push({ ...base, id, type: 'group', grpid: str(r.grpid), members: fps, left: !ids.includes(CONTACT_SELF) });
+        const p = params(r.param);
+        const chat: Chat = { ...base, id, type: 'group', grpid: str(r.grpid), members: fps, left: !ids.includes(CONTACT_SELF), unpromoted: p.get('U') === '1' || undefined };
+        chats.push(chat);
+        const image = p.get('i');
+        if (image) avatarFiles.set(chat, { file: image.split('/').pop()!, at: Number(p.get('J') ?? 0) * 1000 });
         chatIdMap.set(num(r.id), id);
       }
     }
@@ -269,10 +273,10 @@ export async function readBackup(
     }
     const blobs = new Map<string, TarEntry>();
     for (const [name, e] of entries) if (name.startsWith('blobs_backup/')) blobs.set(name.split('/').pop()!, e);
-    for (const [contact, { file, at }] of avatarFiles) {
+    for (const [owner, { file, at }] of avatarFiles) {
       const blob = blobs.get(file);
-      contact.avatar = blob && blob.size <= MAX_BLOB ? avatarDataUrl(toBase64(await readAt(blob.offset, blob.size))) : undefined;
-      contact.avatarAt = contact.avatar ? at || undefined : undefined;
+      owner.avatar = blob && blob.size <= MAX_BLOB ? avatarDataUrl(toBase64(await readAt(blob.offset, blob.size))) : undefined;
+      owner.avatarAt = owner.avatar ? at || undefined : undefined;
     }
 
     const messages: Message[] = [];
