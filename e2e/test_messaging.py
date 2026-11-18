@@ -1006,6 +1006,18 @@ def test_group_image_from_web(web, dora, make_account, tmp_path):
         return next((c for c in erin.get_chatlist() if c.get_basic_snapshot().name == "Web picture group"), None)
     wait_until(lambda: erin_group() and erin_group().get_basic_snapshot().profile_image, "Erin got no group image")
 
+    fred = make_account("Fred")
+    page.get_by_role("button", name="Close").click()
+    page.get_by_role("button", name="Invite link").click()
+    link = page.locator("dialog input").input_value()
+    page.get_by_role("button", name="Close").click()
+    fred.secure_join(link)
+    wait_event(fred, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
+    fred_group = next(c for c in fred.get_chatlist() if c.get_basic_snapshot().name == "Web picture group")
+    assert fred_group.get_basic_snapshot().profile_image
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    settings = page.locator("dialog").first
+
     settings.get_by_role("button", name="Remove", exact=True).click()
     expect(settings.locator(".avatar-row .avatar img")).to_have_count(0)
     expect(page.locator(".messages .info", has_text="You deleted the group image.")).to_be_visible()

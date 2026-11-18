@@ -1617,7 +1617,7 @@ export class DcClient extends EventTarget {
             subject: chat.name, text: `Member ${bob.addr} added.`,
             headers: [
               { name: 'Chat-Version', value: '1.0', kind: 'raw' },
-              ...this.groupHeaders(chat, members),
+              ...this.groupHeaders(chat, members, !!chat.avatar),
               { name: 'Chat-Group-Member-Added', value: bob.addr, kind: 'raw' },
               { name: 'Secure-Join', value: 'vg-member-added', kind: 'raw' },
             ],
