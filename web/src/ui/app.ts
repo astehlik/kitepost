@@ -1688,7 +1688,18 @@ function deleteChatSection(client: DcClient, chat: Chat, consequence: string, de
   ]);
   return h('section', {}, h('h3', {}, t('chat.deleteChat')),
     h('p', {}, [t(client.config.bccSelf ? 'chat.deleteEverywhere' : 'chat.deleteHere'), consequence].filter(Boolean).join(' ')),
-    h('button', { class: 'danger', onclick: confirm }, t('chat.deleteChat')));
+    h('div', { class: 'row' }, h('button', { class: 'danger', onclick: confirm }, t('chat.deleteChat'))));
+}
+
+/** Like Delta Chat's "Clear chat": deletes the messages for this profile and keeps the chat. */
+function clearChatSection(client: DcClient, chat: Chat): Element {
+  const confirm = () => dialog(t('chat.clearTitle'), h('p', {}, t('chat.deleteUndo')), [
+    { label: t('cancel') },
+    { label: t('chat.clear'), primary: true, onClick: () => client.clearChat(chat.id) },
+  ]);
+  return h('section', {}, h('h3', {}, t('chat.clear')),
+    h('p', {}, [t(client.config.bccSelf ? 'chat.clearEverywhere' : 'chat.clearHere'), chat.type === 'self' ? '' : t('chat.clearOthersKeep')].filter(Boolean).join(' ')),
+    h('div', { class: 'row' }, h('button', { onclick: confirm }, t('chat.clear'))));
 }
 
 /** Like Delta Chat's contact profile, in place of a chat. */
@@ -1734,6 +1745,7 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
       section(t(c.blocked ? 'contact.unblock' : 'contact.block'),
         h('p', {}, t(c.blocked ? 'contact.blockedText' : 'contact.blockText')),
         h('div', { class: 'row' }, h('button', { class: c.blocked ? '' : 'danger', onclick: confirmBlock }, t(c.blocked ? 'contact.unblock' : 'contact.block')))),
+      chat ? clearChatSection(client, chat) : null,
       chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), close) : null));
 }
 
@@ -1786,6 +1798,7 @@ function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
     active ? h('section', {}, h('h3', {}, t('group.leave')),
       h('p', {}, t('group.leaveText')),
       h('button', { class: 'danger', onclick: confirmLeave }, t('group.leave'))) : null,
+    clearChatSection(client, chat),
     chat.type === 'self' ? null : deleteChatSection(client, chat, active ? t('chat.deleteKeepGroup') : '', () => { dlg.close(); deleted(); })),
   [{ label: t('close'), primary: true }]);
 }

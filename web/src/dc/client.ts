@@ -964,6 +964,12 @@ export class DcClient extends EventTarget {
     await this.saveMessage({ ...original, text, edited: true });
   }
 
+  /** Like Delta Chat's "Clear chat": every message deleted for me, which syncs to the own other devices. */
+  async clearChat(chatId: string) {
+    const ids = (this.messages.get(chatId) ?? []).map(m => m.id);
+    if (ids.length) await this.deleteMessages(chatId, ids, false);
+  }
+
   /**
    * Deletes a message like core's delete_msgs_ext(): for everyone only own sent messages, otherwise
    * here and, through a sync message, on the own other devices.

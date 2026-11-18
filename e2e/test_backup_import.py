@@ -289,6 +289,22 @@ def test_chat_deletion_syncs_between_devices(imported):
     expect(page.locator(".chatlist li[data-chat]", has_text="Saved messages")).to_have_count(1)
 
 
+def test_clearing_a_chat_syncs_between_devices(imported):
+    page, phone = imported.page, imported.phone
+    open_chat(page, "Bob")
+    expect(page.locator(".msg", has_text="reply from bob")).to_be_visible()
+    profile = open_profile(page)
+    profile.get_by_role("button", name="Clear chat").click()
+    page.locator("dialog", has_text="Clear chat?").get_by_role("button", name="Clear chat").click()
+    profile.locator(".chathead :is(.back, .close):visible").click()
+    expect(page.locator(".messages .msg")).to_have_count(0)
+    expect(page.locator(".chatlist li[data-chat]", has_text="Bob")).to_have_count(1)
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while any(m.get_snapshot().text in ("reply from bob", "hello from alice\nsecond line") for m in imported.phone_bob.get_messages()):
+        assert time.monotonic() < deadline, "the phone kept the messages"
+        time.sleep(0.2)
+
+
 def wait_contact_name(contact, name):
     deadline = time.monotonic() + EVENT_TIMEOUT
     while contact.get_snapshot().name != name:
