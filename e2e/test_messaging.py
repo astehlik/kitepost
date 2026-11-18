@@ -1250,6 +1250,20 @@ def test_contact_nickname(web, dora):
     expect(title).to_have_text("Dora Renamed")
 
 
+def test_nickname_is_stored_when_the_profile_closes(web, dora):
+    page = web.page
+    page.evaluate("""() => {
+        const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+        crypto.subtle.encrypt = async (...args) => { await new Promise(r => setTimeout(r, 1000)); return encrypt(...args); };
+    }""")
+    set_nickname(page, "Dora from work")
+    expect(page.locator(".chathead strong")).to_have_text("Dora from work")
+
+    reload_and_unlock(page)
+    open_chat(page, "Dora")
+    expect(page.locator(".chathead strong")).to_have_text("Dora from work")
+
+
 def test_chat_settings_explain_deletion(web, dora):
     page = web.page
     settings = open_profile(page)

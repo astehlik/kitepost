@@ -57,6 +57,8 @@ async function unseal<T>(key: CryptoKey, sealed: Sealed, aad: string): Promise<T
 }
 
 export class Store {
+  private writes = new Set<Promise<void>>();
+
   private constructor(private db: IDBDatabase, private key: CryptoKey) {}
 
   static async exists(): Promise<boolean> {
@@ -134,9 +136,19 @@ export class Store {
     await req(indexedDB.deleteDatabase(DB_NAME));
   }
 
-  async put(id: string, value: unknown) {
-    const sealed = await seal(this.key, value, id);
-    await req(this.db.transaction('records', 'readwrite').objectStore('records').put(sealed, id));
+  put(id: string, value: unknown): Promise<void> {
+    const write = (async () => {
+      const sealed = await seal(this.key, value, id);
+      await req(this.db.transaction('records', 'readwrite').objectStore('records').put(sealed, id));
+    })();
+    this.writes.add(write);
+    void write.catch(() => undefined).finally(() => this.writes.delete(write));
+    return write;
+  }
+
+  /** Resolves when the writes started so far have finished. */
+  async settled() {
+    await Promise.allSettled(this.writes);
   }
 
   async delete(id: string) {

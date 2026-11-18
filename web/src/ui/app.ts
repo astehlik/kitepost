@@ -1759,11 +1759,13 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
   ]);
   const section = (title: string, ...content: (Node | null)[]) => h('section', {}, h('h3', {}, title), ...content);
   const relays = [...new Set([c.addr, ...c.relays])];
+  // The nickname is saved on blur, i.e. by this click; close only once it is stored.
+  const closeSaved = busyClick(async () => { await client.saved(); close(); });
   return h('div', { class: 'settings contact' },
     h('header', { class: 'chathead' },
-      h('button', { class: 'back', onclick: close }, '‹'),
+      h('button', { class: 'back', onclick: closeSaved }, '‹'),
       title,
-      Object.assign(iconButton(ICONS.close, t('close'), close), { className: 'icon-button close' })),
+      Object.assign(iconButton(ICONS.close, t('close'), closeSaved), { className: 'icon-button close' })),
     h('div', { class: 'settings-body' },
       h('section', {},
         h('div', { class: 'profile-head' }, avatar(name, c.addr, undefined, c.avatar),

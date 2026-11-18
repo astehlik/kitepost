@@ -255,6 +255,11 @@ export class DcClient extends EventTarget {
     return c ? contactName(c) : fp.slice(0, 8);
   }
 
+  /** Resolves when the changes made so far are stored. */
+  saved(): Promise<void> {
+    return this.store.settled();
+  }
+
   /** An empty nickname shows the contact's own name again, like core's Contact::set_name(). */
   async setNickname(fp: string, nickname: string) {
     const c = this.contacts.get(fp);
