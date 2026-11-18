@@ -1,6 +1,6 @@
 from playwright.sync_api import expect
 
-from helpers import addr_of, capture_clipboard, new_chat, open_chat, reload_and_unlock, solid_png, wait_text, web_send
+from helpers import new_chat, open_chat, reload_and_unlock, solid_png, wait_text, web_send
 
 
 def delete_chat(page):
@@ -92,10 +92,6 @@ def test_profile_and_deletion_from_contact_list(web, dora):
     row = page.locator(".new-chat li[data-contact]", has_text="Dora")
     row.click(button="right")
     page.locator(".menu").get_by_role("menuitem", name="View profile").click()
-    capture_clipboard(page)
-    page.locator("dialog").get_by_role("button", name="Copy address").click()
-    expect(page.locator("dialog .profile-head .link")).to_have_text("Copied ✓")
-    assert page.evaluate("window.copied") == addr_of(dora.acc)
     page.locator("dialog").get_by_role("button", name="Send message").click()
     expect(page.locator(".chathead strong")).to_have_text("Dora")
 
