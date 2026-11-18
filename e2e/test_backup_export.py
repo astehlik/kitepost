@@ -2,13 +2,13 @@
 
 from pathlib import Path
 
-from deltachat_rpc_client import DeltaChat
+from deltachat_rpc_client import DeltaChat, EventType
 from playwright.sync_api import expect
 
-from helpers import PNG, RELAY_IP, addr_of, message_action, new_chat, open_chat, own_state, set_passphrase, transport, wait_own_msg, wait_text, web_send
+from helpers import PNG, RELAY_IP, addr_of, message_action, new_chat, open_chat, own_state, set_passphrase, transport, wait_event, wait_own_msg, wait_text, web_send
 
 
-def test_export_restores_in_core(web, dora, rpc, tmp_path):
+def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
     page = web.page
     web_send(page, "question\nin two lines")
     question = wait_text(dora.acc, "question\nin two lines")
@@ -45,6 +45,15 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
     page.locator("dialog input").fill("My phone")
     page.get_by_role("button", name="Save", exact=True).click()
     expect(page.locator(".chathead strong")).to_have_text("My phone")
+    erin = make_account("Erin")
+    new_chat(page, "Add contact")
+    page.locator("dialog textarea").fill(erin.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    page.locator("dialog").get_by_role("button", name="Block contact").click()
+    page.locator("dialog", has_text="Block this contact?").get_by_role("button", name="Block contact").click()
+    expect(page.locator(".chatlist li[data-chat]", has_text="Erin")).to_have_count(0)
 
     unsecured = page.locator(".profile .icon-button.attention")
     expect(unsecured).to_be_visible()
@@ -70,6 +79,8 @@ def test_export_restores_in_core(web, dora, rpc, tmp_path):
         assert restored.get_config("displayname") == "Webby"
         chats = {c.get_basic_snapshot().name: c for c in restored.get_chatlist()}
         assert {"Dora", "Export group", "My phone", "Saved messages"} <= set(chats), list(chats)
+        assert "Erin" not in chats
+        assert [c.address for c in restored.get_blocked_contacts()] == [addr_of(erin)]
         phone = restored.get_contact_by_addr(addr_of(web.phone)).get_snapshot()
         assert (phone.name, phone.auth_name) == ("My phone", "Phone"), phone
         assert chats["Export group"].get_basic_snapshot().pinned

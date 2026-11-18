@@ -199,6 +199,30 @@ def test_nicknames_sync_between_devices(imported):
     wait_contact_name(bob, "")
 
 
+def wait_blocked(contact, blocked):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while contact.get_snapshot().is_blocked != blocked:
+        assert time.monotonic() < deadline, f"the phone did not see blocked={blocked}"
+        time.sleep(0.2)
+
+
+def test_blocking_syncs_between_devices(imported):
+    page, phone = imported.page, imported.phone
+    bob = phone.get_contact_by_addr(addr_of(imported.bob))
+    entry = page.locator(".chatlist li[data-chat]", has_text="Bob")
+    open_chat(page, "Bob")
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    page.locator("dialog").get_by_role("button", name="Block contact").click()
+    page.locator("dialog", has_text="Block this contact?").get_by_role("button", name="Block contact").click()
+    expect(entry).to_have_count(0)
+    wait_blocked(bob, True)
+
+    bob.unblock()
+    expect(entry).to_have_count(1)
+    bob.block()
+    expect(entry).to_have_count(0)
+
+
 def test_chat_deletion_syncs_between_devices(imported):
     page, phone = imported.page, imported.phone
     open_chat(page, "Backup group")

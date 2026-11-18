@@ -349,10 +349,10 @@ export class DcClient extends EventTarget {
     return age <= 600_000 ? 'recent' : 'normal';
   }
 
-  /** Pinned chats first, like core's chatlist. */
+  /** Pinned chats first, like core's chatlist; chats with blocked contacts stay hidden. */
   sortedChats(): Chat[] {
     const pinned = (c: Chat) => c.visibility === 'pinned' ? 1 : 0;
-    return [...this.chats.values()].sort((a, b) => pinned(b) - pinned(a) || b.lastActivity - a.lastActivity);
+    return [...this.chats.values()].filter(c => !this.isBlockedChat(c)).sort((a, b) => pinned(b) - pinned(a) || b.lastActivity - a.lastActivity);
   }
 
   /** Archives, pins or resets a chat and tells the own other devices, like core's set_visibility(). */
@@ -404,13 +404,31 @@ export class DcClient extends EventTarget {
     await this.saveChat(chat);
   }
 
+  isBlockedChat(chat: Chat): boolean {
+    return chat.type === 'single' && !!chat.contact && !!this.contacts.get(chat.contact)?.blocked;
+  }
+
   async blockChat(chatId: string) {
-    const chat = this.chats.get(chatId);
-    if (chat?.contact) {
-      const c = this.contacts.get(chat.contact);
-      if (c) await this.saveContact({ ...c, blocked: true });
+    const fp = this.chats.get(chatId)?.contact;
+    if (fp) await this.setBlocked(fp, true);
+  }
+
+  blockedContacts(): Contact[] {
+    return [...this.contacts.values()].filter(c => c.blocked).sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
+  }
+
+  /** Like core's contact::set_blocked(): the chat with the contact is hidden, not deleted, so unblocking brings it back. */
+  async setBlocked(fp: string, blocked: boolean, sync = true) {
+    const c = this.contactByFingerprint(fp);
+    if (!c || c.blocked === blocked) return;
+    await this.saveContact({ ...c, blocked });
+    const chat = this.chats.get(`c-${c.fingerprint}`);
+    if (chat && !blocked && chat.isRequest) await this.acceptChat(chat.id);
+    this.changed('contacts');
+    this.changed('chats');
+    if (sync && this.config.bccSelf) {
+      await this.sendSync({ AlterChat: { id: { ContactFingerprint: c.fingerprint }, action: blocked ? 'Block' : 'Unblock' } });
     }
-    await this.removeChat(chatId);
   }
 
   /** Like core's ChatId::delete(): here and, through a sync message, on the own other devices. */
@@ -1087,7 +1105,10 @@ export class DcClient extends EventTarget {
     if (!p.encrypted || !p.signature) return false;
 
     const sender = await this.senderContact(p);
-    if (!sender || sender.blocked) return false;
+    if (!sender) return false;
+    // Like core, blocked contacts cannot start chats but still write in existing groups.
+    const grpid = p.headers['chat-group-id'];
+    if (sender.blocked && !(grpid && this.groupByGrpid(grpid))) return false;
     // Like core, a read receipt that names no message does not count as a sign of life.
     if (p.mdn_for.length || !/report-type="?disposition-notification/i.test(p.headers['content-type'] ?? '')) {
       await this.updateLastSeen(sender, this.timestamp(p));
@@ -1179,6 +1200,8 @@ export class DcClient extends EventTarget {
     }
     for (const { data } of items) {
       const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: string | { SetVisibility?: string; Rename?: unknown } } | undefined;
+      const contactFp = typeof alter?.id?.ContactFingerprint === 'string' ? alter.id.ContactFingerprint : undefined;
+      if (contactFp && (alter?.action === 'Block' || alter?.action === 'Unblock')) await this.setBlocked(contactFp, alter.action === 'Block', false);
       const deleted = alter?.action === 'Delete' && this.chatBySyncId(alter.id);
       if (deleted) {
         await this.removeChat(deleted.id);

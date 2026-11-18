@@ -886,7 +886,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       : contact ? [contact.lastSeen && t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }), contact.addr].filter(Boolean).join(' · ') : '';
     const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact && client.freshness(contact), chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
-    const settings = () => chatDialog(client, chat, () => { current = undefined; renderAll(); });
+    const settings = () => chatDialog(client, chat, open, () => { current = undefined; renderAll(); });
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
@@ -921,6 +921,10 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
 
   function renderPane() {
     const chat = current ? client.chats.get(current) : undefined;
+    if (chat && client.isBlockedChat(chat)) {
+      current = undefined;
+      return renderAll();
+    }
     if (view === 'newChat') {
       if (newChat && pane.contains(newChat.el)) return newChat.refresh();
       leaveChat();
@@ -1554,37 +1558,87 @@ function formatFingerprint(fp: string): string {
   return (fp.match(/.{1,4}/g) ?? []).join(' ');
 }
 
-function chatDialog(client: DcClient, chat: Chat, deleted: () => void) {
-  const c = chat.contact ? client.contacts.get(chat.contact) : undefined;
-  const nickname = c && h('input', { type: 'text', maxlength: '100', value: c.nickname ?? '', placeholder: c.name || c.addr });
-  const fingerprint = (name: string, fp: string) => [h('strong', {}, name), h('code', {}, formatFingerprint(fp))];
-  const encryption = c
-    ? [h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), h('div', { class: 'fingerprints' },
-      ...fingerprint(client.config.displayName || t('me'), client.config.fingerprint), ...fingerprint(client.contactName(c.fingerprint), c.fingerprint))]
-    : [h('p', {}, t(chat.type === 'self' ? 'e2e.self' : 'e2e.group'))];
-  const consequence = c ? t('chat.deleteKeepContact', { name: client.contactName(c.fingerprint) }) : chat.type === 'group' && !chat.left ? t('chat.deleteKeepGroup') : '';
+function fingerprintRows(client: DcClient, fp: string) {
+  const row = (name: string, fp: string) => [h('strong', {}, name), h('code', {}, formatFingerprint(fp))];
+  return h('div', { class: 'fingerprints' }, ...row(client.config.displayName || t('me'), client.config.fingerprint), ...row(client.contactName(fp), fp));
+}
+
+function deleteChatSection(client: DcClient, chat: Chat, consequence: string, deleted: () => void): Element {
+  const confirm = () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteUndo')), [
+    { label: t('cancel') },
+    { label: t('delete'), primary: true, onClick: async () => { await client.deleteChat(chat.id); deleted(); } },
+  ]);
+  return h('section', {}, h('h3', {}, t('chat.deleteChat')),
+    h('p', {}, [t(client.config.bccSelf ? 'chat.deleteEverywhere' : 'chat.deleteHere'), consequence].filter(Boolean).join(' ')),
+    h('button', { class: 'danger', onclick: confirm }, t('chat.deleteChat')));
+}
+
+/** Like Delta Chat's contact profile; `chat` is the chat it was opened from. */
+function profileDialog(client: DcClient, fp: string, open: (id: string) => void, chat?: Chat, deleted?: () => void) {
+  const c = client.contacts.get(fp);
+  if (!c) return;
+  const name = client.contactName(fp);
+  const nickname = h('input', { type: 'text', maxlength: '100', value: c.nickname ?? '', placeholder: c.name || c.addr });
+  const goTo = (id: string) => { dlg.close(); open(id); };
+  const shared = client.sortedChats().filter(g => g.type === 'group' && !g.left && g.members.includes(fp));
+  const blockText = (key: 'contact.blockAsk' | 'contact.unblockAsk') => h('div', {}, ...t(key).split('\n\n').map(p => h('p', {}, p)));
+  const confirmBlock = () => dialog(name, blockText(c.blocked ? 'contact.unblockAsk' : 'contact.blockAsk'), [
+    { label: t('cancel') },
+    { label: t(c.blocked ? 'contact.unblock' : 'contact.block'), primary: true, onClick: async () => { await client.setBlocked(fp, !c.blocked); dlg.close(); } },
+  ]);
+  const dlg = dialog(name, h('div', { class: 'chat-settings' },
+    h('div', { class: 'profile-head' }, avatar(name, c.addr),
+      h('span', { class: 'names' }, h('strong', {}, name), h('small', {}, c.addr),
+        c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null)),
+    chat || c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => goTo(await client.chatWith(fp))) }, t('contact.sendMessage')),
+    field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })),
+    h('section', {}, h('h3', {}, t('contact.sharedChats')),
+      shared.length
+        ? h('ul', { class: 'member-list' }, ...shared.map(g => h('li', {}, h('button', { type: 'button', class: 'link', onclick: () => goTo(g.id) }, client.chatTitle(g)))))
+        : h('p', {}, t('contact.noSharedChats'))),
+    h('section', {}, h('h3', {}, t('e2e.title')), h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), fingerprintRows(client, fp)),
+    h('section', {}, h('h3', {}, t(c.blocked ? 'contact.unblock' : 'contact.block')),
+      h('p', {}, t(c.blocked ? 'contact.blockedText' : 'contact.blockText')),
+      h('button', { class: c.blocked ? '' : 'danger', onclick: confirmBlock }, t(c.blocked ? 'contact.unblock' : 'contact.block'))),
+    chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), () => { dlg.close(); deleted?.(); }) : null),
+  [{ label: t('cancel') }, { label: t('save'), primary: true, onClick: () => client.setNickname(fp, nickname.value) }]);
+  nickname.select();
+}
+
+/** Like Delta Chat's "Blocked contacts" in the chat settings. */
+function blockedDialog(client: DcClient) {
+  const list = h('ul', { class: 'member-list' });
+  const render = () => {
+    const blocked = client.blockedContacts();
+    list.replaceChildren(...blocked.map(c => h('li', {},
+      h('span', {}, h('strong', {}, client.contactName(c.fingerprint)), h('small', {}, c.addr)),
+      h('button', {
+        type: 'button', onclick: () => dialog(client.contactName(c.fingerprint), h('p', {}, t('contact.unblockAsk')), [
+          { label: t('cancel') },
+          { label: t('contact.unblock'), primary: true, onClick: async () => { await client.setBlocked(c.fingerprint, false); render(); } },
+        ]),
+      }, t('contact.unblock')))));
+    if (!blocked.length) list.append(h('li', {}, t('contact.blockedEmpty')));
+  };
+  render();
+  dialog(t('contact.blockedTitle'), list, [{ label: t('close'), primary: true }]);
+}
+
+function chatDialog(client: DcClient, chat: Chat, open: (id: string) => void, deleted: () => void) {
+  if (chat.type === 'single' && chat.contact) return profileDialog(client, chat.contact, open, chat, deleted);
   const confirmLeave = () => dialog(t('group.leaveTitle'), h('p', {}, t('group.leaveText')), [
     { label: t('cancel') },
     { label: t('group.leave'), primary: true, onClick: async () => { await client.leaveGroup(chat.id); dlg.close(); } },
   ]);
-  const confirmDelete = () => dialog(t('chat.deleteTitle'), h('p', {}, t('chat.deleteUndo')), [
-    { label: t('cancel') },
-    { label: t('delete'), primary: true, onClick: async () => { await client.deleteChat(chat.id); dlg.close(); deleted(); } },
-  ]);
+  const active = chat.type === 'group' && !chat.left;
   const dlg = dialog(client.chatTitle(chat), h('div', { class: 'chat-settings' },
-    nickname && c ? field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr })) : null,
-    chat.type === 'group' && !chat.left ? membersSection(client, chat) : null,
-    h('section', {}, h('h3', {}, t('e2e.title')), ...encryption),
-    chat.type === 'group' && !chat.left ? h('section', {}, h('h3', {}, t('group.leave')),
+    active ? membersSection(client, chat) : null,
+    h('section', {}, h('h3', {}, t('e2e.title')), h('p', {}, t(chat.type === 'self' ? 'e2e.self' : 'e2e.group'))),
+    active ? h('section', {}, h('h3', {}, t('group.leave')),
       h('p', {}, t('group.leaveText')),
       h('button', { class: 'danger', onclick: confirmLeave }, t('group.leave'))) : null,
-    chat.type === 'self' ? null : h('section', {}, h('h3', {}, t('chat.deleteChat')),
-      h('p', {}, [t(client.config.bccSelf ? 'chat.deleteEverywhere' : 'chat.deleteHere'), consequence].filter(Boolean).join(' ')),
-      h('button', { class: 'danger', onclick: confirmDelete }, t('chat.deleteChat')))),
-  nickname && c
-    ? [{ label: t('cancel') }, { label: t('save'), primary: true, onClick: () => client.setNickname(c.fingerprint, nickname.value) }]
-    : [{ label: t('close'), primary: true }]);
-  nickname?.select();
+    chat.type === 'self' ? null : deleteChatSection(client, chat, active ? t('chat.deleteKeepGroup') : '', () => { dlg.close(); deleted(); })),
+  [{ label: t('close'), primary: true }]);
 }
 
 function membersSection(client: DcClient, chat: Chat): Element {
@@ -1701,7 +1755,8 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
       section(t('settings.chats'),
         check(receipts, t('profile.readReceipts'), t('profile.readReceiptsHint')),
         field(t('profile.notify'), notifyDetails, t('profile.notifyHint')),
-        permission),
+        permission,
+        h('div', { class: 'row' }, h('button', { onclick: () => blockedDialog(client) }, t('contact.blockedTitle')))),
       section(t('settings.devices'),
         client.config.secured ? null : h('p', { class: 'warning' }, t('backup.unsecured')),
         h('div', { class: 'row' },

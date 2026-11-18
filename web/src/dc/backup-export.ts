@@ -15,6 +15,7 @@ const FIRST_ID = 10;
 const ORIGIN_OUTGOING_TO = 0x4000;
 const CHAT_SINGLE = 100;
 const CHAT_GROUP = 120;
+const BLOCKED_YES = 1;
 const BLOCKED_REQUEST = 2;
 const NAMESPACE_INVITE_NUMBER = 100;
 const NAMESPACE_AUTH = 110;
@@ -162,7 +163,7 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
         : chat.name;
       run(`INSERT INTO chats (id, type, name, blocked, grpid, param, created_timestamp, archived, ephemeral_timer)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [chatId, chat.type === 'group' ? CHAT_GROUP : CHAT_SINGLE, name, chat.isRequest ? BLOCKED_REQUEST : 0,
+      [chatId, chat.type === 'group' ? CHAT_GROUP : CHAT_SINGLE, name, src.contacts.find(c => c.fingerprint === chat.contact)?.blocked ? BLOCKED_YES : chat.isRequest ? BLOCKED_REQUEST : 0,
         chat.grpid ?? '', chat.id === SELF_CHAT ? 'K=1' : '', created, chat.visibility === 'archived' ? 1 : chat.visibility === 'pinned' ? 2 : 0, chat.ephemeralTimer ?? 0]);
       const members: [number, number, number][] = chat.type === 'self' ? [[CONTACT_SELF, created, 0]]
         : single ? [[single, created, 0]]

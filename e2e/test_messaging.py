@@ -1337,7 +1337,7 @@ def test_storage_unlock_and_stay_unlocked(web):
     expect(page.locator(".chatlist li", has_text="Phone")).to_be_visible()
     page.get_by_role("button", name="Settings").click()
     expect(page.get_by_label("Stay unlocked in this browser")).to_be_checked()
-    page.get_by_role("button", name="Lock").click()
+    page.get_by_role("button", name="Lock", exact=True).click()
     expect(page.get_by_role("heading", name="Unlock Kitepost")).to_be_visible()
     page.reload()
     expect(page.get_by_role("heading", name="Unlock Kitepost")).to_be_visible()
