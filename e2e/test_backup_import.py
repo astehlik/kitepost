@@ -199,6 +199,26 @@ def test_nicknames_sync_between_devices(imported):
     wait_contact_name(bob, "")
 
 
+def wait_config(acc, key, value):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while acc.get_config(key) != value:
+        assert time.monotonic() < deadline, f"the phone did not set {key} to {value!r}"
+        time.sleep(0.2)
+
+
+def test_display_name_syncs_between_devices(imported):
+    page, phone = imported.page, imported.phone
+    phone.set_config("displayname", "Alice Laptop")
+    expect(page.locator(".profile")).to_contain_text("Alice Laptop")
+    page.get_by_role("button", name="Settings").click()
+    name = page.locator(".settings .field", has_text="Display name").locator("input")
+    expect(name).to_have_value("Alice Laptop")
+    name.fill("Alice Web")
+    name.press("Enter")
+    expect(page.locator(".profile")).to_contain_text("Alice Web")
+    wait_config(phone, "displayname", "Alice Web")
+
+
 def wait_blocked(contact, blocked):
     deadline = time.monotonic() + EVENT_TIMEOUT
     while contact.get_snapshot().is_blocked != blocked:

@@ -604,10 +604,14 @@ export class DcClient extends EventTarget {
     this.changed('config');
   }
 
-  async setDisplayName(name: string) {
-    this.config.displayName = cleanName(name);
+  /** Like core's set_config(Displayname): here and, through a sync message, on the own other devices. */
+  async setDisplayName(name: string, sync = true) {
+    const clean = cleanName(name);
+    if (clean === this.config.displayName) return;
+    this.config.displayName = clean;
     await this.saveConfig();
     this.changed('config');
+    if (sync && this.config.bccSelf) await this.sendSync({ Config: { key: 'Displayname', val: clean } });
   }
 
   // ---------------------------------------------------------------- invites
@@ -1222,6 +1226,8 @@ export class DcClient extends EventTarget {
       return;
     }
     for (const { data } of items) {
+      const config = data?.Config as { key?: unknown; val?: unknown } | undefined;
+      if (config?.key === 'Displayname' && typeof config.val === 'string') await this.setDisplayName(config.val, false);
       const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: string | { SetVisibility?: string; Rename?: unknown } } | undefined;
       const contactFp = typeof alter?.id?.ContactFingerprint === 'string' ? alter.id.ContactFingerprint : undefined;
       if (contactFp && (alter?.action === 'Block' || alter?.action === 'Unblock')) await this.setBlocked(contactFp, alter.action === 'Block', false);

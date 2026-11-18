@@ -900,7 +900,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       return;
     }
     if (view === 'settings') {
-      const key = JSON.stringify([client.config.secured, canHandoff]);
+      const key = JSON.stringify([client.config.secured, canHandoff, client.config.displayName]);
       if (settings?.key === key && pane.contains(settings.el)) return;
       leaveChat();
       settings = { key, el: settingsView(client, () => startMain(client, undefined, true), () => { view = undefined; renderAll(); }) };
