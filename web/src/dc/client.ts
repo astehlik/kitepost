@@ -1539,6 +1539,12 @@ export class DcClient extends EventTarget {
 
   // ---------------------------------------------------------------- securejoin (see core src/securejoin.rs)
 
+  /** Core attaches the own avatar to vc-request-with-auth and vc-contact-confirm. */
+  private async handshakeAvatar(p: ParsedMessage) {
+    const avatar = p.headers['chat-user-avatar'];
+    if (avatar !== undefined && p.signature) await this.applyAvatar(p.signature, avatar, this.timestamp(p));
+  }
+
   private async handleSecureJoin(p: ParsedMessage): Promise<HandshakeResult> {
     const self = this.config.fingerprint;
     const step = p.headers['secure-join-invitenumber'] ? 'vc-request' : p.headers['secure-join'];
@@ -1598,6 +1604,7 @@ export class DcClient extends EventTarget {
         const bobContact = await this.senderContact(p);
         if (!bobContact || bobContact.fingerprint !== fp || bobContact.blocked) return 'ignore';
         await this.saveContact({ ...bobContact, verified: true });
+        await this.handshakeAvatar(p);
         const bob = this.contacts.get(fp)!;
         if (token.grpid) {
           const chat = this.groupByGrpid(token.grpid);
@@ -1633,6 +1640,7 @@ export class DcClient extends EventTarget {
       case 'vc-contact-confirm': {
         for (const b of [...this.bob.values()]) {
           if (b.stage !== 'confirm' || b.invite.group || p.signature !== b.invite.fingerprint) continue;
+          await this.handshakeAvatar(p);
           await this.finishBob(b, t('info.connected'));
         }
         return 'ignore';

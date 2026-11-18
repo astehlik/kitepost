@@ -1,6 +1,7 @@
+from deltachat_rpc_client import EventType
 from playwright.sync_api import expect
 
-from helpers import new_chat, open_chat, reload_and_unlock, solid_png, wait_text, web_send
+from helpers import new_chat, open_chat, reload_and_unlock, solid_png, wait_event, wait_text, web_send
 
 
 def delete_chat(page):
@@ -126,6 +127,18 @@ def test_contact_avatars(web, dora, tmp_path):
     dora.chat.send_text("picture gone")
     expect(page.locator(".msg.in", has_text="picture gone")).to_be_visible()
     expect(entry_avatar).to_have_count(0)
+
+
+def test_avatar_from_the_invite_handshake(web, make_account, tmp_path):
+    page = web.page
+    erin = make_account("Erin")
+    (tmp_path / "erin.png").write_bytes(solid_png(64, 64))
+    erin.set_config("selfavatar", str(tmp_path / "erin.png"))
+    new_chat(page, "Add contact")
+    page.locator("dialog textarea").fill(erin.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+    expect(page.locator(".chatlist li[data-chat]", has_text="Erin").locator(".avatar img")).to_be_visible()
 
 
 def test_own_avatar_reaches_contacts(web, dora, tmp_path):
