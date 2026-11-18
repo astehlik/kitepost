@@ -74,7 +74,8 @@ def test_history_is_imported(imported):
     expect(reply.locator(".quote span")).to_have_text("hello from alice\nsecond line")
     expect(reply.locator(".text")).to_have_text("reply from bob")
     expect(page.locator(".msg.out .attachment img")).to_be_visible()
-    expect(page.locator(".chathead small")).to_contain_text(addr_of(imported.bob))
+    expect(page.locator(".chathead small")).to_contain_text("Last seen")
+    expect(page.locator(".chathead")).not_to_contain_text(addr_of(imported.bob))
     open_chat(page, "Backup group")
     expect(page.locator(".msg.out", has_text="group hello")).to_be_visible()
 

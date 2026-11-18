@@ -850,14 +850,14 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       ? t('chat.savedSubtitle')
       : chat.type === 'group'
       ? t('chat.members', { n: chat.members.length + 1 })
-      : contact ? [contact.lastSeen && t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }), contact.addr].filter(Boolean).join(' · ') : '';
+      : contact?.lastSeen ? t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }) : '';
     const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatarAt, chat.avatar?.slice(-24), contact && client.freshness(contact), chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
     const settings = () => chatDialog(client, chat, open, () => { current = undefined; renderAll(); });
     return [key, h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: () => { current = undefined; renderAll(); } }, '‹'),
       chatAvatar(client, chat),
-      h('button', { type: 'button', class: 'who', title: t('chat.settings'), onclick: settings }, h('strong', {}, client.chatTitle(chat)), h('small', {}, subtitle)),
+      h('button', { type: 'button', class: 'who', title: t('chat.settings'), onclick: settings }, h('strong', {}, client.chatTitle(chat)), subtitle ? h('small', {}, subtitle) : null),
       chat.ephemeralTimer ? h('button', { class: 'icon-button', title: timerLabel, 'aria-label': timerLabel, onclick: () => timerDialog(chat) }, icon(ICONS.timer)) : null,
       chat.type === 'group' ? h('button', { onclick: busyClick(() => showInvite(client, chat.id)) }, t('invite.link')) : null,
       chat.type === 'self' ? h('button', { class: 'icon-button', title: t('saved.about'), 'aria-label': t('saved.about'), onclick: savedInfo }, icon(ICONS.info)) : null,
