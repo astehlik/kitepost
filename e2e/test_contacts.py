@@ -1,6 +1,6 @@
 from playwright.sync_api import expect
 
-from helpers import new_chat, open_chat, wait_text, web_send
+from helpers import new_chat, open_chat, reload_and_unlock, wait_text, web_send
 
 
 def delete_chat(page):
@@ -84,3 +84,26 @@ def test_blocked_contact_still_writes_in_groups(web, dora):
     group.send_text("Dora in the group")
     open_chat(page, "Group with Dora")
     expect(page.locator(".msg.in", has_text="Dora in the group")).to_be_visible()
+
+
+def test_profile_and_deletion_from_contact_list(web, dora):
+    page = web.page
+    page.get_by_role("button", name="New chat").click()
+    row = page.locator(".new-chat li[data-contact]", has_text="Dora")
+    row.click(button="right")
+    page.locator(".menu").get_by_role("menuitem", name="View profile").click()
+    page.locator("dialog").get_by_role("button", name="Send message").click()
+    expect(page.locator(".chathead strong")).to_have_text("Dora")
+
+    page.get_by_role("button", name="New chat").click()
+    row.click(button="right")
+    page.locator(".menu").get_by_role("menuitem", name="Delete contact").click()
+    page.locator("dialog", has_text="Delete this contact?").get_by_role("button", name="Delete contact").click()
+    expect(row).to_have_count(0)
+    reload_and_unlock(page)
+    page.get_by_role("button", name="New chat").click()
+    expect(page.locator(".new-chat li[data-contact]")).to_have_count(1)
+
+    dora.chat.send_text("still in our chat")
+    open_chat(page, "Dora")
+    expect(page.locator(".msg.in", has_text="still in our chat")).to_be_visible()

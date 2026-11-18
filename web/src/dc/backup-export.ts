@@ -12,6 +12,7 @@ const BACKUP_VERSION = 5;
 const CONTACT_SELF = 1;
 const CONTACT_INFO = 2;
 const FIRST_ID = 10;
+const ORIGIN_HIDDEN = 0x8;
 const ORIGIN_OUTGOING_TO = 0x4000;
 const CHAT_SINGLE = 100;
 const CHAT_GROUP = 120;
@@ -137,7 +138,7 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       contactIds.set(c.fingerprint, id);
       run(`INSERT INTO contacts (id, name, addr, origin, blocked, authname, fingerprint, verifier, last_seen)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, c.nickname ?? '', c.addr, ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0, Math.floor((c.lastSeen ?? 0) / 1000)]);
+      [id, c.nickname ?? '', c.addr, c.hidden ? ORIGIN_HIDDEN : ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0, Math.floor((c.lastSeen ?? 0) / 1000)]);
       run('INSERT OR IGNORE INTO public_keys (fingerprint, public_key) VALUES (?, ?)', [c.fingerprint, fromBase64(c.publicKey)]);
     }
 

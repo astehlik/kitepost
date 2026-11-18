@@ -16,6 +16,8 @@ const CONTACT_DEVICE = 5;
 const CHAT_SINGLE = 100;
 const CHAT_GROUP = 120;
 const BLOCKED_YES = 1;
+// Core's Contact::get_all() lists contacts from this origin on.
+const ORIGIN_INCOMING_REPLY_TO = 0x100;
 const BLOCKED_REQUEST = 2;
 const STATE_IN_FRESH = 10;
 const STATE_OUT_DRAFT = 19;
@@ -196,7 +198,7 @@ export async function readBackup(
     progress(t('backup.contacts'));
     const fpById = new Map<number, string>([[CONTACT_SELF, 'self']]);
     const contacts: Contact[] = [];
-    const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.blocked, c.verifier, c.last_seen, k.public_key
+    const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.origin, c.blocked, c.verifier, c.last_seen, k.public_key
       FROM contacts c JOIN public_keys k ON k.fingerprint = c.fingerprint
       WHERE c.id > 9 AND c.fingerprint != ''`);
     for (const r of contactRows) {
@@ -208,6 +210,7 @@ export async function readBackup(
           fingerprint: info.fingerprint, addr: str(r.addr).toLowerCase(), name: str(r.authname), nickname: str(r.name) || undefined,
           publicKey: info.key, relays: info.relays?.length ? info.relays : [str(r.addr).toLowerCase()],
           verified: num(r.verifier) !== 0, blocked: num(r.blocked) === BLOCKED_YES,
+          hidden: num(r.origin) < ORIGIN_INCOMING_REPLY_TO || undefined,
           lastSeen: num(r.last_seen) * 1000 || undefined,
         });
       } catch (e) {

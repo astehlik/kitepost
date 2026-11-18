@@ -747,56 +747,15 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
 
   /** Pin and archive like Delta Chat's chatlist menu: right click, or a long press on touch screens. */
   function listenForChatMenu() {
-    const chatOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>('li[data-chat]');
-    let press: { timer: number; x: number; y: number } | undefined;
-    let longPressed = false;
-    const cancel = () => {
-      if (press) clearTimeout(press.timer);
-      press = undefined;
-    };
-    const show = (li: HTMLElement, at: DOMRect) => {
+    listenForItemMenu(chatList, 'li[data-chat]', (li, at) => {
       const chat = client.chats.get(li.dataset.chat!);
       if (!chat) return;
       const set = (v: Chat['visibility']) => () => void client.setVisibility(chat.id, v).catch(errorDialog);
-      const item = (label: string, d: string, run: () => void) => {
-        const b = h('button', { type: 'button', role: 'menuitem', onclick: () => { close(); run(); } }, h('span', {}, label));
-        b.prepend(icon(d));
-        return b;
-      };
-      const box = h('div', { class: 'menu', role: 'menu' },
-        chat.left || chat.isRequest ? null : item(t('timer.title'), ICONS.timer, () => timerDialog(chat)),
-        chat.visibility === 'pinned' ? item(t('chat.unpinChat'), ICONS.pin, set(undefined)) : item(t('chat.pinChat'), ICONS.pin, set('pinned')),
-        chat.visibility === 'archived' ? item(t('chat.unarchive'), ICONS.archive, set(undefined)) : item(t('chat.archive'), ICONS.archive, set('archived')));
-      const close = popover(li, box, at);
-    };
-    chatList.addEventListener('contextmenu', ev => {
-      const li = chatOf(ev.target);
-      if (!li) return;
-      ev.preventDefault();
-      if (!press && !longPressed) show(li, new DOMRect(ev.clientX, ev.clientY, 0, 0));
+      showMenu(li, at,
+        chat.left || chat.isRequest ? null : [t('timer.title'), ICONS.timer, () => timerDialog(chat)],
+        chat.visibility === 'pinned' ? [t('chat.unpinChat'), ICONS.pin, set(undefined)] : [t('chat.pinChat'), ICONS.pin, set('pinned')],
+        chat.visibility === 'archived' ? [t('chat.unarchive'), ICONS.archive, set(undefined)] : [t('chat.archive'), ICONS.archive, set('archived')]);
     });
-    chatList.addEventListener('pointerdown', ev => {
-      longPressed = false;
-      const li = chatOf(ev.target);
-      if (ev.pointerType !== 'touch' || !li) return;
-      const timer = window.setTimeout(() => {
-        press = undefined;
-        longPressed = true;
-        show(li, new DOMRect(ev.clientX, ev.clientY, 0, 0));
-      }, 500);
-      press = { timer, x: ev.clientX, y: ev.clientY };
-    });
-    chatList.addEventListener('pointermove', ev => {
-      if (press && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > 10) cancel();
-    });
-    chatList.addEventListener('pointerup', cancel);
-    chatList.addEventListener('pointercancel', cancel);
-    chatList.addEventListener('click', ev => {
-      if (!longPressed) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      longPressed = false;
-    }, true);
   }
 
   function listenForSelection(list: HTMLElement) {
@@ -1313,6 +1272,55 @@ function icon(d: string): SVGSVGElement {
   return svg;
 }
 
+/** Calls `show` on a right-click or, on touch screens, a long press on an item of `list`. */
+function listenForItemMenu(list: HTMLElement, selector: string, show: (item: HTMLElement, at: DOMRect) => void) {
+  const itemOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>(selector);
+  let press: { timer: number; x: number; y: number } | undefined;
+  let longPressed = false;
+  const cancel = () => {
+    if (press) clearTimeout(press.timer);
+    press = undefined;
+  };
+  list.addEventListener('contextmenu', ev => {
+    const item = itemOf(ev.target);
+    if (!item) return;
+    ev.preventDefault();
+    if (!press && !longPressed) show(item, new DOMRect(ev.clientX, ev.clientY, 0, 0));
+  });
+  list.addEventListener('pointerdown', ev => {
+    longPressed = false;
+    const item = itemOf(ev.target);
+    if (ev.pointerType !== 'touch' || !item) return;
+    const timer = window.setTimeout(() => {
+      press = undefined;
+      longPressed = true;
+      show(item, new DOMRect(ev.clientX, ev.clientY, 0, 0));
+    }, 500);
+    press = { timer, x: ev.clientX, y: ev.clientY };
+  });
+  list.addEventListener('pointermove', ev => {
+    if (press && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > 10) cancel();
+  });
+  list.addEventListener('pointerup', cancel);
+  list.addEventListener('pointercancel', cancel);
+  list.addEventListener('click', ev => {
+    if (!longPressed) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    longPressed = false;
+  }, true);
+}
+
+function showMenu(anchor: HTMLElement, at: DOMRect, ...items: ([label: string, d: string, run: () => void] | null)[]) {
+  const box = h('div', { class: 'menu', role: 'menu' }, ...items.map(i => {
+    if (!i) return null;
+    const b = h('button', { type: 'button', role: 'menuitem', onclick: () => { close(); i[2](); } }, h('span', {}, i[0]));
+    b.prepend(icon(i[1]));
+    return b;
+  }));
+  const close = popover(anchor, box, at);
+}
+
 function iconButton(d: string, label: string, onclick: (ev: Event) => void): HTMLButtonElement {
   const b = h('button', { type: 'button', title: label, 'aria-label': label, onclick });
   b.append(icon(d));
@@ -1435,7 +1443,7 @@ function joinDialog(client: DcClient, open: (id: string) => void) {
 function groupDialog(client: DcClient, open: (id: string) => void) {
   const name = h('input', { type: 'text', maxlength: '100', placeholder: t('group.namePlaceholder') });
   const boxes = [...client.contacts.values()]
-    .filter(c => c.publicKey && !c.blocked)
+    .filter(c => c.publicKey && !c.blocked && !c.hidden)
     .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: client.contactName(c.fingerprint) }));
   const list = h('div', { class: 'members' }, ...boxes.map(b => h('label', { class: 'check' }, b.box, b.label)));
   if (!boxes.length) list.append(h('p', {}, t('group.addContactsFirst')));
@@ -1482,6 +1490,16 @@ function newChatView(client: DcClient, open: (id: string) => void, close: () => 
         h('strong', {}, client.contactName(c.fingerprint)), h('small', {}, c.addr))));
     if (!contacts.length) list.append(h('li', { class: 'empty' }, t(search.value.trim() ? 'contacts.noMatch' : 'contacts.empty')));
   }
+  const confirmDelete = (fp: string) => dialog(client.contactName(fp), h('p', {}, t('contact.deleteAsk')), [
+    { label: t('cancel') },
+    { label: t('contact.delete'), primary: true, onClick: () => client.deleteContact(fp) },
+  ]);
+  listenForItemMenu(list, 'li[data-contact]', (li, at) => {
+    const fp = li.dataset.contact!;
+    showMenu(li, at,
+      [t('contact.viewProfile'), ICONS.info, () => profileDialog(client, fp, open)],
+      [t('contact.delete'), ICONS.trash, () => confirmDelete(fp)]);
+  });
   search.addEventListener('input', refresh);
   refresh();
   const el = h('div', { class: 'settings new-chat' },
@@ -1665,7 +1683,7 @@ function membersSection(client: DcClient, chat: Chat): Element {
 
 function addMembersDialog(client: DcClient, chat: Chat, done: () => void) {
   const boxes = [...client.contacts.values()]
-    .filter(c => c.publicKey && !c.blocked && !chat.members.includes(c.fingerprint))
+    .filter(c => c.publicKey && !c.blocked && !c.hidden && !chat.members.includes(c.fingerprint))
     .map(c => ({ fp: c.fingerprint, box: h('input', { type: 'checkbox' }), label: client.contactName(c.fingerprint) }));
   const list = h('div', { class: 'members' }, ...boxes.map(b => h('label', { class: 'check' }, b.box, b.label)));
   if (!boxes.length) list.append(h('p', {}, t('group.noMoreContacts')));

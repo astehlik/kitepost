@@ -274,6 +274,7 @@ export class DcClient extends EventTarget {
       relays: info.relays?.length ? info.relays : [addr.toLowerCase()],
       verified: existing?.verified ?? false,
       blocked: existing?.blocked ?? false,
+      hidden: existing?.hidden,
       nickname: existing?.nickname,
     };
     await this.saveContact(contact);
@@ -311,6 +312,7 @@ export class DcClient extends EventTarget {
 
   /** Like core's ChatId::create_for_contact(). */
   async chatWith(fp: string): Promise<string> {
+    await this.unhide(fp);
     const chat = await this.singleChat(fp, false);
     if (chat.isRequest) await this.acceptChat(chat.id);
     return chat.id;
@@ -321,9 +323,29 @@ export class DcClient extends EventTarget {
     const q = query.trim().toLowerCase();
     const hasChat = (c: Contact) => this.chats.get(`c-${c.fingerprint}`)?.isRequest === false ? 1 : 0;
     return [...this.contacts.values()]
-      .filter(c => c.publicKey && !c.blocked && c.fingerprint !== this.config.fingerprint)
+      .filter(c => c.publicKey && !c.blocked && !c.hidden && c.fingerprint !== this.config.fingerprint)
       .filter(c => !q || contactName(c).toLowerCase().includes(q) || c.addr.includes(q))
       .sort((a, b) => hasChat(b) - hasChat(a) || (b.lastSeen ?? 0) - (a.lastSeen ?? 0));
+  }
+
+  /** Like core's Contact::delete(): only on this device, and a contact that is still in a chat is hidden instead. */
+  async deleteContact(fp: string) {
+    const c = this.contacts.get(fp);
+    if (!c) return;
+    const inUse = [...this.chats.values()].some(ch => ch.members.includes(fp))
+      || [...this.messages.values()].some(msgs => msgs.some(m => m.from === fp));
+    if (inUse) {
+      await this.saveContact({ ...c, hidden: true });
+    } else {
+      this.contacts.delete(fp);
+      await this.store.delete(`contact/${fp}`);
+    }
+    this.changed('contacts');
+  }
+
+  private async unhide(fp: string) {
+    const c = this.contacts.get(fp);
+    if (c?.hidden) await this.saveContact({ ...c, hidden: undefined });
   }
 
   private groupByGrpid(grpid: string): Chat | undefined {
@@ -607,6 +629,7 @@ export class DcClient extends EventTarget {
     const invite = parseInvite(link);
     if (invite.fingerprint === this.config.fingerprint) throw new Error(t('error.ownInvite'));
     const known = this.contacts.get(invite.fingerprint);
+    await this.unhide(invite.fingerprint);
     if (!known) {
       await this.saveContact({
         fingerprint: invite.fingerprint, addr: invite.addrs[0], name: cleanName(invite.name), publicKey: '',

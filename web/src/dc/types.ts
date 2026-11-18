@@ -40,6 +40,8 @@ export interface Contact {
   /** Connected via SecureJoin in Kitepost; current core no longer records this, so imports lack it. */
   verified: boolean;
   blocked: boolean;
+  /** Deleted while still in a chat, like core's Origin::Hidden; not in the contact list. */
+  hidden?: boolean;
   /** Date of the newest message from the contact, like core's last_seen. */
   lastSeen?: number;
 }
