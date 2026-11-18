@@ -1787,19 +1787,26 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
       chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), close) : null));
 }
 
-/** Sends the contact to a chat picked from the chat list, like Delta Chat's "Share contact". */
+/** Sends the contact to a chat, or to a contact without one yet, like Delta Chat's "Share contact". */
 function shareContactDialog(client: DcClient, fp: string, open: (id: string) => void) {
+  const send = (target: () => Promise<string>) => busyClick(async () => {
+    const chatId = await target();
+    await client.shareContact(chatId, fp);
+    dlg.close();
+    open(chatId);
+  });
   const { search, input, list } = searchList({
     label: t('chat.search'), class: 'pick',
-    rows: () => client.sortedChats().filter(c => !c.left && !c.isRequest && c.contact !== fp).map(chat => ({
-      name: client.chatTitle(chat), sub: chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.addr : undefined,
-      badge: chatAvatar(client, chat),
-      onclick: busyClick(async () => {
-        await client.shareContact(chat.id, fp);
-        dlg.close();
-        open(chat.id);
-      }),
-    })),
+    rows: () => [
+      ...client.sortedChats().filter(c => !c.left && !c.isRequest && c.contact !== fp).map(chat => ({
+        name: client.chatTitle(chat), sub: chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.addr : undefined,
+        badge: chatAvatar(client, chat), onclick: send(async () => chat.id),
+      })),
+      ...client.knownContacts().filter(c => c.fingerprint !== fp && !client.chats.has(`c-${c.fingerprint}`)).map(c => ({
+        name: client.contactName(c.fingerprint), sub: c.addr,
+        badge: avatar(client.contactName(c.fingerprint), c.addr, undefined, c.avatar), onclick: send(() => client.chatWith(c.fingerprint)),
+      })),
+    ],
     empty: () => t('contact.shareEmpty'),
   });
   const dlg = dialog(t('contact.shareTitle', { name: client.contactName(fp) }), h('div', { class: 'share' }, search, list), [{ label: t('cancel') }]);
