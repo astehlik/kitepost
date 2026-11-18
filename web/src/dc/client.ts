@@ -8,6 +8,7 @@ import {
   generateKeypair, parseMessage, publicKeyInfo, renderMessage,
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
 } from '../wasm';
+import { parseAvatarHeader } from './avatar';
 import { buildContactInvite, buildGroupInvite, parseInvite, type Invite } from './invite';
 import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
 
@@ -267,6 +268,7 @@ export class DcClient extends EventTarget {
     const info = publicKeyInfo(addr, key);
     if (info.fingerprint !== fp) throw new Error('fingerprint mismatch');
     const contact: Contact = {
+      ...existing,
       fingerprint: fp,
       addr: addr.toLowerCase(),
       name: name !== undefined && cleanName(name) ? cleanName(name) : existing?.name ?? '',
@@ -274,8 +276,6 @@ export class DcClient extends EventTarget {
       relays: info.relays?.length ? info.relays : [addr.toLowerCase()],
       verified: existing?.verified ?? false,
       blocked: existing?.blocked ?? false,
-      hidden: existing?.hidden,
-      nickname: existing?.nickname,
     };
     await this.saveContact(contact);
     return contact;
@@ -355,6 +355,15 @@ export class DcClient extends EventTarget {
   chatTitle(chat: Chat): string {
     if (chat.type === 'self') return t('chat.saved');
     return chat.type === 'single' && chat.contact ? this.contactName(chat.contact) : chat.name;
+  }
+
+  /** Like core's set_profile_image(), unless the message is older than the one that set the current avatar. */
+  private async applyAvatar(fp: string, header: string, ts: number) {
+    const c = this.contacts.get(fp);
+    const avatar = parseAvatarHeader(header);
+    if (!c || avatar === undefined || ts < (c.avatarAt ?? 0)) return;
+    await this.saveContact({ ...c, avatar: avatar ?? undefined, avatarAt: ts });
+    this.changed('contacts');
   }
 
   private async updateLastSeen(c: Contact, ts: number) {
@@ -1140,6 +1149,8 @@ export class DcClient extends EventTarget {
     if (p.mdn_for.length || !/report-type="?disposition-notification/i.test(p.headers['content-type'] ?? '')) {
       await this.updateLastSeen(sender, this.timestamp(p));
     }
+    const avatar = p.headers['chat-user-avatar'];
+    if (avatar !== undefined) await this.applyAvatar(sender.fingerprint, avatar, this.timestamp(p));
 
     for (const g of p.gossip) {
       if (g.fingerprint !== this.config.fingerprint && g.can_encrypt && !this.contacts.get(g.fingerprint)?.publicKey) {

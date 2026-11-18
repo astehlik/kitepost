@@ -851,7 +851,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       : chat.type === 'group'
       ? t('chat.members', { n: chat.members.length + 1 })
       : contact ? [contact.lastSeen && t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }), contact.addr].filter(Boolean).join(' · ') : '';
-    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact && client.freshness(contact), chat.ephemeralTimer]);
+    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatarAt, contact && client.freshness(contact), chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
     const settings = () => chatDialog(client, chat, open, () => { current = undefined; renderAll(); });
     return [key, h('header', { class: 'chathead' },
@@ -1191,7 +1191,8 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     const title = details === 'none' ? 'Kitepost' : client.chatTitle(chat);
     const n = new Notification(title, {
       body: body.length > 200 ? `${body.slice(0, 199)}…` : body, tag: chat.id,
-      icon: details === 'none' ? undefined : avatarImage(client.chatTitle(chat), chatAvatarKey(client, chat)),
+      icon: details === 'none' ? undefined
+        : (chat.type === 'single' && client.contacts.get(chat.contact ?? '')?.avatar) || avatarImage(client.chatTitle(chat), chatAvatarKey(client, chat)),
       renotify: true,
     } as NotificationOptions);
     n.onclick = () => {
@@ -1343,8 +1344,9 @@ function action(d: string, label: string, onclick: (ev: Event) => void) {
 }
 
 /** Letter avatar with a stable color per address, like Delta Chat's. */
-function avatar(name: string, key: string, content?: Node) {
-  const el = h('span', { class: 'avatar', 'aria-hidden': 'true' }, content ?? h('span', {}, ([...name.trim()][0] ?? '?').toUpperCase()));
+function avatar(name: string, key: string, content?: Node, image?: string) {
+  const el = h('span', { class: 'avatar', 'aria-hidden': 'true' },
+    image ? h('img', { src: image, alt: '' }) : content ?? h('span', {}, ([...name.trim()][0] ?? '?').toUpperCase()));
   el.style.background = `hsl(${avatarHue(key)} 42% 42%)`;
   return el;
 }
@@ -1410,7 +1412,7 @@ function attachmentKind(mime: string): string {
 function chatAvatar(client: DcClient, chat: Chat) {
   if (chat.type === 'self') return avatar('', 'self', icon(ICONS.star));
   const contact = chat.type === 'single' ? client.contacts.get(chat.contact ?? '') : undefined;
-  const el = avatar(client.chatTitle(chat), chatAvatarKey(client, chat));
+  const el = avatar(client.chatTitle(chat), chatAvatarKey(client, chat), undefined, contact?.avatar);
   if (contact && client.freshness(contact) === 'recent') el.classList.add('seen');
   return el;
 }
@@ -1495,7 +1497,7 @@ function newChatView(client: DcClient, open: (id: string) => void, close: () => 
         entry(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
         entry(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))],
       ...contacts.map(c => row({ 'data-contact': c.fingerprint }, () => start(c.fingerprint),
-        avatar(client.contactName(c.fingerprint), c.addr),
+        avatar(client.contactName(c.fingerprint), c.addr, undefined, c.avatar),
         h('strong', {}, client.contactName(c.fingerprint)), h('small', {}, c.addr))));
     if (!contacts.length) list.append(h('li', { class: 'empty' }, t(search.value.trim() ? 'contacts.noMatch' : 'contacts.empty')));
   }
@@ -1628,7 +1630,7 @@ function profileDialog(client: DcClient, fp: string, open: (id: string) => void,
     { label: t(c.blocked ? 'contact.unblock' : 'contact.block'), primary: true, onClick: async () => { await client.setBlocked(fp, !c.blocked); dlg.close(); } },
   ]);
   const dlg = dialog(name, h('div', { class: 'chat-settings' },
-    h('div', { class: 'profile-head' }, avatar(name, c.addr),
+    h('div', { class: 'profile-head' }, avatar(name, c.addr, undefined, c.avatar),
       h('span', { class: 'names' }, h('strong', {}, name), h('small', {}, c.addr),
         c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null)),
     chat || c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => goTo(await client.chatWith(fp))) }, t('contact.sendMessage')),

@@ -11,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, own_state, set_passphrase, wait_event, wait_own_msg, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, own_state, set_passphrase, solid_png, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -26,6 +26,8 @@ def imported(page, make_account, tmp_path):
     hello = wait_text(bob, "hello from alice\nsecond line")
     bob.mark_seen_messages([bob.get_message_by_id(hello.id)])
     bob_chat = bob.get_chat_by_id(hello.chat_id)
+    (tmp_path / "bob.png").write_bytes(solid_png(64, 64))
+    bob.set_config("selfavatar", str(tmp_path / "bob.png"))
     bob_chat.send_message(text="reply from bob", quoted_msg=hello.id)
     reply = wait_text(phone, "reply from bob")
     deadline = time.monotonic() + EVENT_TIMEOUT
@@ -72,6 +74,10 @@ def test_history_is_imported(imported):
     expect(page.locator(".chathead small")).to_contain_text(addr_of(imported.bob))
     open_chat(page, "Backup group")
     expect(page.locator(".msg.out", has_text="group hello")).to_be_visible()
+
+
+def test_contact_avatars_are_imported(imported):
+    expect(imported.page.locator(".chatlist li[data-chat]", has_text="Bob").locator(".avatar img")).to_be_visible()
 
 
 def test_both_devices_send_and_receive(imported):

@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import type { Database, SqlValue } from 'sql.js';
 import type { AttachmentData } from '../wasm';
+import { avatarDataUrl } from './avatar';
 import { SELF_CHAT, type AuthToken, type Chat, type Contact, type Message, type MessageState } from './types';
 
 // Reads an unencrypted Delta Chat backup (`delta-chat-backup-*.tar`, see core src/imex.rs).
@@ -198,7 +199,8 @@ export async function readBackup(
     progress(t('backup.contacts'));
     const fpById = new Map<number, string>([[CONTACT_SELF, 'self']]);
     const contacts: Contact[] = [];
-    const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.origin, c.blocked, c.verifier, c.last_seen, k.public_key
+    const avatarFiles = new Map<Contact, { file: string; at: number }>();
+    const contactRows = rows(db, `SELECT c.id, c.name, c.authname, c.addr, c.origin, c.blocked, c.verifier, c.last_seen, c.param, k.public_key
       FROM contacts c JOIN public_keys k ON k.fingerprint = c.fingerprint
       WHERE c.id > 9 AND c.fingerprint != ''`);
     for (const r of contactRows) {
@@ -206,13 +208,17 @@ export async function readBackup(
         const info = keyInfo(str(r.addr), toBase64(r.public_key as Uint8Array));
         if (!info.can_encrypt || info.fingerprint === self.fingerprint) continue;
         fpById.set(num(r.id), info.fingerprint);
-        contacts.push({
+        const p = params(r.param);
+        const contact: Contact = {
           fingerprint: info.fingerprint, addr: str(r.addr).toLowerCase(), name: str(r.authname), nickname: str(r.name) || undefined,
           publicKey: info.key, relays: info.relays?.length ? info.relays : [str(r.addr).toLowerCase()],
           verified: num(r.verifier) !== 0, blocked: num(r.blocked) === BLOCKED_YES,
           hidden: num(r.origin) < ORIGIN_INCOMING_REPLY_TO || undefined,
           lastSeen: num(r.last_seen) * 1000 || undefined,
-        });
+        };
+        contacts.push(contact);
+        const avatar = p.get('i');
+        if (avatar) avatarFiles.set(contact, { file: avatar.split('/').pop()!, at: Number(p.get('J') ?? 0) * 1000 });
       } catch (e) {
         console.warn('skipping contact with unusable key', r.addr, e);
       }
@@ -262,6 +268,11 @@ export async function readBackup(
     }
     const blobs = new Map<string, TarEntry>();
     for (const [name, e] of entries) if (name.startsWith('blobs_backup/')) blobs.set(name.split('/').pop()!, e);
+    for (const [contact, { file, at }] of avatarFiles) {
+      const blob = blobs.get(file);
+      contact.avatar = blob && blob.size <= MAX_BLOB ? avatarDataUrl(toBase64(await readAt(blob.offset, blob.size))) : undefined;
+      contact.avatarAt = contact.avatar ? at || undefined : undefined;
+    }
 
     const messages: Message[] = [];
     const chatById = new Map(chats.map(c => [c.id, c]));

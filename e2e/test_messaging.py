@@ -2,10 +2,8 @@
 
 import random
 import re
-import struct
 import subprocess
 import time
-import zlib
 from pathlib import Path
 
 import pytest
@@ -13,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, PNG, WEBM, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, own_state, reload_and_unlock, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, PNG, WEBM, mailbox_size, addr_of, capture_clipboard, message_action, new_chat, open_chat, own_state, reload_and_unlock, solid_png, wait_event, wait_text, web_send
 
 
 def test_phone_connects_by_scanning_the_setup_qr(web):
@@ -697,14 +695,6 @@ def test_attachment_by_drop(web, dora):
     web_send(page, "dropped pictures")
     snap = wait_text(dora.acc, "dropped pictures")
     assert received_files(dora.acc, snap.chat_id, 2) == [("dropped pictures", "a.png"), ("", "b.png")]
-
-
-def solid_png(width, height):
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
-    rows = b"".join(b"\x00" + b"\x40\x80\xc0" * width for _ in range(height))
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
 def test_images_open_in_a_lightbox(web, dora, tmp_path):

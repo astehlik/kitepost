@@ -2,8 +2,10 @@ import base64
 import os
 import re
 import secrets
+import struct
 import subprocess
 import time
+import zlib
 from collections import deque
 from pathlib import Path
 from queue import Empty
@@ -40,6 +42,14 @@ WEBM = base64.b64decode(
     "nnD++2iX/z0zXmD/Jz/9uR/tyP9uR/+2wgCjlYEAyACxAQABEBAAGAAYWC/0AAhwAKOVgQGQALEBAAEQEAAYABhYL/QACHAAHFO7"
     "a5G7j7OBALeK94EB8YIBsfCBAw=="
 )
+
+
+def solid_png(width, height):
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\x00" + b"\x40\x80\xc0" * width for _ in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
 def wait_event(acc, kind, pred=lambda e: True, timeout=EVENT_TIMEOUT):

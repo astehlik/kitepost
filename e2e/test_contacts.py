@@ -1,6 +1,6 @@
 from playwright.sync_api import expect
 
-from helpers import new_chat, open_chat, reload_and_unlock, wait_text, web_send
+from helpers import new_chat, open_chat, reload_and_unlock, solid_png, wait_text, web_send
 
 
 def delete_chat(page):
@@ -107,3 +107,22 @@ def test_profile_and_deletion_from_contact_list(web, dora):
     dora.chat.send_text("still in our chat")
     open_chat(page, "Dora")
     expect(page.locator(".msg.in", has_text="still in our chat")).to_be_visible()
+
+
+def test_contact_avatars(web, dora, tmp_path):
+    page = web.page
+    (tmp_path / "dora.png").write_bytes(solid_png(64, 64))
+    dora.acc.set_config("selfavatar", str(tmp_path / "dora.png"))
+    dora.chat.send_text("now with a picture")
+    expect(page.locator(".msg.in", has_text="now with a picture")).to_be_visible()
+    entry_avatar = page.locator(".chatlist li[data-chat]", has_text="Dora").locator(".avatar img")
+    expect(entry_avatar).to_be_visible()
+    expect(page.locator(".chathead .avatar img")).to_be_visible()
+    page.locator(".chathead").get_by_role("button", name="Edit chat").click()
+    expect(page.locator("dialog .profile-head .avatar img")).to_be_visible()
+    page.locator("dialog").get_by_role("button", name="Cancel").click()
+
+    dora.acc.set_config("selfavatar", None)
+    dora.chat.send_text("picture gone")
+    expect(page.locator(".msg.in", has_text="picture gone")).to_be_visible()
+    expect(entry_avatar).to_have_count(0)

@@ -5,11 +5,13 @@ from pathlib import Path
 from deltachat_rpc_client import DeltaChat, EventType
 from playwright.sync_api import expect
 
-from helpers import PNG, RELAY_IP, addr_of, message_action, new_chat, open_chat, own_state, set_passphrase, transport, wait_event, wait_own_msg, wait_text, web_send
+from helpers import PNG, RELAY_IP, addr_of, message_action, new_chat, open_chat, own_state, set_passphrase, solid_png, transport, wait_event, wait_own_msg, wait_text, web_send
 
 
 def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
     page = web.page
+    (tmp_path / "dora.png").write_bytes(solid_png(64, 64))
+    dora.acc.set_config("selfavatar", str(tmp_path / "dora.png"))
     web_send(page, "question\nin two lines")
     question = wait_text(dora.acc, "question\nin two lines")
     dora.chat.send_message(text="hello web", quoted_msg=question.id)
@@ -86,6 +88,7 @@ def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
         assert chats["Export group"].get_basic_snapshot().pinned
         assert rpc.get_chat_ephemeral_timer(restored.id, chats["Export group"].id) == 604_800
         assert restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot().last_seen > 0
+        assert restored.get_contact_by_addr(addr_of(dora.acc)).get_snapshot().profile_image
         snaps = [m.get_snapshot() for m in chats["Dora"].get_messages()]
         assert {"hello web", "hello dora"} <= {s.text for s in snaps}
         quoted = next(s for s in snaps if s.text == "hello web")

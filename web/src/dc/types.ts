@@ -42,6 +42,9 @@ export interface Contact {
   blocked: boolean;
   /** Deleted while still in a chat, like core's Origin::Hidden; not in the contact list. */
   hidden?: boolean;
+  /** Data URL of the contact's own avatar, and the Date of the message that set it (core's AvatarTimestamp). */
+  avatar?: string;
+  avatarAt?: number;
   /** Date of the newest message from the contact, like core's last_seen. */
   lastSeen?: number;
 }

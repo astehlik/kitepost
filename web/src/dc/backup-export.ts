@@ -1,6 +1,7 @@
 import type { SqlValue } from 'sql.js';
 import schema from './backup-schema.sql?raw';
 import { openDatabase } from './backup';
+import { avatarBase64, avatarExtension } from './avatar';
 import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type Chat, type Config, type Contact, type Message } from './types';
 
 // Writes a backup that Delta Chat imports with "Restore from backup" (see core src/imex.rs).
@@ -130,15 +131,28 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
         ['INBOX', config.uidValidity, config.lastUid + 1]);
     }
 
+    const files: { name: string; data: Uint8Array }[] = [];
+    const blobs = new Set<string>();
+    const addBlob = async (data: Uint8Array, filename: string) => {
+      const file = await blobName(data, filename);
+      if (!blobs.has(file)) {
+        blobs.add(file);
+        files.push({ name: `blobs_backup/${file}`, data });
+      }
+      return file;
+    };
+
     const contactIds = new Map<string, number>([['self', CONTACT_SELF]]);
     let nextId = FIRST_ID;
     for (const c of src.contacts) {
       if (!c.publicKey) continue;
       const id = nextId++;
       contactIds.set(c.fingerprint, id);
-      run(`INSERT INTO contacts (id, name, addr, origin, blocked, authname, fingerprint, verifier, last_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, c.nickname ?? '', c.addr, c.hidden ? ORIGIN_HIDDEN : ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0, Math.floor((c.lastSeen ?? 0) / 1000)]);
+      const avatar = c.avatar && await addBlob(fromBase64(avatarBase64(c.avatar)), `avatar.${avatarExtension(c.avatar)}`);
+      run(`INSERT INTO contacts (id, name, addr, origin, blocked, authname, fingerprint, verifier, last_seen, param)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, c.nickname ?? '', c.addr, c.hidden ? ORIGIN_HIDDEN : ORIGIN_OUTGOING_TO, c.blocked ? 1 : 0, c.name, c.fingerprint, c.verified ? CONTACT_SELF : 0, Math.floor((c.lastSeen ?? 0) / 1000),
+        params([['i', avatar && `$BLOBDIR/${avatar}`], ['J', c.avatarAt && Math.floor(c.avatarAt / 1000)]])]);
       run('INSERT OR IGNORE INTO public_keys (fingerprint, public_key) VALUES (?, ?)', [c.fingerprint, fromBase64(c.publicKey)]);
     }
 
@@ -146,8 +160,6 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
     for (const t of src.tokens) tokens.push([NAMESPACE_AUTH, t.grpid, t.token, Math.floor(t.created / 1000)]);
     for (const t of tokens) run('INSERT OR IGNORE INTO tokens (namespc, foreign_key, token, timestamp) VALUES (?, ?, ?, ?)', t);
 
-    const files: { name: string; data: Uint8Array }[] = [];
-    const blobs = new Set<string>();
     const messagesByChat = new Map<string, Message[]>();
     for (const m of src.messages) messagesByChat.set(m.chatId, [...(messagesByChat.get(m.chatId) ?? []), m]);
 
@@ -185,12 +197,7 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
         const att = m.attachments[0];
         let file: string | undefined;
         if (att) {
-          const data = fromBase64(att.data_b64);
-          file = await blobName(data, att.filename);
-          if (!blobs.has(file)) {
-            blobs.add(file);
-            files.push({ name: `blobs_backup/${file}`, data });
-          }
+          file = await addBlob(fromBase64(att.data_b64), att.filename);
         }
         const state = m.info ? STATE.seen
           : !out ? (fresh.has(m.id) ? STATE.fresh : STATE.seen)

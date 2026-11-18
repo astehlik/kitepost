@@ -131,6 +131,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .icon-button svg { width: 18px; height: 18px; }
 .avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: 1.05rem; user-select: none; }
 .avatar > span { line-height: 1; text-box: trim-both cap alphabetic; }
+.avatar > img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .avatar svg { width: 20px; height: 20px; fill: currentColor; }
 .avatar.seen { position: relative; }
 .avatar.seen::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border: 2px solid var(--panel); border-radius: 50%; background: #3ba55c; }
