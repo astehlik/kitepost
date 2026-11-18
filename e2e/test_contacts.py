@@ -125,7 +125,9 @@ def test_contact_avatars(web, dora, tmp_path):
     entry_avatar = page.locator(".chatlist li[data-chat]", has_text="Dora").locator(".avatar img")
     expect(entry_avatar).to_be_visible()
     expect(page.locator(".chathead .avatar img")).to_be_visible()
-    expect(open_profile(page).locator(".profile-head .avatar img")).to_be_visible()
+    profile = open_profile(page)
+    expect(profile.locator(".profile-head .avatar img")).to_be_visible()
+    expect(profile.locator(".relays")).to_have_text(addr_of(dora.acc))
     page.locator(".settings.contact").locator(".chathead :is(.back, .close):visible").click()
 
     dora.acc.set_config("selfavatar", None)

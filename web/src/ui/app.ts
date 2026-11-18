@@ -1709,6 +1709,7 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
     { label: t(c.blocked ? 'contact.unblock' : 'contact.block'), primary: true, onClick: () => client.setBlocked(fp, !c.blocked) },
   ]);
   const section = (title: string, ...content: (Node | null)[]) => h('section', {}, h('h3', {}, title), ...content);
+  const relays = [...new Set([c.addr, ...c.relays])];
   return h('div', { class: 'settings contact' },
     h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: close }, '‹'),
@@ -1717,7 +1718,7 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
     h('div', { class: 'settings-body' },
       h('section', {},
         h('div', { class: 'profile-head' }, avatar(name, c.addr, undefined, c.avatar),
-          h('span', { class: 'names' }, shownName, h('small', {}, c.addr),
+          h('span', { class: 'names' }, shownName,
             c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null)),
         h('div', { class: 'row' },
           c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => open(await client.chatWith(fp))) }, t('contact.sendMessage')),
@@ -1727,7 +1728,9 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
         shared.length
           ? h('ul', { class: 'member-list' }, ...shared.map(g => h('li', {}, h('button', { type: 'button', class: 'link', onclick: () => open(g.id) }, client.chatTitle(g)))))
           : h('p', {}, t('contact.noSharedChats'))),
-      section(t('e2e.title'), h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), fingerprintRows(client, fp)),
+      section(t('e2e.title'), h('p', {}, t(c.verified ? 'e2e.invite' : 'e2e.compare')), fingerprintRows(client, fp),
+        h('h4', {}, t(relays.length > 1 ? 'contact.relays' : 'contact.relay')),
+        h('ul', { class: 'relays' }, ...relays.map(r => h('li', {}, r)))),
       section(t(c.blocked ? 'contact.unblock' : 'contact.block'),
         h('p', {}, t(c.blocked ? 'contact.blockedText' : 'contact.blockText')),
         h('div', { class: 'row' }, h('button', { class: c.blocked ? '' : 'danger', onclick: confirmBlock }, t(c.blocked ? 'contact.unblock' : 'contact.block')))),
