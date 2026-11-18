@@ -250,6 +250,8 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .dialog .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 /* Same rhythm as the onboarding forms. */
 .dialog .field + .field, .dialog .field + .remember, .dialog .remember + .remember { margin-top: .9rem; }
+.avatar-row { display: flex; align-items: center; gap: 1rem; }
+.avatar-row .avatar { width: 64px; height: 64px; font-size: 1.6rem; }
 .profile-info { display: flex; flex-direction: column; gap: .2rem; margin-top: 1.2rem; }
 .invite .qr, .card .qr { width: 220px; margin: 0 auto 1rem; }
 .invite .qr svg, .card .qr svg { width: 100%; height: auto; display: block; }

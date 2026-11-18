@@ -57,6 +57,11 @@ def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
     page.locator("dialog", has_text="Block this contact?").get_by_role("button", name="Block contact").click()
     expect(page.locator(".chatlist li[data-chat]", has_text="Erin")).to_have_count(0)
 
+    page.get_by_role("button", name="Settings").click()
+    (tmp_path / "webby.png").write_bytes(solid_png(64, 64))
+    page.locator(".settings input[type=file]").set_input_files(str(tmp_path / "webby.png"))
+    expect(page.locator(".profile .avatar img")).to_be_visible()
+
     unsecured = page.locator(".profile .icon-button.attention")
     expect(unsecured).to_be_visible()
     page.get_by_role("button", name="Settings").click()
@@ -79,6 +84,7 @@ def test_export_restores_in_core(web, dora, rpc, make_account, tmp_path):
             restored.add_or_update_transport(transport(web.addr, login["password"]))
         restored.start_io()
         assert restored.get_config("displayname") == "Webby"
+        assert restored.get_config("selfavatar")
         chats = {c.get_basic_snapshot().name: c for c in restored.get_chatlist()}
         assert {"Dora", "Export group", "My phone", "Saved messages"} <= set(chats), list(chats)
         assert "Erin" not in chats

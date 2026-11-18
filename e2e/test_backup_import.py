@@ -39,6 +39,8 @@ def imported(page, make_account, tmp_path):
     png = tmp_path / "pic.png"
     png.write_bytes(PNG)
     phone_bob.send_file(str(png))
+    (tmp_path / "alice.png").write_bytes(solid_png(64, 64))
+    phone.set_config("selfavatar", str(tmp_path / "alice.png"))
     phone_saved = phone.get_contact_by_id(1).create_chat()
     phone_saved.send_text("note before export")
     phone_saved.pin()
@@ -76,8 +78,24 @@ def test_history_is_imported(imported):
     expect(page.locator(".msg.out", has_text="group hello")).to_be_visible()
 
 
-def test_contact_avatars_are_imported(imported):
+def test_avatars_are_imported(imported):
     expect(imported.page.locator(".chatlist li[data-chat]", has_text="Bob").locator(".avatar img")).to_be_visible()
+    expect(imported.page.locator(".profile .avatar img")).to_be_visible()
+
+
+def test_own_avatar_syncs_between_devices(imported, tmp_path):
+    page, phone = imported.page, imported.phone
+    own = page.locator(".profile .avatar img")
+    phone.set_config("selfavatar", None)
+    expect(own).to_have_count(0)
+    page.get_by_role("button", name="Settings").click()
+    (tmp_path / "web.png").write_bytes(solid_png(300, 300))
+    page.locator(".settings input[type=file]").set_input_files(str(tmp_path / "web.png"))
+    expect(own).to_be_visible()
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while not phone.get_config("selfavatar"):
+        assert time.monotonic() < deadline, "the phone did not get the avatar"
+        time.sleep(0.2)
 
 
 def test_both_devices_send_and_receive(imported):

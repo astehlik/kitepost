@@ -8,9 +8,11 @@ import {
   generateKeypair, parseMessage, publicKeyInfo, renderMessage,
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
 } from '../wasm';
-import { parseAvatarHeader } from './avatar';
+import { avatarBase64, avatarDataUrl, avatarHeader, parseAvatarHeader } from './avatar';
 import { buildContactInvite, buildGroupInvite, parseInvite, type Invite } from './invite';
 import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
+
+const RESEND_AVATAR_MS = 14 * 86_400_000;
 
 export function createId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -134,7 +136,7 @@ export class DcClient extends EventTarget {
       imap.close();
     }
     const config: Config = {
-      addr: b.addr, password: b.password, imapHost: b.host, smtpHost: b.host, displayName: cleanName(b.displayName),
+      addr: b.addr, password: b.password, imapHost: b.host, smtpHost: b.host, displayName: cleanName(b.displayName), avatar: b.avatar,
       secretKey: b.secretKey, publicKey: b.publicKey, fingerprint: b.fingerprint,
       inviteNumber: b.inviteNumber ?? createId(), uidValidity: b.uidValidity, lastUid: b.lastUid, bridgeUrl, bccSelf: true, secured: true,
     };
@@ -623,6 +625,31 @@ export class DcClient extends EventTarget {
     if (sync && this.config.bccSelf) await this.sendSync({ Config: { key: 'Displayname', val: clean } });
   }
 
+  /** Like core's set_config(Selfavatar): here and, through a sync message, on the own other devices. */
+  async setAvatar(dataUrl: string | undefined, sync = true) {
+    if (dataUrl === this.config.avatar) return;
+    this.config.avatar = dataUrl;
+    this.config.avatarChangedAt = Date.now();
+    await this.saveConfig();
+    this.changed('config');
+    if (sync && this.config.bccSelf) await this.sendSync({ Config: { key: 'Selfavatar', val: dataUrl ? avatarBase64(dataUrl) : '' } });
+  }
+
+  /** Like core's shall_attach_selfavatar(): after a change, and to every contact again after 14 days. */
+  private avatarHeaders(contacts: Contact[]): OutgoingMessage['headers'] {
+    const due = Math.max(this.config.avatarChangedAt ?? 0, Date.now() - RESEND_AVATAR_MS);
+    if (!contacts.some(c => (this.contacts.get(c.fingerprint)?.avatarSentAt ?? 0) < due)) return [];
+    return [{ name: 'Chat-User-Avatar', value: avatarHeader(this.config.avatar), kind: 'raw' }];
+  }
+
+  private async markAvatarSent(contacts: Contact[]) {
+    const now = Date.now();
+    for (const { fingerprint } of contacts) {
+      const c = this.contacts.get(fingerprint);
+      if (c) await this.saveContact({ ...c, avatarSentAt: now });
+    }
+  }
+
   // ---------------------------------------------------------------- invites
 
   async inviteLink(chatId?: string): Promise<string> {
@@ -703,24 +730,30 @@ export class DcClient extends EventTarget {
       { name: 'Secure-Join-Fingerprint', value: this.config.fingerprint, kind: 'raw' },
     ];
     if (invite.group) headers.push({ name: 'Secure-Join-Group', value: invite.group.grpid, kind: 'text' });
+    const avatar = this.avatarHeaders([alice]);
     await this.send({
       to: [{ name: alice.name, addr: alice.addr }], subject: 'Secure-Join', text: 'Secure-Join: vc-request-with-auth',
-      headers, gossip: [{ addr: alice.addr, key: alice.publicKey }],
+      headers: [...headers, ...avatar], gossip: [{ addr: alice.addr, key: alice.publicKey }],
       encryption: { kind: 'asymmetric', keys: [alice.publicKey] }, attach_pubkey: true, sign: true, compress: false,
     }, alice.relays);
+    if (avatar.length) await this.markAvatarSent([alice]);
   }
 
   private async sendHandshake(contact: Contact, step: string, extra: OutgoingMessage['headers'] = []) {
+    // Like core's should_attach_profile_data(): not before the contact has proven the invite.
+    const avatar = step === 'vc-contact-confirm' ? this.avatarHeaders([contact]) : [];
     await this.send({
       to: [{ name: contact.name, addr: contact.addr }], subject: 'Secure-Join', text: `Secure-Join: ${step}`,
       headers: [
         { name: 'Chat-Version', value: '1.0', kind: 'raw' },
         { name: 'Secure-Join', value: step, kind: 'raw' },
         ...extra,
+        ...avatar,
       ],
       gossip: [{ addr: contact.addr, key: contact.publicKey }],
       encryption: { kind: 'asymmetric', keys: [contact.publicKey] }, attach_pubkey: true, sign: true, compress: false,
     }, contact.relays);
+    if (avatar.length) await this.markAvatarSent([contact]);
   }
 
   // ---------------------------------------------------------------- sending
@@ -861,13 +894,17 @@ export class DcClient extends EventTarget {
     const self = chat.type === 'self' || !members.length;
     if (chat.ephemeralTimer) msg = { ...msg, headers: [...msg.headers, { name: 'Ephemeral-Timer', value: String(chat.ephemeralTimer), kind: 'raw' }] };
     if (self && !this.config.bccSelf) return msg.rfc724_mid ?? createMid();
-    return this.send({
+    const avatar = self ? [] : this.avatarHeaders(members);
+    const mid = await this.send({
       to: self ? [{ name: '', addr: this.config.addr }] : members.map(m => ({ name: m.name, addr: m.addr })),
       subject: chat.type === 'group' ? chat.name : `Message from ${this.config.displayName || this.config.addr}`,
       encryption: { kind: 'asymmetric', keys: members.map(m => m.publicKey) },
       attach_pubkey: true, sign: true, compress: true,
       ...msg,
+      headers: [...msg.headers, ...avatar],
     }, members.flatMap(m => m.relays), true);
+    if (avatar.length) await this.markAvatarSent(members);
+    return mid;
   }
 
   /** Replaces the text of an own message, like core's send_edit_request(). */
@@ -1239,6 +1276,10 @@ export class DcClient extends EventTarget {
     for (const { data } of items) {
       const config = data?.Config as { key?: unknown; val?: unknown } | undefined;
       if (config?.key === 'Displayname' && typeof config.val === 'string') await this.setDisplayName(config.val, false);
+      if (config?.key === 'Selfavatar' && typeof config.val === 'string') {
+        const avatar = config.val ? avatarDataUrl(config.val) : undefined;
+        if (avatar || !config.val) await this.setAvatar(avatar, false);
+      }
       const alter = data?.AlterChat as { id?: Record<string, unknown>; action?: string | { SetVisibility?: string; Rename?: unknown } } | undefined;
       const contactFp = typeof alter?.id?.ContactFingerprint === 'string' ? alter.id.ContactFingerprint : undefined;
       if (contactFp && (alter?.action === 'Block' || alter?.action === 'Unblock')) await this.setBlocked(contactFp, alter.action === 'Block', false);

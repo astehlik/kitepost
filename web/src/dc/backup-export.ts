@@ -112,11 +112,23 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
     db.exec(schema);
     const run = (sql: string, values: SqlValue[]) => db.run(sql, values);
 
+    const files: { name: string; data: Uint8Array }[] = [];
+    const blobs = new Set<string>();
+    const addBlob = async (data: Uint8Array, filename: string) => {
+      const file = await blobName(data, filename);
+      if (!blobs.has(file)) {
+        blobs.add(file);
+        files.push({ name: `blobs_backup/${file}`, data });
+      }
+      return file;
+    };
+
     const settings: [string, string][] = [
       ['configured_addr', config.addr], ['configured', '1'], ['configured_timestamp', String(now)],
       ['displayname', config.displayName], ['key_id', '1'], ['bcc_self', '1'],
       ['backup_version', String(BACKUP_VERSION)],
     ];
+    if (config.avatar) settings.push(['selfavatar', `$BLOBDIR/${await addBlob(fromBase64(avatarBase64(config.avatar)), `avatar.${avatarExtension(config.avatar)}`)}`]);
     for (const [k, v] of settings) {
       run('DELETE FROM config WHERE keyname = ?', [k]);
       run('INSERT INTO config (keyname, value) VALUES (?, ?)', [k, v]);
@@ -130,17 +142,6 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       run('INSERT INTO imap_sync (transport_id, folder, uidvalidity, uid_next, modseq) VALUES (1, ?, ?, ?, 0)',
         ['INBOX', config.uidValidity, config.lastUid + 1]);
     }
-
-    const files: { name: string; data: Uint8Array }[] = [];
-    const blobs = new Set<string>();
-    const addBlob = async (data: Uint8Array, filename: string) => {
-      const file = await blobName(data, filename);
-      if (!blobs.has(file)) {
-        blobs.add(file);
-        files.push({ name: `blobs_backup/${file}`, data });
-      }
-      return file;
-    };
 
     const contactIds = new Map<string, number>([['self', CONTACT_SELF]]);
     let nextId = FIRST_ID;

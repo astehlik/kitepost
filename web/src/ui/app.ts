@@ -483,7 +483,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     edit.title = label;
     edit.setAttribute('aria-label', label);
     const name = client.config.displayName || t('me');
-    me.replaceChildren(avatar(name, client.config.addr),
+    me.replaceChildren(avatar(name, client.config.addr, undefined, client.config.avatar),
       h('span', { class: 'who' }, h('strong', {}, name), h('small', {}, client.config.addr)));
   }
   clear(root());
@@ -900,7 +900,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       return;
     }
     if (view === 'settings') {
-      const key = JSON.stringify([client.config.secured, canHandoff, client.config.displayName]);
+      const key = JSON.stringify([client.config.secured, canHandoff, client.config.displayName, client.config.avatarChangedAt]);
       if (settings?.key === key && pane.contains(settings.el)) return;
       leaveChat();
       settings = { key, el: settingsView(client, () => startMain(client, undefined, true), () => { view = undefined; renderAll(); }) };
@@ -1743,10 +1743,38 @@ function exportDialog(client: DcClient, done?: () => void) {
 
 /** `rebuild` redraws the main view after the language changed. */
 /** The profile and the settings of this browser, saved as soon as they change. */
+/** Like core's recode_to_avatar_size(): a square of at most 512 px and 60 KB. */
+async function avatarFromFile(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file).catch(() => { throw new Error(t('profile.avatarInvalid')); });
+  const side = Math.min(bitmap.width, bitmap.height);
+  for (const size of [512, 384, 256]) {
+    const px = Math.min(size, side);
+    const canvas = h('canvas', { width: String(px), height: String(px) });
+    canvas.getContext('2d')!.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, px, px);
+    for (const quality of [0.85, 0.7, 0.55]) {
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+      if (blob && blob.size <= 60_000) return `data:image/jpeg;base64,${await blobToBase64(blob)}`;
+    }
+  }
+  throw new Error(t('profile.avatarInvalid'));
+}
+
 function settingsView(client: DcClient, rebuild: () => void, close: () => void): Element {
   const save = (f: () => unknown) => () => { void Promise.resolve().then(f).catch(errorDialog); };
   const name = h('input', { type: 'text', maxlength: '100', value: client.config.displayName });
   name.addEventListener('change', save(() => client.setDisplayName(name.value)));
+  const picture = h('input', { type: 'file', accept: 'image/*', hidden: true, 'aria-label': t('profile.avatarChoose') });
+  picture.addEventListener('change', save(async () => {
+    const file = picture.files?.[0];
+    picture.value = '';
+    if (file) await client.setAvatar(await avatarFromFile(file));
+  }));
+  const avatarRow = h('div', { class: 'avatar-row' },
+    avatar(client.config.displayName || t('me'), client.config.addr, undefined, client.config.avatar),
+    h('div', { class: 'row' },
+      h('button', { type: 'button', onclick: () => picture.click() }, t('profile.avatarChoose')),
+      client.config.avatar ? h('button', { type: 'button', onclick: busyClick(() => client.setAvatar(undefined)) }, t('profile.avatarRemove')) : null),
+    picture);
 
   const lang = languageSelect(rebuild);
   const theme = h('select', {},
@@ -1787,6 +1815,7 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
       Object.assign(iconButton(ICONS.close, t('close'), close), { className: 'icon-button close' })),
     h('div', { class: 'settings-body' },
       section(t('settings.profile'),
+        h('div', { class: 'field' }, h('span', {}, t('profile.avatar')), avatarRow, h('small', { class: 'hint' }, t('profile.avatarHint'))),
         field(t('setup.displayName'), name),
         h('div', { class: 'profile-info' },
           h('small', {}, t('profile.address', { addr: client.config.addr })),

@@ -6,6 +6,9 @@ export interface Config {
   imapHost: string;
   smtpHost: string;
   displayName: string;
+  /** Data URL of the own avatar, like core's selfavatar, and when it last changed. */
+  avatar?: string;
+  avatarChangedAt?: number;
   secretKey: string;
   publicKey: string;
   fingerprint: string;
@@ -45,6 +48,8 @@ export interface Contact {
   /** Data URL of the contact's own avatar, and the Date of the message that set it (core's AvatarTimestamp). */
   avatar?: string;
   avatarAt?: number;
+  /** When the own avatar last went to the contact, like core's selfavatar_sent. */
+  avatarSentAt?: number;
   /** Date of the newest message from the contact, like core's last_seen. */
   lastSeen?: number;
 }

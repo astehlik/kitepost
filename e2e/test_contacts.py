@@ -126,3 +126,24 @@ def test_contact_avatars(web, dora, tmp_path):
     dora.chat.send_text("picture gone")
     expect(page.locator(".msg.in", has_text="picture gone")).to_be_visible()
     expect(entry_avatar).to_have_count(0)
+
+
+def test_own_avatar_reaches_contacts(web, dora, tmp_path):
+    page = web.page
+    (tmp_path / "me.png").write_bytes(solid_png(600, 400))
+    page.get_by_role("button", name="Settings").click()
+    page.locator(".settings input[type=file]").set_input_files(str(tmp_path / "me.png"))
+    expect(page.locator(".profile .avatar img")).to_be_visible()
+    page.locator(".chatlist").get_by_text("Dora", exact=True).click()
+    web_send(page, "see my picture")
+    wait_text(dora.acc, "see my picture")
+    me = dora.acc.get_contact_by_id(dora.contact_id)
+    assert me.get_snapshot().profile_image
+
+    page.get_by_role("button", name="Settings").click()
+    page.locator(".settings").get_by_role("button", name="Remove").click()
+    expect(page.locator(".profile .avatar img")).to_have_count(0)
+    page.locator(".chatlist").get_by_text("Dora", exact=True).click()
+    web_send(page, "picture removed")
+    wait_text(dora.acc, "picture removed")
+    assert not me.get_snapshot().profile_image

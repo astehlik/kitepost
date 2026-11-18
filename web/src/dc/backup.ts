@@ -28,6 +28,7 @@ export interface BackupProfile {
   password: string;
   host: string;
   displayName: string;
+  avatar?: string;
   secretKey: string;
   publicKey: string;
   fingerprint: string;
@@ -322,9 +323,11 @@ export async function readBackup(
       if (!chat.lastActivity) chat.lastActivity = Date.now();
     }
 
+    const selfAvatar = blobs.get((config.get('selfavatar') ?? '').split('/').pop()!);
+    const avatar = selfAvatar && selfAvatar.size <= MAX_BLOB ? avatarDataUrl(toBase64(await readAt(selfAvatar.offset, selfAvatar.size))) : undefined;
     const tokens = rows(db, 'SELECT namespc, foreign_key, token, timestamp FROM tokens ORDER BY timestamp');
     return {
-      addr, password, host, displayName: config.get('displayname') ?? '', secretKey: self.secret, publicKey: self.public,
+      addr, password, host, displayName: config.get('displayname') ?? '', avatar, secretKey: self.secret, publicKey: self.public,
       fingerprint: self.fingerprint, relays,
       inviteNumber: tokens.filter(t => num(t.namespc) === 100 && !str(t.foreign_key)).pop()?.token as string | undefined,
       uidValidity: num(sync?.uidvalidity),
