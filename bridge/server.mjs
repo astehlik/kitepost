@@ -205,3 +205,6 @@ async function relay(ws, req, url) {
 server.listen(PORT, HOST, () => {
   console.log(`kitepost bridge listening on http://${HOST}:${PORT}${STATIC_DIR ? ` (static: ${STATIC_DIR})` : ''}`);
 });
+
+// As PID 1 in a container, Node ignores SIGTERM without a handler and is killed after the stop timeout.
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => process.exit(0));

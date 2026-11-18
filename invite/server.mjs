@@ -414,3 +414,6 @@ await load();
 await setup.load();
 await mkdir(MAILBOXES_DIR, { recursive: true });
 server.listen(PORT, HOST, () => console.log(`invite service for ${MAIL_DOMAIN} on http://${HOST}:${PORT}${ADMIN_TOKEN ? '' : ' (admin disabled: no ADMIN_TOKEN)'}`));
+
+// As PID 1 in a container, Node ignores SIGTERM without a handler and is killed after the stop timeout.
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(() => process.exit(0)));
