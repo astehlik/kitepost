@@ -48,6 +48,12 @@ export const de: Record<keyof typeof en, string> = {
   'setup.create': 'Profil erstellen',
 
   'import.file': 'Backup-Datei importieren…',
+  'import.scan': 'QR-Code vom Handy scannen',
+  'import.scanNote': 'Scannen klappt nur mit einer Delta-Chat-App, die „Zweitgerät hinzufügen“ über das Chatmail-Relay anbietet. Aktuelle Versionen können das noch nicht. Klappt es nicht, nimm die Backup-Datei.',
+  'import.scanTitle': 'Als Zweitgerät hinzufügen',
+  'import.scanHint': 'Öffne auf deinem Handy Delta Chat → Einstellungen → Zweitgerät hinzufügen und scanne den angezeigten QR-Code.',
+  'import.connecting': 'Verbinde mit deinem Handy…',
+  'import.receiving': 'Empfange… {percent} %',
   'way.legend': 'Wie möchtest du beginnen?',
   'backup.title': 'Profil sichern',
   'key.warning': 'Ein anderes Gerät nutzt diese Adresse mit einem eigenen Schlüssel. Es kann nicht lesen, was du hier schreibst, und die Geräte sind nicht synchron.',

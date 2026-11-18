@@ -18,7 +18,11 @@ def test_start_page_offers_three_ways(page):
     expect(way).to_contain_text("Settings → Chats and media → Export backup")
     expect(way).to_contain_text("different key")
     expect(way.get_by_role("button", name="Import backup file")).to_be_visible()
+    expect(way.get_by_role("button", name="Scan QR from phone")).to_be_visible()
+    expect(way).to_contain_text("current releases do not do yet")
 
     page.get_by_role("radio", name="I already use Kitepost in another browser").check()
     expect(way).to_contain_text("Settings → Export backup")
     expect(way.get_by_role("button", name="Import backup file")).to_be_visible()
+    expect(page.get_by_role("button", name="Scan QR from phone")).to_be_hidden()
+    expect(way.get_by_text("current releases do not do yet")).to_be_hidden()

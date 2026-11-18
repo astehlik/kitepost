@@ -16,7 +16,6 @@ from helpers import addr_of, configure, open_chat, set_passphrase, wait_event, w
 pytestmark = [
     pytest.mark.local_relay,
     pytest.mark.skipif(not os.environ.get("DC_RPC_SERVER"), reason="needs a patched core in DC_RPC_SERVER"),
-    pytest.mark.skip(reason="the Scan QR button is hidden until Delta Chat releases offer the transfer over a relay"),
 ]
 
 
@@ -43,6 +42,7 @@ def test_second_device_by_qr(page, patched_rpc):
 
     # Headless Chromium has no camera, so the code is pasted.
     set_passphrase(page)
+    page.get_by_role("radio", name="I already use Delta Chat").check()
     page.get_by_role("button", name="Scan QR from phone").click()
     page.get_by_label("QR code text").fill(qr)
     expect(page.locator(".status.ok")).to_be_visible()

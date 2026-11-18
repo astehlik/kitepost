@@ -1,6 +1,7 @@
 import { fileReader, readBackup } from '../dc/backup';
 import { canDeleteForAll, canResend, DcClient, formatDuration, pinnable, savable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
+import { looksLikeBackupQr, receiveBackup } from '../dc/transfer';
 import { byChatOrder, type Chat, type Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { avatarDataUrl } from '../dc/avatar';
@@ -11,6 +12,7 @@ import { applyTheme, base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale
 import { attachEmojiCompletion, emojiPicker, insertAtCursor, popover } from './emoji';
 import { splitLinks } from './links';
 import { pastedFiles, pasteIncomplete } from './paste';
+import { scanQr } from './scanner';
 import { sendErrorKind } from './send-error';
 import { checkForUpdate } from './update';
 
@@ -269,12 +271,12 @@ function renderAccountSetup(store: Store) {
     say(t('import.signingIn', { addr: profile.addr }));
     return DcClient.importBackup(store, profile, bridgeUrl());
   };
-  const busy = async (job: () => Promise<DcClient | undefined>) => {
+  const busy = async (button: HTMLButtonElement, job: () => Promise<DcClient | undefined>) => {
     importErr.hidden = true;
     importStatus.hidden = false;
     importBox.classList.add('busy');
     try {
-      const client = await whileBusy(importButton, job);
+      const client = await whileBusy(button, job);
       if (client) startMain(client);
       else importStatus.hidden = true;
     } catch (e) {
@@ -285,11 +287,25 @@ function renderAccountSetup(store: Store) {
     }
   };
   const importButton = h('button', { type: 'button', class: 'primary', onclick: () => backup.click() }, t('import.file'));
-  const importBox = h('div', { class: 'import' }, importStatus, importErr, h('div', { class: 'row' }, importButton), backup);
+  const scanButton = h('button', {
+    type: 'button',
+    onclick: () => busy(scanButton, async () => {
+      const qr = await scanQr(t('import.scanTitle'), t('import.scanHint'), looksLikeBackupQr);
+      if (!qr) return undefined;
+      let client: DcClient | undefined;
+      say(t('import.connecting'));
+      await receiveBackup(qr, (got, total) => say(t('import.receiving', { percent: total ? Math.min(100, Math.round((got / total) * 100)) : 0 })), async blob => {
+        client = await importFrom(blob);
+      });
+      return client;
+    }),
+  }, t('import.scan'));
+  const scanNote = h('small', { class: 'hint' }, t('import.scanNote'));
+  const importBox = h('div', { class: 'import' }, importStatus, importErr, h('div', { class: 'row' }, importButton, scanButton), scanNote, backup);
   backup.addEventListener('change', () => {
     const file = backup.files?.[0];
     backup.value = '';
-    if (file) void busy(() => importFrom(file));
+    if (file) void busy(importButton, () => importFrom(file));
   });
 
   // The two ways to an existing profile only differ in where the backup comes from.
@@ -311,6 +327,7 @@ function renderAccountSetup(store: Store) {
   const show = (key: keyof typeof ways) => {
     for (const [k, el] of Object.entries(ways)) el.hidden = k !== key;
     if (key !== 'new') ways[key].append(importBox);
+    scanButton.hidden = scanNote.hidden = key !== 'deltaChat';
   };
   // An invite link brings a new address, so there is nothing to choose.
   const fromInvite = existing.checked;

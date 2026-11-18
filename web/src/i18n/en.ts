@@ -46,6 +46,12 @@ export const en = {
   'setup.create': 'Create profile',
 
   'import.file': 'Import backup file…',
+  'import.scan': 'Scan QR from phone',
+  'import.scanNote': 'Scanning only works with a Delta Chat app that offers “Add second device” through the chatmail relay, which current releases do not do yet. If it fails, use the backup file.',
+  'import.scanTitle': 'Add as second device',
+  'import.scanHint': 'On your phone, open Delta Chat → Settings → Add second device and scan the QR code shown there.',
+  'import.connecting': 'Connecting to your phone…',
+  'import.receiving': 'Receiving… {percent} %',
   'way.legend': 'How do you want to start?',
   'backup.title': 'Back up your profile',
   'key.warning': 'Another device uses this address with its own key. It cannot read what you write here, and the devices are not in sync.',
