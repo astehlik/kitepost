@@ -142,6 +142,7 @@ export const de: Record<keyof typeof en, string> = {
   'notify.video': 'Video',
   'notify.audio': 'Audio',
   'notify.file': 'Datei',
+  'notify.contact': 'Kontakt',
   'profile.notify': 'Benachrichtigungen zeigen',
   'profile.notifyAll': 'Absender und Inhalt',
   'profile.notifySender': 'Nur Absender',
@@ -253,6 +254,10 @@ export const de: Record<keyof typeof en, string> = {
   'group.leaveText': 'Du bekommst keine Nachrichten mehr daraus und kannst nicht mehr darin schreiben. Der Chat mit seinen Nachrichten bleibt hier, bis du ihn löschst, und die anderen Mitglieder sehen, dass du gegangen bist.',
 
   'contact.sendMessage': 'Nachricht senden',
+  'contact.share': 'Kontakt teilen',
+  'contact.shareTitle': '{name} senden an …',
+  'contact.shareEmpty': 'Es gibt noch keinen Chat, an den du den Kontakt senden kannst.',
+  'contact.cardNoKey': 'Diese Kontaktkarte enthält keinen nutzbaren Schlüssel.',
   'contact.sharedChats': 'Gemeinsame Chats',
   'contact.noSharedChats': 'Keine',
   'contact.block': 'Kontakt blockieren',

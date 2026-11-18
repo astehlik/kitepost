@@ -10,6 +10,7 @@ import {
 } from '../wasm';
 import { avatarBase64, avatarDataUrl, avatarHeader, parseAvatarHeader } from './avatar';
 import { buildContactInvite, buildGroupInvite, parseInvite, type Invite } from './invite';
+import { makeVcard, type VcardContact } from './vcard';
 import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
 
 const RESEND_AVATAR_MS = 14 * 86_400_000;
@@ -318,6 +319,37 @@ export class DcClient extends EventTarget {
     const chat = await this.singleChat(fp, false);
     if (chat.isRequest) await this.acceptChat(chat.id);
     return chat.id;
+  }
+
+  /** Sends a contact like core's make_vcard(): with the name it chose, its key and its profile picture. */
+  async shareContact(chatId: string, fp: string) {
+    const c = this.contacts.get(fp);
+    if (!c?.publicKey) throw new Error('unknown contact');
+    const card = makeVcard([{ addr: c.addr, name: c.name, key: c.publicKey, photo: c.avatar && avatarBase64(c.avatar) }]);
+    let bin = '';
+    for (const b of new TextEncoder().encode(card)) bin += String.fromCharCode(b);
+    await this.sendText(chatId, '', { filename: 'vcard.vcf', mime: 'text/vcard', data_b64: btoa(bin) });
+  }
+
+  /**
+   * Like core's import_vcard_contact(): returns the contact's fingerprint, or undefined for the own card.
+   * A key that is known already keeps its contact unchanged, so a card cannot rename or readdress it.
+   */
+  async importVcardContact(card: VcardContact): Promise<string | undefined> {
+    let info: ReturnType<typeof publicKeyInfo> | undefined;
+    try {
+      info = card.key ? publicKeyInfo(card.addr, card.key) : undefined;
+    } catch {
+      info = undefined;
+    }
+    if (!info?.can_encrypt) throw new Error(t('contact.cardNoKey'));
+    if (info.fingerprint === this.config.fingerprint) return undefined;
+    if (this.contacts.get(info.fingerprint)?.publicKey) return info.fingerprint;
+    const c = await this.upsertContact(info.fingerprint, card.addr, card.key!, card.name);
+    const avatar = card.photo ? avatarDataUrl(card.photo) : undefined;
+    if (avatar) await this.saveContact({ ...c, avatar });
+    this.changed('contacts');
+    return info.fingerprint;
   }
 
   /** Like core's Contact::get_all(): contacts with an accepted chat first, then by last seen. */

@@ -149,6 +149,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .new-chat .search { padding: .6rem .9rem; border-bottom: 1px solid var(--border); }
 .new-chat .search input { width: 100%; }
 .chatlist.contacts li { padding: 0; }
+.chatlist.pick { margin: 0 -1.3rem; max-height: 60vh; overflow-y: auto; border-top: 1px solid var(--border); }
 .chatlist.contacts li > button { display: flex; align-items: center; gap: .7rem; width: 100%; padding: .6rem .9rem; border: 0; border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; }
 .chatlist.contacts li > button:hover { background: var(--bg); filter: none; }
 .avatar.action { background: var(--bg); }
@@ -214,6 +215,9 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .lightbox .next { right: .5rem; }
 .lightbox .icon-button[hidden] { display: none; }
 .attachment a { color: inherit; font-size: .9rem; }
+.attachment .vcard { display: flex; align-items: center; gap: .7rem; max-width: 100%; min-width: 12rem; padding: .5rem .9rem .5rem .5rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.vcard .names { display: flex; flex-direction: column; min-width: 0; }
+.vcard small { color: var(--muted); overflow-wrap: anywhere; }
 .info { align-self: center; font-size: .82rem; color: var(--muted); background: var(--panel); border-radius: 10px; padding: .25rem .7rem; text-align: center; }
 .info.linked { border: 0; font-size: .82rem; cursor: pointer; }
 .request { display: flex; gap: .6rem; align-items: center; padding: .8rem 1rem; background: var(--panel); border-top: 1px solid var(--border); flex-wrap: wrap; }

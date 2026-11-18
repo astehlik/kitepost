@@ -140,6 +140,7 @@ export const en = {
   'notify.video': 'Video',
   'notify.audio': 'Audio',
   'notify.file': 'File',
+  'notify.contact': 'Contact',
   'profile.notify': 'Notifications show',
   'profile.notifyAll': 'Sender and content',
   'profile.notifySender': 'Sender only',
@@ -251,6 +252,10 @@ export const en = {
   'group.leaveText': 'You no longer get its messages and cannot write in it any more. The chat and its messages stay here until you delete it, and the other members see that you left.',
 
   'contact.sendMessage': 'Send message',
+  'contact.share': 'Share contact',
+  'contact.shareTitle': 'Send {name} to…',
+  'contact.shareEmpty': 'There is no chat to send the contact to yet.',
+  'contact.cardNoKey': 'This contact card has no usable encryption key.',
   'contact.sharedChats': 'Chats in common',
   'contact.noSharedChats': 'None',
   'contact.block': 'Block contact',

@@ -3,6 +3,8 @@ import { canDeleteForAll, canResend, DcClient, formatDuration, pinnable, savable
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
 import { byChatOrder, type Chat, type Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
+import { avatarDataUrl } from '../dc/avatar';
+import { isVcard, parseVcard, type VcardContact } from '../dc/vcard';
 import { Store } from '../store';
 import { importKeypair, publicKeyInfo, qrSvg, type AttachmentData } from '../wasm';
 import { applyTheme, base64ToBlob, blobToBase64, clear, DATE_LOCALES, dateLocale, dialog, flashLabel, formatAgo, formatDateTime, formatTime, getDateLocale, getTheme, setDateLocale, setTheme, THEMES, type DateLocale, type Theme, h, trustedSvg, whileBusy } from './dom';
@@ -517,7 +519,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
             h('strong', {}, client.chatTitle(chat) || '…'),
             chat.visibility === 'pinned' ? metaMark(ICONS.pin, 'mark.pinnedChat') : null,
             chat.unread ? h('span', { class: 'badge' }, String(chat.unread)) : null),
-          h('small', {}, chat.isRequest ? t('list.request') : last ? `${last.from === 'self' && !last.info ? t('list.mePrefix') : ''}${last.text || (last.attachments[0]?.filename ?? '')}` : chat.type === 'self' ? t('chat.savedSubtitle') : ''))));
+          h('small', {}, chat.isRequest ? t('list.request') : last ? `${last.from === 'self' && !last.info ? t('list.mePrefix') : ''}${last.text || attachmentSummary(last.attachments[0])}` : chat.type === 'self' ? t('chat.savedSubtitle') : ''))));
     }
     if (!showArchived && archived.length) {
       const archivedUnread = archived.reduce((n, c) => n + c.unread, 0);
@@ -531,6 +533,13 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   }
 
   function attachmentView(a: AttachmentData, urls: string[]): Node {
+    const card = vcardOf(a);
+    if (card) {
+      const name = card.name || card.addr;
+      return h('div', { class: 'attachment' }, h('button', { type: 'button', class: 'vcard', title: t('contacts.chatWith', { name }), onclick: () => openCard(card) },
+        avatar(name, card.addr, undefined, card.photo ? avatarDataUrl(card.photo) : undefined),
+        h('span', { class: 'names' }, h('strong', {}, name), h('small', {}, card.addr))));
+    }
     const kind = INLINE_IMAGE_TYPES.has(a.mime) ? 'image' : playableVideo(a.mime) ? 'video' : undefined;
     const blob = base64ToBlob(a.data_b64, kind ? a.mime : 'application/octet-stream');
     const url = URL.createObjectURL(blob);
@@ -1159,6 +1168,21 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     renderAll();
   }
 
+  function openCard(card: VcardContact) {
+    const name = card.name || card.addr;
+    dialog(name, h('p', {}, t('contacts.chatWith', { name })), [
+      { label: t('cancel') },
+      {
+        label: t('ok'), primary: true, onClick: async () => {
+          const fp = await client.importVcardContact(card);
+          if (!fp) return;
+          if (client.contacts.get(fp)?.blocked) showContact(fp);
+          else open(await client.chatWith(fp));
+        },
+      },
+    ]);
+  }
+
   function showContact(fp: string, from?: string) {
     view = { contact: fp, from };
     current = undefined;
@@ -1433,7 +1457,24 @@ function avatarImage(name: string, key: string): string {
   return canvas.toDataURL();
 }
 
+function vcardOf(a: AttachmentData): VcardContact | undefined {
+  if (!isVcard(a)) return undefined;
+  try {
+    return parseVcard(new TextDecoder().decode(Uint8Array.from(atob(a.data_b64), c => c.charCodeAt(0))))[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/** Like core's summary of a vCard: the contact's name. */
+function attachmentSummary(a: AttachmentData | undefined): string {
+  if (!a) return '';
+  const card = vcardOf(a);
+  return card ? `👤 ${card.name || card.addr}` : a.filename;
+}
+
 function attachmentKind(mime: string): string {
+  if (/^text\/(x-)?vcard$/i.test(mime)) return t('notify.contact');
   const kind = mime.split('/')[0];
   return t(kind === 'image' ? 'notify.image' : kind === 'video' ? 'notify.video' : kind === 'audio' ? 'notify.audio' : 'notify.file');
 }
@@ -1679,7 +1720,8 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
           h('span', { class: 'names' }, shownName, h('small', {}, c.addr),
             c.lastSeen ? h('small', {}, t('chat.lastSeen', { when: formatAgo(c.lastSeen) })) : null)),
         h('div', { class: 'row' },
-          c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => open(await client.chatWith(fp))) }, t('contact.sendMessage')))),
+          c.blocked ? null : h('button', { class: 'primary', onclick: busyClick(async () => open(await client.chatWith(fp))) }, t('contact.sendMessage')),
+          c.publicKey ? h('button', { onclick: () => shareContactDialog(client, fp, open) }, t('contact.share')) : null)),
       h('section', {}, field(t('group.name'), nickname, t('contact.nicknameHint', { name: c.name || c.addr }))),
       section(t('contact.sharedChats'),
         shared.length
@@ -1690,6 +1732,21 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
         h('p', {}, t(c.blocked ? 'contact.blockedText' : 'contact.blockText')),
         h('div', { class: 'row' }, h('button', { class: c.blocked ? '' : 'danger', onclick: confirmBlock }, t(c.blocked ? 'contact.unblock' : 'contact.block')))),
       chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), close) : null));
+}
+
+/** Sends the contact to a chat picked from the chat list, like Delta Chat's "Share contact". */
+function shareContactDialog(client: DcClient, fp: string, open: (id: string) => void) {
+  const chats = client.sortedChats().filter(c => !c.left && !c.isRequest && c.contact !== fp);
+  const list = h('ul', { class: 'chatlist contacts pick' }, ...chats.map(chat => h('li', {},
+    h('button', {
+      type: 'button', onclick: busyClick(async () => {
+        await client.shareContact(chat.id, fp);
+        dlg.close();
+        open(chat.id);
+      }),
+    }, chatAvatar(client, chat), h('div', { class: 'item' }, h('strong', {}, client.chatTitle(chat)))))));
+  if (!chats.length) list.append(h('li', { class: 'empty' }, t('contact.shareEmpty')));
+  const dlg = dialog(t('contact.shareTitle', { name: client.contactName(fp) }), list, [{ label: t('cancel') }]);
 }
 
 /** Like Delta Chat's "Blocked contacts" in the chat settings. */

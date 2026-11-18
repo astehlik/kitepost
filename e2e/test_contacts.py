@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from deltachat_rpc_client import EventType
+from deltachat_rpc_client.const import ViewType
 from playwright.sync_api import expect
 
-from helpers import new_chat, open_chat, open_profile, reload_and_unlock, solid_png, wait_event, wait_text, web_send
+from helpers import addr_of, new_chat, open_chat, open_profile, reload_and_unlock, solid_png, wait_event, wait_text, web_send
 
 
 def delete_chat(page):
@@ -163,3 +166,38 @@ def test_own_avatar_reaches_contacts(web, dora, tmp_path):
     wait_text(dora.acc, "picture removed")
     assert not me.get_snapshot().profile_image
 
+
+def test_share_contacts_with_core(web, dora, make_account, tmp_path):
+    page = web.page
+    erin = make_account("Erin")
+    (tmp_path / "erin.png").write_bytes(solid_png(64, 64))
+    erin.set_config("selfavatar", str(tmp_path / "erin.png"))
+    new_chat(page, "Add contact")
+    page.locator("dialog textarea").fill(erin.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    wait_event(erin, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
+    erin.get_contact_by_addr(web.addr).create_chat().send_text("hi from Erin")
+    expect(page.locator(".msg.in", has_text="hi from Erin")).to_be_visible()
+
+    open_profile(page).get_by_role("button", name="Share contact").click()
+    page.locator("dialog .pick li", has_text="Dora").get_by_role("button").click()
+    expect(page.locator(".chathead strong")).to_have_text("Dora")
+    expect(page.locator(".msg.out .vcard")).to_contain_text(addr_of(erin))
+    expect(page.locator(".chatlist li[data-chat]", has_text="Dora")).to_contain_text("👤 Erin")
+    is_card = lambda e: dora.acc.get_message_by_id(e.msg_id).get_snapshot().view_type == ViewType.VCARD
+    snap = dora.acc.get_message_by_id(wait_event(dora.acc, EventType.INCOMING_MSG, is_card).msg_id).get_snapshot()
+    assert snap.view_type == ViewType.VCARD and snap.vcard_contact.addr == addr_of(erin), snap
+    [dora_erin] = dora.acc.import_vcard(Path(snap.file).read_text())
+    assert dora_erin.get_snapshot().profile_image
+    dora_erin.create_chat().send_text("Dora found you")
+    assert wait_text(erin, "Dora found you").show_padlock
+
+    fiona = make_account("Fiona")
+    [dora_fiona] = dora.acc.import_vcard(fiona.self_contact.make_vcard())
+    dora.chat.send_contact(dora_fiona)
+    shared = page.locator(".msg.in .vcard", has_text="Fiona")
+    shared.click()
+    page.locator("dialog", has_text="Chat with Fiona?").get_by_role("button", name="OK").click()
+    expect(page.locator(".chathead strong")).to_have_text("Fiona")
+    web_send(page, "hello Fiona")
+    assert wait_text(fiona, "hello Fiona").show_padlock
