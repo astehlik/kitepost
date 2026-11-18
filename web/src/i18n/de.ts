@@ -128,6 +128,7 @@ export const de: Record<keyof typeof en, string> = {
   'chat.deleteKeepContact': '{name} behält die Nachrichten und ihr bleibt verbunden: Mit der nächsten Nachricht erscheint der Chat wieder.',
   'chat.deleteKeepGroup': 'Du bleibst Mitglied und die anderen behalten die Nachrichten: Mit der nächsten Nachricht in der Gruppe erscheint der Chat wieder.',
   'chat.deleteUndo': 'Das lässt sich nicht rückgängig machen.',
+  'chat.search': 'Chats durchsuchen',
   'chat.clear': 'Chat leeren',
   'chat.clearTitle': 'Chat leeren?',
   'chat.clearHere': 'Löscht alle Nachrichten des Chats in diesem Browser, der Chat bleibt.',

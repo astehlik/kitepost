@@ -126,6 +126,7 @@ export const en = {
   'chat.deleteKeepContact': '{name} keeps the messages and you stay connected: the chat reappears with the next message.',
   'chat.deleteKeepGroup': 'You stay a member and the others keep the messages: the chat reappears with the next message in the group.',
   'chat.deleteUndo': 'This cannot be undone.',
+  'chat.search': 'Search chats',
   'chat.clear': 'Clear chat',
   'chat.clearTitle': 'Clear chat?',
   'chat.clearHere': 'Deletes all messages of the chat in this browser; the chat stays.',

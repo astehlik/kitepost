@@ -1565,16 +1565,31 @@ function groupDialog(client: DcClient, open: (id: string) => void) {
 }
 
 /** Like Delta Chat's "New chat" screen: new contact and new group, then the contacts. */
+type ListRow = { name: string; sub?: string; badge: Element; onclick: (ev: Event) => void; attrs?: Record<string, string> };
+
+/** A search field over a list of contacts or chats, filtering by name and address; `lead` rows show only without a query. */
+function searchList(o: { label: string; rows: () => ListRow[]; lead?: () => ListRow[]; empty: () => string; class?: string }) {
+  const search = h('input', { type: 'search', placeholder: o.label, 'aria-label': o.label });
+  const list = h('ul', { class: `chatlist contacts ${o.class ?? ''}`.trim() });
+  const item = (r: ListRow) => h('li', r.attrs ?? {},
+    h('button', { type: 'button', onclick: r.onclick }, r.badge, h('div', { class: 'item' }, h('strong', {}, r.name), r.sub ? h('small', {}, r.sub) : null)));
+  function refresh() {
+    const q = search.value.trim().toLowerCase();
+    const rows = o.rows().filter(r => !q || r.name.toLowerCase().includes(q) || !!r.sub?.toLowerCase().includes(q));
+    list.replaceChildren(...(q ? [] : o.lead?.() ?? []).map(item), ...rows.map(item));
+    if (!rows.length) list.append(h('li', { class: 'empty' }, q ? t('contacts.noMatch') : o.empty()));
+  }
+  search.addEventListener('input', refresh);
+  refresh();
+  return { search: h('div', { class: 'search' }, search), input: search, list, refresh };
+}
+
 function newChatView(client: DcClient, open: (id: string) => void, profile: (fp: string) => void, close: () => void) {
-  const search = h('input', { type: 'search', placeholder: t('contacts.search'), 'aria-label': t('contacts.search') });
-  const list = h('ul', { class: 'chatlist contacts' });
-  const row = (attrs: Record<string, string>, onclick: () => void, badge: Element, ...text: Node[]) =>
-    h('li', attrs, h('button', { type: 'button', onclick }, badge, h('div', { class: 'item' }, ...text)));
-  const entry = (d: string, label: string, onclick: () => void) => {
+  const action = (d: string, name: string, onclick: () => void): ListRow => {
     const badge = avatar('', 'action', icon(d));
     badge.classList.add('action');
     badge.style.background = '';
-    return row({}, onclick, badge, h('strong', {}, label));
+    return { name, badge, onclick };
   };
   const start = (fp: string) => {
     const existing = client.chats.get(`c-${fp}`);
@@ -1584,17 +1599,17 @@ function newChatView(client: DcClient, open: (id: string) => void, profile: (fp:
       { label: t('ok'), primary: true, onClick: async () => open(await client.chatWith(fp)) },
     ]);
   };
-  function refresh() {
-    const contacts = client.knownContacts(search.value);
-    list.replaceChildren(
-      ...search.value.trim() ? [] : [
-        entry(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
-        entry(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))],
-      ...contacts.map(c => row({ 'data-contact': c.fingerprint }, () => start(c.fingerprint),
-        avatar(client.contactName(c.fingerprint), c.addr, undefined, c.avatar),
-        h('strong', {}, client.contactName(c.fingerprint)), h('small', {}, c.addr))));
-    if (!contacts.length) list.append(h('li', { class: 'empty' }, t(search.value.trim() ? 'contacts.noMatch' : 'contacts.empty')));
-  }
+  const { search, list, refresh } = searchList({
+    label: t('contacts.search'),
+    lead: () => [
+      action(ICONS.addContact, t('nav.addContact'), () => joinDialog(client, open)),
+      action(ICONS.group, t('nav.newGroup'), () => groupDialog(client, open))],
+    rows: () => client.knownContacts().map(c => ({
+      name: client.contactName(c.fingerprint), sub: c.addr, attrs: { 'data-contact': c.fingerprint },
+      badge: avatar(client.contactName(c.fingerprint), c.addr, undefined, c.avatar), onclick: () => start(c.fingerprint),
+    })),
+    empty: () => t('contacts.empty'),
+  });
   const confirmDelete = (fp: string) => dialog(client.contactName(fp), h('p', {}, t('contact.deleteAsk')), [
     { label: t('cancel') },
     { label: t('contact.delete'), primary: true, onClick: () => client.deleteContact(fp) },
@@ -1605,14 +1620,12 @@ function newChatView(client: DcClient, open: (id: string) => void, profile: (fp:
       [t('contact.viewProfile'), ICONS.info, () => profile(fp)],
       [t('contact.delete'), ICONS.trash, () => confirmDelete(fp)]);
   });
-  search.addEventListener('input', refresh);
-  refresh();
   const el = h('div', { class: 'settings new-chat' },
     h('header', { class: 'chathead' },
       h('button', { class: 'back', onclick: close }, '‹'),
       h('h2', { class: 'who' }, t('nav.newChat')),
       Object.assign(iconButton(ICONS.close, t('close'), close), { className: 'icon-button close' })),
-    h('div', { class: 'search' }, search),
+    search,
     list);
   return { el, refresh };
 }
@@ -1770,17 +1783,21 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
 
 /** Sends the contact to a chat picked from the chat list, like Delta Chat's "Share contact". */
 function shareContactDialog(client: DcClient, fp: string, open: (id: string) => void) {
-  const chats = client.sortedChats().filter(c => !c.left && !c.isRequest && c.contact !== fp);
-  const list = h('ul', { class: 'chatlist contacts pick' }, ...chats.map(chat => h('li', {},
-    h('button', {
-      type: 'button', onclick: busyClick(async () => {
+  const { search, input, list } = searchList({
+    label: t('chat.search'), class: 'pick',
+    rows: () => client.sortedChats().filter(c => !c.left && !c.isRequest && c.contact !== fp).map(chat => ({
+      name: client.chatTitle(chat), sub: chat.type === 'single' ? client.contacts.get(chat.contact ?? '')?.addr : undefined,
+      badge: chatAvatar(client, chat),
+      onclick: busyClick(async () => {
         await client.shareContact(chat.id, fp);
         dlg.close();
         open(chat.id);
       }),
-    }, chatAvatar(client, chat), h('div', { class: 'item' }, h('strong', {}, client.chatTitle(chat)))))));
-  if (!chats.length) list.append(h('li', { class: 'empty' }, t('contact.shareEmpty')));
-  const dlg = dialog(t('contact.shareTitle', { name: client.contactName(fp) }), list, [{ label: t('cancel') }]);
+    })),
+    empty: () => t('contact.shareEmpty'),
+  });
+  const dlg = dialog(t('contact.shareTitle', { name: client.contactName(fp) }), h('div', { class: 'share' }, search, list), [{ label: t('cancel') }]);
+  input.focus();
 }
 
 /** Like Delta Chat's "Blocked contacts" in the chat settings. */

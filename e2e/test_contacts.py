@@ -182,7 +182,11 @@ def test_share_contacts_with_core(web, dora, make_account, tmp_path):
     expect(page.locator(".msg.in", has_text="hi from Erin")).to_be_visible()
 
     open_profile(page).get_by_role("button", name="Share contact").click()
-    page.locator("dialog .pick li", has_text="Dora").get_by_role("button").click()
+    targets = page.locator("dialog .pick li")
+    expect(targets).to_have_count(3)
+    page.locator("dialog").get_by_role("searchbox", name="Search chats").fill("dor")
+    expect(targets).to_have_count(1)
+    targets.get_by_role("button", name="Dora").click()
     expect(page.locator(".chathead strong")).to_have_text("Dora")
     expect(page.locator(".msg.out .vcard")).to_contain_text(addr_of(erin))
     expect(page.locator(".chatlist li[data-chat]", has_text="Dora")).to_contain_text("👤 Erin")
