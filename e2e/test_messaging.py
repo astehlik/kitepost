@@ -811,6 +811,20 @@ def test_links(web, dora):
     assert len(page.context.pages) == 1
 
 
+def test_email_addresses(web, dora):
+    page = web.page
+    phone = addr_of(web.phone)
+    dora.chat.send_text(f"ask {phone} or nobody@example.org.")
+    links = page.locator(".msg.in", has_text="nobody@").locator(".text a")
+    expect(links).to_have_text([phone, "nobody@example.org"])
+    expect(links.nth(1)).to_have_attribute("href", "mailto:nobody@example.org")
+    expect(links.nth(1)).not_to_have_attribute("target", "_blank")
+
+    links.first.click()
+    page.locator("dialog", has_text="Chat with Phone?").get_by_role("button", name="OK").click()
+    expect(page.locator(".chathead strong")).to_have_text("Phone")
+
+
 def test_notifications_show_sender_and_content(web, dora, tmp_path):
     page = web.page
     page.evaluate(NOTIFICATIONS)

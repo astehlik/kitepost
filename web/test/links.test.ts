@@ -9,7 +9,7 @@ test('finds links with a scheme', () => {
     { text: 'see ' }, { text: 'https://example.org/a?b=1#c', href: 'https://example.org/a?b=1#c' }, { text: ' now' },
   ]);
   assert.deepEqual(links('HTTP://Example.org and http://x.test'), ['HTTP://Example.org', 'http://x.test']);
-  assert.deepEqual(links('www.example.org example.org mailto:a@b.c ftp://x.test'), []);
+  assert.deepEqual(links('www.example.org example.org ftp://x.test'), []);
 });
 
 test('never links other schemes', () => {
@@ -48,4 +48,12 @@ test('marks addresses that can imitate others', () => {
   assert.equal(user.suspicious, true);
   assert.equal(new URL(user.href!).hostname, 'evil.test');
   assert.equal(splitLinks('https://example.org')[0].suspicious, undefined);
+});
+
+test('links email addresses', () => {
+  assert.deepEqual(splitLinks('write to bob.b+x@example.org.'), [
+    { text: 'write to ' }, { text: 'bob.b+x@example.org', href: 'mailto:bob.b+x@example.org', addr: 'bob.b+x@example.org' }, { text: '.' },
+  ]);
+  assert.deepEqual(links('(abcdefghi@_chatmail.test), mailto:a@b.cd and jörg@straße.de'), ['abcdefghi@_chatmail.test', 'a@b.cd', 'jörg@straße.de']);
+  assert.deepEqual(links('@name, a@b, a@.org, .a@b.org, a..b@c.org, see https://bank.example@evil.test/'), ['https://bank.example@evil.test/']);
 });

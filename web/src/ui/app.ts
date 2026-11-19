@@ -695,7 +695,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       originView(m),
       quoteView(chat, m),
       ...m.attachments.map(a => attachmentView(a, urls)),
-      m.text ? h('div', { class: 'text' }, ...linkified(m.text)) : null,
+      m.text ? h('div', { class: 'text' }, ...linkified(m.text, openAddress)) : null,
       h('div', { class: 'meta' }, m.ephemeralTimer ? metaMark(ICONS.timer, 'mark.ephemeral') : null, savedMark(m), m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
       counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
         type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
@@ -1219,6 +1219,19 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     ]);
   }
 
+  /** A known contact's address offers a chat, others open the mail program. */
+  function openAddress(addr: string, ev: Event) {
+    const lower = addr.toLowerCase();
+    const c = [...client.contacts.values()].find(c => c.publicKey && c.addr === lower && c.fingerprint !== client.config.fingerprint);
+    if (!c) return;
+    ev.preventDefault();
+    const name = client.contactName(c.fingerprint);
+    dialog(name, h('p', {}, t('contacts.chatWith', { name })), [
+      { label: t('cancel') },
+      { label: t('ok'), primary: true, onClick: async () => c.blocked ? showContact(c.fingerprint) : open(await client.chatWith(c.fingerprint)) },
+    ]);
+  }
+
   function showContact(fp: string, from?: string | GroupView) {
     view = { contact: fp, from };
     current = undefined;
@@ -1654,8 +1667,10 @@ function newChatView(client: DcClient, open: (id: string) => void, profile: (fp:
   return { el, refresh };
 }
 
-function linkified(text: string): (string | Node)[] {
-  return splitLinks(text).map(({ text, href, suspicious }) => !href ? text : h('a', {
+function linkified(text: string, onAddress?: (addr: string, ev: Event) => void): (string | Node)[] {
+  return splitLinks(text).map(({ text, href, addr, suspicious }) => !href ? text : addr ? h('a', {
+    class: 'link', href, onclick: onAddress && (ev => onAddress(addr, ev)),
+  }, text) : h('a', {
     class: 'link', href, target: '_blank', rel: 'noopener noreferrer',
     onclick: suspicious ? ev => { ev.preventDefault(); confirmLink(href); } : undefined,
   }, text));
