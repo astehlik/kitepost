@@ -116,6 +116,20 @@ def test_profile_and_deletion_from_contact_list(web, dora):
     expect(page.locator(".msg.in", has_text="still in our chat")).to_be_visible()
 
 
+def test_delete_contact_from_profile(web, dora):
+    page = web.page
+    open_chat(page, "Dora")
+    profile = open_profile(page)
+    profile.get_by_role("button", name="Delete contact").click()
+    page.locator("dialog", has_text="Delete this contact?").get_by_role("button", name="Delete contact").click()
+    expect(profile).to_have_count(0)
+    expect(page.locator(".chathead strong")).to_have_text("Dora")
+    expect(open_profile(page).get_by_role("button", name="Delete contact")).to_have_count(0)
+
+    page.get_by_role("button", name="New chat").click()
+    expect(page.locator(".new-chat li[data-contact]", has_text="Dora")).to_have_count(0)
+
+
 def test_contact_avatars(web, dora, tmp_path):
     page = web.page
     (tmp_path / "dora.png").write_bytes(solid_png(64, 64))

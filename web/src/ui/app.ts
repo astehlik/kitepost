@@ -1774,6 +1774,10 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
     { label: t('cancel') },
     { label: t(c.blocked ? 'contact.unblock' : 'contact.block'), primary: true, onClick: () => client.setBlocked(fp, !c.blocked) },
   ]);
+  const confirmDelete = () => dialog(name, h('p', {}, t('contact.deleteAsk')), [
+    { label: t('cancel') },
+    { label: t('contact.delete'), primary: true, onClick: async () => { await client.deleteContact(fp); close(); } },
+  ]);
   const section = (title: string, ...content: (Node | null)[]) => h('section', {}, h('h3', {}, title), ...content);
   const relays = [...new Set([c.addr, ...c.relays])];
   // The nickname is saved on blur, i.e. by this click; close only once it is stored.
@@ -1803,7 +1807,9 @@ function contactView(client: DcClient, fp: string, open: (id: string) => void, c
         h('p', {}, t(c.blocked ? 'contact.blockedText' : 'contact.blockText')),
         h('div', { class: 'row' }, h('button', { class: c.blocked ? '' : 'danger', onclick: confirmBlock }, t(c.blocked ? 'contact.unblock' : 'contact.block')))),
       chat ? clearChatSection(client, chat) : null,
-      chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), close) : null));
+      chat ? deleteChatSection(client, chat, t('chat.deleteKeepContact', { name }), close) : null,
+      c.hidden ? null : section(t('contact.delete'), h('p', {}, t('contact.deleteText')),
+        h('div', { class: 'row' }, h('button', { class: 'danger', onclick: confirmDelete }, t('contact.delete'))))));
 }
 
 /** Sends the contact to a chat, or to a contact without one yet, like Delta Chat's "Share contact". */
