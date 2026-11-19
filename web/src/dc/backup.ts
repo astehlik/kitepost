@@ -2,7 +2,7 @@ import { t } from '../i18n';
 import type { Database, SqlValue } from 'sql.js';
 import type { AttachmentData } from '../wasm';
 import { avatarDataUrl } from './avatar';
-import { SELF_CHAT, type AuthToken, type Chat, type Contact, type Message, type MessageState } from './types';
+import { SELF_CHAT, type AuthToken, type Chat, type Contact, type Message, type MessageState, type Relay } from './types';
 
 // Reads an unencrypted Delta Chat backup (`delta-chat-backup-*.tar`, see core src/imex.rs).
 
@@ -33,6 +33,10 @@ export interface BackupProfile {
   publicKey: string;
   fingerprint: string;
   relays: string[];
+  addedAt: number;
+  /** The relays besides `addr`, and those removed, like core's transports and removed_transports. */
+  extraRelays: Relay[];
+  removedRelays: { addr: string; at: number }[];
   inviteNumber?: string;
   uidValidity: number;
   lastUid: number;
@@ -140,6 +144,17 @@ const str = (v: SqlValue) => (v == null ? '' : String(v));
 const num = (v: SqlValue) => Number(v ?? 0);
 const isIp = (host: string) => /^[\d.]+$|:/.test(host);
 
+/** A relay from core's login parameters, as stored in the transports table and sent in sync messages. */
+export function relayFromCore(entered: unknown, configured: unknown, addedAt: number): Relay | undefined {
+  const c = configured as { addr?: unknown; imap?: { connection?: { host?: unknown } }[]; imap_password?: unknown } | null;
+  if (typeof c?.addr !== 'string' || typeof c.imap_password !== 'string' || !Array.isArray(c.imap) || !c.imap.length) return undefined;
+  const addr = c.addr.toLowerCase();
+  const imapHost = c.imap[0]?.connection?.host;
+  // Core may have connected to an IP address; the bridge and TLS need the name.
+  const host = typeof imapHost === 'string' && imapHost && !isIp(imapHost) ? imapHost : addr.split('@')[1];
+  return { addr, password: c.imap_password, host, addedAt, uidValidity: 0, lastUid: 0, entered, configured };
+}
+
 function messageState(state: number, incoming: boolean): MessageState {
   if (incoming) return 'received';
   if (state === 28) return 'read';
@@ -181,7 +196,7 @@ export async function readBackup(
     const addr = (config.get('configured_addr') ?? '').toLowerCase();
     if (!addr || config.get('configured') !== '1') throw new Error(t('backup.notConfigured'));
 
-    const transports = rows(db, 'SELECT id, addr, configured_param, is_published FROM transports');
+    const transports = rows(db, 'SELECT id, addr, entered_param, configured_param, add_timestamp, is_published FROM transports');
     const transport = transports.find(t => str(t.addr).toLowerCase() === addr);
     if (!transport) throw new Error(t('backup.noLogin', { addr }));
     const login = JSON.parse(str(transport.configured_param));
@@ -195,7 +210,26 @@ export async function readBackup(
     const secretKey = toBase64(keyRow.private_key as Uint8Array);
     const self = importKey(secretKey, addr, relays.length ? relays : [addr]);
 
-    const sync = rows(db, 'SELECT uidvalidity, uid_next FROM imap_sync WHERE transport_id = ? AND folder = ?', [num(transport.id), 'INBOX'])[0];
+    const inbox = (id: number) => rows(db, 'SELECT uidvalidity, uid_next FROM imap_sync WHERE transport_id = ? AND folder = ?', [id, 'INBOX'])[0];
+    const sync = inbox(num(transport.id));
+    const json = (v: SqlValue) => {
+      try {
+        return JSON.parse(str(v));
+      } catch {
+        return undefined;
+      }
+    };
+    const extraRelays = transports.filter(r => r !== transport && num(r.is_published)).flatMap(r => {
+      const relay = relayFromCore(json(r.entered_param), json(r.configured_param), num(r.add_timestamp));
+      const state = inbox(num(r.id));
+      return relay ? [{ ...relay, uidValidity: num(state?.uidvalidity), lastUid: Math.max(0, num(state?.uid_next) - 1) }] : [];
+    });
+    let removedRelays: { addr: string; at: number }[] = [];
+    try {
+      removedRelays = rows(db, 'SELECT addr, remove_timestamp FROM removed_transports').map(r => ({ addr: str(r.addr).toLowerCase(), at: num(r.remove_timestamp) }));
+    } catch {
+      // Backups from before multi-relay have no such table.
+    }
 
     progress(t('backup.contacts'));
     const fpById = new Map<number, string>([[CONTACT_SELF, 'self']]);
@@ -332,7 +366,7 @@ export async function readBackup(
     const tokens = rows(db, 'SELECT namespc, foreign_key, token, timestamp FROM tokens ORDER BY timestamp');
     return {
       addr, password, host, displayName: config.get('displayname') ?? '', avatar, secretKey: self.secret, publicKey: self.public,
-      fingerprint: self.fingerprint, relays,
+      fingerprint: self.fingerprint, relays, addedAt: num(transport.add_timestamp), extraRelays, removedRelays,
       inviteNumber: tokens.filter(t => num(t.namespc) === 100 && !str(t.foreign_key)).pop()?.token as string | undefined,
       uidValidity: num(sync?.uidvalidity),
       lastUid: Math.max(0, num(sync?.uid_next) - 1),

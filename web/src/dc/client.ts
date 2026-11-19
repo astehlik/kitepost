@@ -2,16 +2,16 @@ import { getLanguage, t, type Key } from '../i18n';
 import { ImapClient } from '../net/imap';
 import { SmtpClient, SmtpError } from '../net/smtp';
 import type { Store } from '../store';
-import type { BackupProfile } from './backup';
+import { relayFromCore, type BackupProfile } from './backup';
 import { backupFileName, buildBackup } from './backup-export';
 import {
-  generateKeypair, parseMessage, publicKeyInfo, renderMessage,
+  generateKeypair, importKeypair, parseMessage, publicKeyInfo, renderMessage,
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
 } from '../wasm';
 import { avatarBase64, avatarDataUrl, avatarHeader, parseAvatarHeader } from './avatar';
 import { buildContactInvite, buildGroupInvite, parseInvite, type Invite } from './invite';
 import { makeVcard, type VcardContact } from './vcard';
-import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message } from './types';
+import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type BobState, type Chat, type Config, type Contact, type Message, type Relay, type ServerUid } from './types';
 
 const RESEND_AVATAR_MS = 14 * 86_400_000;
 
@@ -95,12 +95,15 @@ export class DcClient extends EventTarget {
   private tokens = new Map<string, AuthToken>();
   private bob = new Map<string, BobState>();
   private seen = new Set<string>();
-  private seenQueue = new Set<number>();
-  private deleteQueue = new Set<number>();
+  /** UIDs per relay address that still need `\Seen` or deleting on the server. */
+  private seenQueue = new Map<string, Set<number>>();
+  private deleteQueue = new Map<string, Set<number>>();
   private ephemeralTimeout: ReturnType<typeof setTimeout> | undefined;
-  private currentUid: number | undefined;
+  private current: ServerUid | undefined;
+  private receiving: Promise<unknown> = Promise.resolve();
   private abort: AbortController | undefined;
-  private wakeImap: (() => void) | undefined;
+  private loops = new Map<string, AbortController>();
+  private wakers = new Set<() => void>();
   status = 'offline';
 
   private constructor(private store: Store, public config: Config) {
@@ -122,6 +125,7 @@ export class DcClient extends EventTarget {
       addr, password: p.password, imapHost: domain, smtpHost: domain,
       displayName: cleanName(p.displayName), secretKey: keys.secret, publicKey: keys.public,
       fingerprint: keys.fingerprint, inviteNumber: createId(), uidValidity: 0, lastUid: 0, bridgeUrl: p.bridgeUrl,
+      addedAt: Math.floor(Date.now() / 1000),
     };
     await store.put('config', config);
     const client = new DcClient(store, config);
@@ -140,6 +144,7 @@ export class DcClient extends EventTarget {
       addr: b.addr, password: b.password, imapHost: b.host, smtpHost: b.host, displayName: cleanName(b.displayName), avatar: b.avatar,
       secretKey: b.secretKey, publicKey: b.publicKey, fingerprint: b.fingerprint,
       inviteNumber: b.inviteNumber ?? createId(), uidValidity: b.uidValidity, lastUid: b.lastUid, bridgeUrl, bccSelf: true, secured: true,
+      addedAt: b.addedAt, relays: b.extraRelays, removedRelays: b.removedRelays,
     };
     for (const c of b.contacts) await store.put(`contact/${c.fingerprint}`, c);
     for (const c of b.chats) await store.put(`chat/${c.id}`, c);
@@ -166,8 +171,12 @@ export class DcClient extends EventTarget {
     }
     for (const list of c.messages.values()) list.sort(byChatOrder);
     for (const id of (await store.get<string[]>('seen')) ?? []) c.seen.add(id);
-    for (const uid of (await store.get<number[]>('seenQueue')) ?? []) c.seenQueue.add(uid);
-    for (const uid of (await store.get<number[]>('deleteQueue')) ?? []) c.deleteQueue.add(uid);
+    for (const key of ['seenQueue', 'deleteQueue'] as const) {
+      // Before several relays, the queue was a list for the own address.
+      const stored = await store.get<number[] | Record<string, number[]>>(key);
+      const byRelay = Array.isArray(stored) ? { [config.addr]: stored } : stored ?? {};
+      for (const [addr, uids] of Object.entries(byRelay)) c[key].set(addr, new Set(uids));
+    }
     // Kitepost has no contact list to start a chat with oneself, so "Saved messages" always exists.
     await c.selfChat();
     return c;
@@ -218,7 +227,7 @@ export class DcClient extends EventTarget {
       ephemeralTimer: timer,
       // Own messages from other devices count as seen, like core's OutDelivered.
       ephemeralAt: own ? Date.now() + timer * 1000 : undefined,
-      serverUid: this.currentUid ? { uid: this.currentUid, validity: this.config.uidValidity } : undefined,
+      serverUid: this.current,
     };
   }
 
@@ -230,6 +239,42 @@ export class DcClient extends EventTarget {
 
   private async saveConfig() {
     await this.store.put('config', this.config);
+  }
+
+  /** All addresses of the profile, like core's get_self_addrs(); the first one sends. */
+  selfAddrs(): string[] {
+    return [this.config.addr, ...(this.config.relays ?? []).map(r => r.addr)];
+  }
+
+  isSelfAddr(addr: string): boolean {
+    return this.selfAddrs().some(a => addrEq(a, addr));
+  }
+
+  /** The login and INBOX state of one of the profile's relays. */
+  private mailbox(addr: string): Relay | undefined {
+    const c = this.config;
+    if (addrEq(addr, c.addr)) {
+      return {
+        addr: c.addr, password: c.password, host: c.imapHost, addedAt: c.addedAt ?? 0,
+        get uidValidity() { return c.uidValidity; }, set uidValidity(v) { c.uidValidity = v; },
+        get lastUid() { return c.lastUid; }, set lastUid(v) { c.lastUid = v; },
+      };
+    }
+    return c.relays?.find(r => addrEq(r.addr, addr));
+  }
+
+  /** Queues `at` for `\Seen` or deletion if its mailbox still has the same UIDs. */
+  private queueUid(queue: Map<string, Set<number>>, at: ServerUid): boolean {
+    const box = this.mailbox(at.relay ?? this.config.addr);
+    if (!box || box.uidValidity !== at.validity) return false;
+    const uids = queue.get(box.addr) ?? new Set();
+    uids.add(at.uid);
+    queue.set(box.addr, uids);
+    return true;
+  }
+
+  private async saveQueue(key: 'seenQueue' | 'deleteQueue') {
+    await this.store.put(key, Object.fromEntries([...this[key]].map(([addr, uids]) => [addr, [...uids]])));
   }
 
   private messageById(id: string): Message | undefined {
@@ -528,12 +573,12 @@ export class DcClient extends EventTarget {
     const read: Message[] = [];
     for (const m of this.messages.get(chatId) ?? []) {
       if (!m.unseenUid) continue;
-      if (m.unseenUid.validity === this.config.uidValidity) this.seenQueue.add(m.unseenUid.uid);
+      this.queueUid(this.seenQueue, m.unseenUid);
       await this.saveMessage({ ...m, unseenUid: undefined, wantsMdn: undefined });
       read.push(m);
     }
     if (!read.length) return;
-    await this.store.put('seenQueue', [...this.seenQueue]);
+    await this.saveQueue('seenQueue');
     this.poke();
 
     // Like core's markseen_msgs(): a receipt to each sender who asked for one, copied to the own
@@ -1220,7 +1265,7 @@ export class DcClient extends EventTarget {
         .map(t => ({ id: `auth:${t.token}`, secret: `securejoin/${this.config.fingerprint}/${t.token}`, expected_signer: null })),
     ];
     return {
-      self_addrs: [this.config.addr],
+      self_addrs: this.selfAddrs(),
       self_secret_key: this.config.secretKey,
       self_public_key: this.config.publicKey,
       symmetric_secrets: secrets,
@@ -1228,8 +1273,21 @@ export class DcClient extends EventTarget {
     };
   }
 
-  /** Processes one raw message. Returns true if it should be deleted from the server. */
-  async receive(raw: Uint8Array): Promise<boolean> {
+  /** Processes one raw message found at `at`, one at a time. Returns true if it should be deleted from the server. */
+  receive(raw: Uint8Array, at?: ServerUid): Promise<boolean> {
+    const result = this.receiving.then(async () => {
+      this.current = at;
+      try {
+        return await this.receiveOne(raw);
+      } finally {
+        this.current = undefined;
+      }
+    });
+    this.receiving = result.catch(() => undefined);
+    return result;
+  }
+
+  private async receiveOne(raw: Uint8Array): Promise<boolean> {
     let p: ParsedMessage;
     try {
       p = parseMessage(raw, this.parseContext());
@@ -1241,11 +1299,11 @@ export class DcClient extends EventTarget {
     if (mid && this.seen.has(mid)) {
       // The copy of an own disappearing message, which has to go from the server as well.
       const own = this.messageById(mid);
-      if (own?.ephemeralTimer && !own.serverUid && this.currentUid) await this.saveMessage({ ...own, serverUid: { uid: this.currentUid, validity: this.config.uidValidity } });
+      if (own?.ephemeralTimer && !own.serverUid && this.current) await this.saveMessage({ ...own, serverUid: this.current });
     }
     if (!mid || this.seen.has(mid)) return false;
     await this.markSeen(mid);
-    if (addrEq(p.from.addr, this.config.addr)) {
+    if (this.isSelfAddr(p.from.addr)) {
       await this.receiveOwn(p, mid);
       return false;
     }
@@ -1331,11 +1389,11 @@ export class DcClient extends EventTarget {
       }
       const name = cleanName(p.headers['chat-group-name'] ?? '');
       if (name) chat.name = name;
-      if (p.headers['chat-group-member-removed'] && addrEq(p.headers['chat-group-member-removed'], this.config.addr)) chat.left = true;
+      if (p.headers['chat-group-member-removed'] && this.isSelfAddr(p.headers['chat-group-member-removed'])) chat.left = true;
       this.applyGroupAvatar(chat, p);
       await this.saveChat(chat);
     } else {
-      const toSelf = p.recipients.length > 0 && p.recipients.every(r => addrEq(r.addr, this.config.addr));
+      const toSelf = p.recipients.length > 0 && p.recipients.every(r => this.isSelfAddr(r.addr));
       const fp = p.intended_recipients.find(f => f !== this.config.fingerprint && this.contacts.get(f)?.publicKey)
         ?? this.recipientFingerprints(p).find(f => f !== this.config.fingerprint);
       if (toSelf) chat = await this.selfChat();
@@ -1386,7 +1444,67 @@ export class DcClient extends EventTarget {
         if (orig && savable(orig) && !this.savedCopy(orig)) await this.copyToSelf(orig, save.dest);
       }
       for (const id of del?.msgs ?? []) await this.deleteLocally(id);
+      const transports = data?.Transports as { transports?: unknown; removed_transports?: unknown } | undefined;
+      if (transports) await this.applyRelays(transports.transports, transports.removed_transports);
     }
+  }
+
+  /** Like core's sync_transports(): relays another device added or removed. */
+  private async applyRelays(added: unknown, removed: unknown) {
+    const c = this.config;
+    const before = this.selfAddrs().join();
+    const relays = [...c.relays ?? []];
+    const tombstones = [...c.removedRelays ?? []];
+    const removals: { addr: string; at: number }[] = [];
+    for (const r of Array.isArray(removed) ? removed as { addr?: unknown; timestamp?: unknown }[] : []) {
+      if (typeof r?.addr === 'string' && typeof r.timestamp === 'number') removals.push({ addr: r.addr.toLowerCase(), at: r.timestamp });
+    }
+    for (const d of Array.isArray(added) ? added as { entered?: unknown; configured?: unknown; timestamp?: unknown; is_published?: unknown }[] : []) {
+      const relay = typeof d?.timestamp === 'number' ? relayFromCore(d.entered, d.configured, d.timestamp) : undefined;
+      if (!relay) continue;
+      if (d.is_published === false) {
+        removals.push({ addr: relay.addr, at: relay.addedAt });
+        continue;
+      }
+      // Removal wins a tie, like in core.
+      if (tombstones.some(r => r.addr === relay.addr && r.at >= relay.addedAt) || addrEq(relay.addr, c.addr)) continue;
+      const known = relays.find(r => r.addr === relay.addr);
+      if (!known) relays.push(relay);
+      else if (relay.addedAt > known.addedAt) Object.assign(known, { password: relay.password, host: relay.host, addedAt: relay.addedAt, entered: relay.entered, configured: relay.configured });
+    }
+    let promoted = false;
+    for (const { addr, at } of removals) {
+      const tombstone = tombstones.find(r => r.addr === addr);
+      if (!tombstone) tombstones.push({ addr, at });
+      else tombstone.at = Math.max(tombstone.at, at);
+      // Removing the last relay would leave the profile without one, as in core.
+      if (!relays.length) continue;
+      if (addrEq(addr, c.addr) && (c.addedAt ?? 0) <= at) {
+        const next = relays.shift()!;
+        Object.assign(c, { addr: next.addr, password: next.password, imapHost: next.host, smtpHost: next.host, addedAt: next.addedAt, uidValidity: next.uidValidity, lastUid: next.lastUid });
+        promoted = true;
+      } else {
+        const i = relays.findIndex(r => r.addr === addr && r.addedAt <= at);
+        if (i >= 0) relays.splice(i, 1);
+      }
+    }
+    c.relays = relays;
+    c.removedRelays = tombstones;
+    if (this.selfAddrs().join() !== before) {
+      // Like core, the own key lists every relay for contacts to write to.
+      c.publicKey = importKeypair(c.secretKey, c.addr, this.selfAddrs()).public;
+      for (const key of ['seenQueue', 'deleteQueue'] as const) {
+        for (const addr of this[key].keys()) if (!this.isSelfAddr(addr)) this[key].delete(addr);
+        await this.saveQueue(key);
+      }
+      if (promoted) {
+        for (const loop of this.loops.values()) loop.abort();
+        this.loops.clear();
+      }
+      this.startLoops();
+    }
+    await this.saveConfig();
+    this.changed('config');
   }
 
   private async deleteLocally(id: string) {
@@ -1489,7 +1607,7 @@ export class DcClient extends EventTarget {
       id: mid, chatId: chat.id, from, text: p.text, timestamp: this.timestamp(p),
       quote: p.quote ?? undefined, replyTo: p.quote !== null ? stripMid(p.headers['in-reply-to']) || undefined : undefined,
       state: own ? 'sent' : 'received', attachments: p.attachments, reactions: {},
-      unseenUid: !own && this.currentUid ? { uid: this.currentUid, validity: this.config.uidValidity } : undefined,
+      unseenUid: own ? undefined : this.current,
       wantsMdn: !own && p.encrypted && !!p.headers['chat-disposition-notification-to'] || undefined,
       ...this.ephemeralFields(p, own),
     });
@@ -1521,7 +1639,7 @@ export class DcClient extends EventTarget {
     const removed = p.headers['chat-group-member-removed'];
     const added = p.headers['chat-group-member-added'];
     // groupChat() reports changes made by others.
-    if (removed) return own ? t(addrEq(removed, this.config.addr) ? 'info.youLeft' : 'info.youRemoved', { addr: removed }) : null;
+    if (removed) return own ? t(this.isSelfAddr(removed) ? 'info.youLeft' : 'info.youRemoved', { addr: removed }) : null;
     if (added) return own ? t('info.youAdded', { addr: added }) : null;
     const oldName = p.headers['chat-group-name-changed'];
     if (oldName !== undefined) return say('info.groupName', 'info.youGroupName', { old: cleanName(oldName), new: cleanName(p.headers['chat-group-name'] ?? '') });
@@ -1544,7 +1662,7 @@ export class DcClient extends EventTarget {
     const added = p.headers['chat-group-member-added'];
     let chat = this.groupByGrpid(grpid);
     if (!chat) {
-      if (removed && addrEq(removed, this.config.addr)) return undefined;
+      if (removed && this.isSelfAddr(removed)) return undefined;
       chat = {
         id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name'] ?? '') || t('group.default'), grpid,
         members: [], isRequest: !this.isAccepted(sender), left: false, lastActivity: Date.now(), unread: 0,
@@ -1552,11 +1670,11 @@ export class DcClient extends EventTarget {
     }
     const isNew = !this.chats.has(chat.id);
     const senderIsMember = chat.members.includes(sender.fingerprint);
-    if (isNew || senderIsMember || (added && addrEq(added, this.config.addr))) {
+    if (isNew || senderIsMember || (added && this.isSelfAddr(added))) {
       const members = new Set(this.recipientFingerprints(p).filter(fp => fp !== self && this.contacts.has(fp)));
       members.add(sender.fingerprint);
       if (removed) {
-        if (addrEq(removed, this.config.addr)) {
+        if (this.isSelfAddr(removed)) {
           chat.left = true;
           await this.addInfo(chat.id, t('info.removedYou', { name: this.contactName(sender.fingerprint) }));
         } else {
@@ -1566,7 +1684,7 @@ export class DcClient extends EventTarget {
         }
       }
       if (added) {
-        if (addrEq(added, this.config.addr)) {
+        if (this.isSelfAddr(added)) {
           chat.left = false;
           if (!p.headers['secure-join']) await this.addInfo(chat.id, t('info.addedYou', { name: this.contactName(sender.fingerprint) }));
         } else await this.addInfo(chat.id, t('info.added', { addr: added, name: this.contactName(sender.fingerprint) }));
@@ -1690,7 +1808,7 @@ export class DcClient extends EventTarget {
       }
       case 'vg-member-added': {
         const added = p.headers['chat-group-member-added'] ?? '';
-        if (addrEq(added, this.config.addr)) {
+        if (this.isSelfAddr(added)) {
           for (const b of [...this.bob.values()]) {
             if (b.stage === 'confirm' && b.invite.group?.grpid === p.headers['chat-group-id'] && p.signature === b.invite.fingerprint) {
               await this.finishBob(b, t('info.youJoined'));
@@ -1720,27 +1838,49 @@ export class DcClient extends EventTarget {
   start() {
     if (this.abort) return;
     this.abort = new AbortController();
-    void this.run(this.abort.signal);
+    this.startLoops();
     this.scheduleEphemeral();
   }
 
   stop() {
     this.abort?.abort();
     this.abort = undefined;
+    this.loops.clear();
     clearTimeout(this.ephemeralTimeout);
+  }
+
+  /** Like core's scheduler: one INBOX loop per relay. */
+  private startLoops() {
+    const signal = this.abort?.signal;
+    if (!signal) return;
+    const addrs = this.selfAddrs();
+    for (const [addr, loop] of this.loops) {
+      if (!addrs.includes(addr)) {
+        loop.abort();
+        this.loops.delete(addr);
+      }
+    }
+    for (const addr of addrs.filter(a => !this.loops.has(a))) {
+      const loop = new AbortController();
+      signal.addEventListener('abort', () => loop.abort(), { once: true });
+      this.loops.set(addr, loop);
+      void this.run(addr, loop.signal);
+    }
   }
 
   /** Interrupts IDLE so new messages are fetched immediately. */
   poke() {
-    this.wakeImap?.();
+    for (const wake of this.wakers) wake();
   }
 
-  private async flushDeletes(imap: ImapClient) {
-    if (!this.deleteQueue.size) return;
-    const uids = [...this.deleteQueue].sort((a, b) => a - b);
-    await imap.deleteUids(uids);
-    for (const uid of uids) this.deleteQueue.delete(uid);
-    await this.store.put('deleteQueue', [...this.deleteQueue]);
+  private async flushQueue(imap: ImapClient, addr: string, key: 'seenQueue' | 'deleteQueue') {
+    const queued = this[key].get(addr);
+    if (!queued?.size) return;
+    const uids = [...queued].sort((a, b) => a - b);
+    if (key === 'seenQueue') await imap.markSeen(uids);
+    else await imap.deleteUids(uids);
+    for (const uid of uids) queued.delete(uid);
+    await this.saveQueue(key);
   }
 
   /** Like core's ephemeral_loop: wakes up for the next message that expires. */
@@ -1758,12 +1898,13 @@ export class DcClient extends EventTarget {
   private async deleteExpired() {
     const now = Date.now();
     const expired = [...this.messages.values()].flat().filter(m => m.ephemeralAt && m.ephemeralAt <= now);
+    let queued = false;
     for (const m of expired) {
-      if (m.serverUid?.validity === this.config.uidValidity) this.deleteQueue.add(m.serverUid.uid);
+      if (m.serverUid) queued = this.queueUid(this.deleteQueue, m.serverUid) || queued;
       await this.deleteLocally(m.id);
     }
-    if (expired.some(m => m.serverUid)) {
-      await this.store.put('deleteQueue', [...this.deleteQueue]);
+    if (queued) {
+      await this.saveQueue('deleteQueue');
       this.poke();
     }
     this.scheduleEphemeral();
@@ -1798,7 +1939,7 @@ export class DcClient extends EventTarget {
       const content = p.headers['chat-content'];
       const mid = stripMid(p.headers['message-id']);
       if ((content !== 'message-pinned' && content !== 'message-unpinned') || !mid || !p.encrypted || !p.signature) return;
-      const own = addrEq(p.from.addr, this.config.addr);
+      const own = this.isSelfAddr(p.from.addr);
       if (own ? p.signature !== this.config.fingerprint : !this.contacts.get(p.signature)) return;
       found.push({ p, mid, from: own ? 'self' : p.signature });
     });
@@ -1873,68 +2014,59 @@ export class DcClient extends EventTarget {
     }
   }
 
-  private async flushSeen(imap: ImapClient) {
-    if (!this.seenQueue.size) return;
-    const uids = [...this.seenQueue].sort((a, b) => a - b);
-    await imap.markSeen(uids);
-    for (const uid of uids) this.seenQueue.delete(uid);
-    await this.store.put('seenQueue', [...this.seenQueue]);
-  }
-
-  private async run(signal: AbortSignal) {
+  private async run(addr: string, signal: AbortSignal) {
     let backoff = 2000;
+    const main = () => addrEq(addr, this.config.addr);
     while (!signal.aborted) {
+      const box = this.mailbox(addr);
+      if (!box) return;
       let imap: ImapClient | undefined;
       try {
-        this.setStatus('connecting');
-        imap = await ImapClient.connect(this.config.bridgeUrl, this.config.imapHost);
-        await imap.login(this.config.addr, this.config.password);
+        if (main()) this.setStatus('connecting');
+        imap = await ImapClient.connect(this.config.bridgeUrl, box.host);
+        await imap.login(box.addr, box.password);
         const sel = await imap.select('INBOX');
-        if (sel.uidValidity !== this.config.uidValidity) {
-          this.config.uidValidity = sel.uidValidity;
-          this.config.lastUid = 0;
-          this.seenQueue.clear();
+        if (sel.uidValidity !== box.uidValidity) {
+          box.uidValidity = sel.uidValidity;
+          box.lastUid = 0;
+          this.seenQueue.delete(addr);
+          this.deleteQueue.delete(addr);
           await this.saveConfig();
         }
-        this.setStatus('connected');
+        if (main()) this.setStatus('connected');
         backoff = 2000;
-        if (!this.config.pinsRepaired) await this.repairPins(imap);
+        if (main() && !this.config.pinsRepaired) await this.repairPins(imap);
         while (!signal.aborted) {
           const toDelete: number[] = [];
-          await this.flushSeen(imap);
-          await this.flushDeletes(imap);
-          await imap.fetchNewer(this.config.lastUid, async m => {
-            this.currentUid = m.uid;
-            try {
-              if (await this.receive(m.body)) toDelete.push(m.uid);
-            } finally {
-              this.currentUid = undefined;
-            }
-            this.config.lastUid = Math.max(this.config.lastUid, m.uid);
+          await this.flushQueue(imap, addr, 'seenQueue');
+          await this.flushQueue(imap, addr, 'deleteQueue');
+          await imap.fetchNewer(box.lastUid, async m => {
+            if (await this.receive(m.body, { uid: m.uid, validity: box.uidValidity, relay: box.addr })) toDelete.push(m.uid);
+            box.lastUid = Math.max(box.lastUid, m.uid);
             await this.saveConfig();
           });
           await imap.deleteUids(toDelete);
           const idleAbort = new AbortController();
           const onAbort = () => idleAbort.abort();
           signal.addEventListener('abort', onAbort, { once: true });
-          this.wakeImap = onAbort;
+          this.wakers.add(onAbort);
           try {
             await imap.idle(idleAbort.signal);
           } finally {
             signal.removeEventListener('abort', onAbort);
-            this.wakeImap = undefined;
+            this.wakers.delete(onAbort);
           }
         }
         await imap.logout();
       } catch (e) {
         imap?.close();
         if (signal.aborted) break;
-        console.warn('IMAP error', e);
-        this.setStatus(`offline: ${e instanceof Error ? e.message : String(e)}`);
+        console.warn('IMAP error', addr, e);
+        if (main()) this.setStatus(`offline: ${e instanceof Error ? e.message : String(e)}`);
         await sleep(backoff, signal);
         backoff = Math.min(backoff * 2, 60_000);
       }
     }
-    this.setStatus('offline');
+    if (main()) this.setStatus('offline');
   }
 }

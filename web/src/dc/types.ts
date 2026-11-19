@@ -1,5 +1,26 @@
 import type { AttachmentData } from '../wasm';
 
+/** A further relay of the profile, like a row of core's `transports` table. */
+export interface Relay {
+  addr: string;
+  password: string;
+  host: string;
+  /** Seconds, like core's add_timestamp, which removals from other devices are compared with. */
+  addedAt: number;
+  uidValidity: number;
+  lastUid: number;
+  /** Core's login parameters as received, for backups. */
+  entered?: unknown;
+  configured?: unknown;
+}
+
+/** Where a mail lies on the server; `relay` is unset for the profile's own address. */
+export interface ServerUid {
+  uid: number;
+  validity: number;
+  relay?: string;
+}
+
 export interface Config {
   addr: string;
   password: string;
@@ -29,6 +50,11 @@ export interface Config {
   /** Last time a message from the own address came with another key, and when the warning was hidden. */
   foreignKeyAt?: number;
   foreignKeyHiddenAt?: number;
+  /** When the own address was added as a relay, in seconds; see `Relay.addedAt`. */
+  addedAt?: number;
+  relays?: Relay[];
+  /** Like core's removed_transports: address and removal time in seconds. */
+  removedRelays?: { addr: string; at: number }[];
 }
 
 export interface Contact {
@@ -115,11 +141,11 @@ export interface Message {
   ephemeralTimer?: number;
   ephemeralAt?: number;
   /** INBOX UID of a disappearing message, to delete it on the server too. */
-  serverUid?: { uid: number; validity: number };
+  serverUid?: ServerUid;
   /** A copy in "Saved messages": the Message-ID of the original, like core's `starred` column. */
   savedFrom?: string;
   /** INBOX UID while `\Seen` still has to be set on the server. */
-  unseenUid?: { uid: number; validity: number };
+  unseenUid?: ServerUid;
   /** The sender asked for a read receipt (Chat-Disposition-Notification-To). */
   wantsMdn?: boolean;
 }

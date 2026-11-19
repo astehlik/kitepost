@@ -323,6 +323,8 @@ export const en = {
   'theme.light': 'Light',
   'theme.dark': 'Dark',
   'settings.chats': 'Chats and notifications',
+  'settings.relays': 'Relays',
+  'relays.hint': 'Your contacts write to all of these addresses, and Kitepost receives from all of them. You can add and remove relays in Delta Chat; the changes reach this browser.',
   'settings.devices': 'Backup and devices',
   'settings.browser': 'This browser',
   'export.title': 'Export backup',

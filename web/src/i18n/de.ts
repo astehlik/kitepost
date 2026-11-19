@@ -325,6 +325,8 @@ export const de: Record<keyof typeof en, string> = {
   'theme.light': 'Hell',
   'theme.dark': 'Dunkel',
   'settings.chats': 'Chats und Benachrichtigungen',
+  'settings.relays': 'Relays',
+  'relays.hint': 'Deine Kontakte schreiben an alle diese Adressen, und Kitepost empfängt über alle. Relays kannst du in Delta Chat hinzufügen und entfernen, die Änderungen erreichen diesen Browser.',
   'settings.devices': 'Backup und Geräte',
   'settings.browser': 'Dieser Browser',
   'export.title': 'Backup exportieren',

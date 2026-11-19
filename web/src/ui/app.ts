@@ -968,7 +968,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       return;
     }
     if (view === 'settings') {
-      const key = JSON.stringify([client.config.secured, canHandoff, client.config.displayName, client.config.avatarChangedAt]);
+      const key = JSON.stringify([client.config.secured, canHandoff, client.config.displayName, client.config.avatarChangedAt, client.selfAddrs()]);
       if (settings?.key === key && pane.contains(settings.el)) return;
       leaveChat();
       settings = { key, el: settingsView(client, () => startMain(client, undefined, true), () => { view = undefined; renderAll(); }) };
@@ -2053,6 +2053,9 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
         h('div', { class: 'profile-info' },
           h('small', {}, t('profile.address', { addr: client.config.addr })),
           h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))),
+      section(t('settings.relays'),
+        h('p', {}, t('relays.hint')),
+        h('ul', { class: 'relays' }, ...client.selfAddrs().map(a => h('li', {}, a)))),
       section(t('settings.appearance'),
         field(t('language'), lang),
         field(t('settings.theme'), theme),

@@ -2,7 +2,7 @@ import type { SqlValue } from 'sql.js';
 import schema from './backup-schema.sql?raw';
 import { openDatabase } from './backup';
 import { avatarBase64, avatarExtension } from './avatar';
-import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type Chat, type Config, type Contact, type Message } from './types';
+import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type Chat, type Config, type Contact, type Message, type Relay } from './types';
 
 // Writes a backup that Delta Chat imports with "Restore from backup" (see core src/imex.rs).
 // The schema is a fresh profile of core; core migrates it to its own version on import.
@@ -47,18 +47,18 @@ function params(entries: [string, string | number | undefined][]): string {
   return entries.filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${String(v).replaceAll('\n', '\n\n')}`).join('\n');
 }
 
-function loginParams(c: Config) {
-  const server = (host: string, port: number) => ({ connection: { host, port, security: 'Tls' }, user: c.addr });
+function loginParams(addr: string, password: string, host: string) {
+  const server = (port: number) => ({ connection: { host, port, security: 'Tls' }, user: addr });
   return {
     entered: {
-      addr: c.addr, oauth2: false, certificate_checks: 'Automatic',
-      imap: { server: c.imapHost, port: 993, folder: '', security: 'Ssl', user: '', password: c.password },
-      smtp: { server: c.smtpHost, port: 465, security: 'Ssl', user: '', password: '' },
+      addr, oauth2: false, certificate_checks: 'Automatic',
+      imap: { server: host, port: 993, folder: '', security: 'Ssl', user: '', password },
+      smtp: { server: host, port: 465, security: 'Ssl', user: '', password: '' },
     },
     configured: {
-      addr: c.addr, oauth2: false, certificate_checks: 'Strict',
-      imap: [server(c.imapHost, 993)], imap_user: '', imap_password: c.password,
-      smtp: [server(c.smtpHost, 465)], smtp_user: '', smtp_password: c.password,
+      addr, oauth2: false, certificate_checks: 'Strict',
+      imap: [server(993)], imap_user: '', imap_password: password,
+      smtp: [server(465)], smtp_user: '', smtp_password: password,
     },
   };
 }
@@ -135,13 +135,20 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
     }
     run('INSERT INTO keypairs (id, private_key, public_key, addr, is_default, created) VALUES (1, ?, ?, ?, 1, ?)',
       [fromBase64(config.secretKey), fromBase64(config.publicKey), config.addr, now]);
-    const login = loginParams(config);
-    run('INSERT INTO transports (id, addr, entered_param, configured_param, add_timestamp, is_published) VALUES (1, ?, ?, ?, ?, 1)',
-      [config.addr, JSON.stringify(login.entered), JSON.stringify(login.configured), now]);
-    if (config.uidValidity) {
-      run('INSERT INTO imap_sync (transport_id, folder, uidvalidity, uid_next, modseq) VALUES (1, ?, ?, ?, 0)',
-        ['INBOX', config.uidValidity, config.lastUid + 1]);
-    }
+    const relays: Relay[] = [
+      { addr: config.addr, password: config.password, host: config.imapHost, addedAt: config.addedAt ?? now, uidValidity: config.uidValidity, lastUid: config.lastUid },
+      ...config.relays ?? [],
+    ];
+    relays.forEach((r, i) => {
+      const login = loginParams(r.addr, r.password, r.host);
+      run('INSERT INTO transports (id, addr, entered_param, configured_param, add_timestamp, is_published) VALUES (?, ?, ?, ?, ?, 1)',
+        [i + 1, r.addr, JSON.stringify(r.entered ?? login.entered), JSON.stringify(r.configured ?? login.configured), r.addedAt || now]);
+      if (r.uidValidity) {
+        run('INSERT INTO imap_sync (transport_id, folder, uidvalidity, uid_next, modseq) VALUES (?, ?, ?, ?, 0)',
+          [i + 1, 'INBOX', r.uidValidity, r.lastUid + 1]);
+      }
+    });
+    for (const r of config.removedRelays ?? []) run('INSERT INTO removed_transports (addr, remove_timestamp) VALUES (?, ?)', [r.addr, r.at]);
 
     const contactIds = new Map<string, number>([['self', CONTACT_SELF]]);
     let nextId = FIRST_ID;

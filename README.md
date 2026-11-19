@@ -160,7 +160,9 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
   Message content is rendered as text only, and only PNG/JPEG/GIF/WebP images are displayed inline.
 - **Bridge**: only ports 993/465, only public IP addresses (it resolves first and connects to the
   checked IP, so DNS rebinding can't reach internal hosts), Origin check, per-IP connection limit,
-  optional host allowlist. Restrict it to your relay with `BRIDGE_ALLOWED_HOSTS`.
+  optional host allowlist. Restrict it to your relay with `BRIDGE_ALLOWED_HOSTS`. A profile with
+  several relays receives from each of them, so the list needs every relay your users add in
+  Delta Chat.
 - **Second device**: the backup is received end-to-end encrypted over iroh (QUIC), authenticated
   by the node id and token in the QR code; the relay only forwards ciphertext. The browser
   connects to the relay itself, so its origin must be allowed by the CSP: same-origin relays are
