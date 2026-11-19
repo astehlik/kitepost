@@ -1630,6 +1630,7 @@ function newChatView(client: DcClient, open: (id: string) => void, profile: (fp:
     rows: () => client.knownContacts().map(c => ({
       name: client.contactName(c.fingerprint), sub: c.addr, attrs: { 'data-contact': c.fingerprint },
       badge: avatar(client.contactName(c.fingerprint), c.addr, undefined, c.avatar), onclick: () => start(c.fingerprint),
+      extra: Object.assign(iconButton(ICONS.info, t('contact.viewProfile'), () => profile(c.fingerprint)), { className: 'icon-button' }),
     })),
     empty: () => t('contacts.empty'),
   });

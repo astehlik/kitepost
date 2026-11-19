@@ -21,7 +21,7 @@ def test_start_chat_from_contact_list(web, dora):
     contacts = page.locator(".new-chat li[data-contact]")
     expect(contacts).to_have_count(2)
     expect(contacts.first).to_contain_text("Phone")
-    contacts.filter(has_text="Phone").get_by_role("button").click()
+    contacts.filter(has_text="Phone").get_by_role("button").first.click()
     expect(page.locator("dialog")).to_have_count(0)
     expect(page.locator(".chathead strong")).to_have_text("Phone")
 
@@ -29,7 +29,7 @@ def test_start_chat_from_contact_list(web, dora):
     page.get_by_role("searchbox", name="Search contacts").fill("dor")
     expect(contacts).to_have_count(1)
     expect(page.locator(".new-chat").get_by_role("button", name="New group")).to_have_count(0)
-    contacts.get_by_role("button").click()
+    contacts.get_by_role("button").first.click()
     page.locator("dialog", has_text="Chat with Dora?").get_by_role("button", name="OK").click()
     expect(page.locator(".chathead strong")).to_have_text("Dora")
     web_send(page, "back again")
@@ -97,8 +97,7 @@ def test_profile_and_deletion_from_contact_list(web, dora):
     page.locator(".menu").get_by_role("menuitem", name="View profile").click()
     page.locator(".settings.contact").locator(".chathead :is(.back, .close):visible").click()
     expect(row).to_be_visible()
-    row.click(button="right")
-    page.locator(".menu").get_by_role("menuitem", name="View profile").click()
+    row.get_by_role("button", name="View profile").click()
     page.locator(".settings.contact").get_by_role("button", name="Send message").click()
     expect(page.locator(".chathead strong")).to_have_text("Dora")
 
