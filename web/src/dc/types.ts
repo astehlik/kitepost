@@ -154,6 +154,8 @@ export interface AuthToken {
   token: string;
   grpid: string;
   created: number;
+  /** Set for tokens another device created; Kitepost's own share `Config.inviteNumber`. */
+  invitenumber?: string;
 }
 
 export interface BobState {

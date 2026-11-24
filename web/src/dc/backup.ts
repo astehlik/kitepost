@@ -364,14 +364,19 @@ export async function readBackup(
     const selfAvatar = blobs.get((config.get('selfavatar') ?? '').split('/').pop()!);
     const avatar = selfAvatar && selfAvatar.size <= MAX_BLOB ? avatarDataUrl(toBase64(await readAt(selfAvatar.offset, selfAvatar.size))) : undefined;
     const tokens = rows(db, 'SELECT namespc, foreign_key, token, timestamp FROM tokens ORDER BY timestamp');
+    const inviteNumber = tokens.filter(t => num(t.namespc) === 100 && !str(t.foreign_key)).pop()?.token as string | undefined;
     return {
       addr, password, host, displayName: config.get('displayname') ?? '', avatar, secretKey: self.secret, publicKey: self.public,
       fingerprint: self.fingerprint, relays, addedAt: num(transport.add_timestamp), extraRelays, removedRelays,
-      inviteNumber: tokens.filter(t => num(t.namespc) === 100 && !str(t.foreign_key)).pop()?.token as string | undefined,
+      inviteNumber,
       uidValidity: num(sync?.uidvalidity),
       lastUid: Math.max(0, num(sync?.uid_next) - 1),
       contacts, chats, messages,
-      tokens: tokens.filter(t => num(t.namespc) === 110).map(t => ({ token: str(t.token), grpid: str(t.foreign_key), created: num(t.timestamp) * 1000 })),
+      tokens: tokens.filter(t => num(t.namespc) === 110).map(t => {
+        const grpid = str(t.foreign_key);
+        const number = tokens.filter(n => num(n.namespc) === 100 && str(n.foreign_key) === grpid).pop()?.token;
+        return { token: str(t.token), grpid, created: num(t.timestamp) * 1000, invitenumber: number && number !== inviteNumber ? str(number) : undefined };
+      }),
       seen: rows(db, "SELECT rfc724_mid FROM msgs WHERE rfc724_mid != '' ORDER BY id DESC LIMIT 2000").map(r => str(r.rfc724_mid)),
     };
   } finally {

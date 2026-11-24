@@ -165,7 +165,10 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
     }
 
     const tokens: [number, string, string, number][] = [[NAMESPACE_INVITE_NUMBER, '', config.inviteNumber, now]];
-    for (const t of src.tokens) tokens.push([NAMESPACE_AUTH, t.grpid, t.token, Math.floor(t.created / 1000)]);
+    for (const t of src.tokens) {
+      tokens.push([NAMESPACE_AUTH, t.grpid, t.token, Math.floor(t.created / 1000)]);
+      if (t.invitenumber) tokens.push([NAMESPACE_INVITE_NUMBER, t.grpid, t.invitenumber, Math.floor(t.created / 1000)]);
+    }
     for (const t of tokens) run('INSERT OR IGNORE INTO tokens (namespc, foreign_key, token, timestamp) VALUES (?, ?, ?, ?)', t);
 
     const messagesByChat = new Map<string, Message[]>();

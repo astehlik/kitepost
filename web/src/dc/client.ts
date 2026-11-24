@@ -80,6 +80,8 @@ const sleep = (ms: number, signal?: AbortSignal) =>
 const SMTP_RETRY_DELAYS = [5_000, 15_000, 30_000, 60_000];
 
 type HandshakeResult = 'done' | 'ignore' | 'propagate';
+/** Core's QrTokenData in src/sync.rs. */
+type QrTokenData = { invitenumber?: unknown; auth?: unknown; grpid?: unknown };
 
 export interface SetupParams {
   addr: string;
@@ -745,6 +747,11 @@ export class DcClient extends EventTarget {
     this.tokens.set(token, t);
     await this.store.put(`token/${token}`, t);
     const { fingerprint, addr, displayName, inviteNumber } = this.config;
+    // Like core's sync_qr_code_tokens(): the other devices answer the invite too.
+    if (this.config.bccSelf) {
+      this.sendSync({ AddQrToken: { invitenumber: inviteNumber, auth: token, grpid: grpid || null } })
+        .catch(e => console.warn('token sync failed', e));
+    }
     return grpid
       ? buildGroupInvite(fingerprint, addr, displayName, inviteNumber, token, grpid, chat!.name)
       : buildContactInvite(fingerprint, addr, displayName, inviteNumber, token);
@@ -1448,6 +1455,10 @@ export class DcClient extends EventTarget {
       }
       for (const id of del?.msgs ?? []) await this.deleteLocally(id);
       if (alter?.action === 'Accept') await this.applyAccept(alter.id);
+      const addToken = data?.AddQrToken as QrTokenData | undefined;
+      if (addToken) await this.addToken(addToken);
+      const delToken = data?.DeleteQrToken as QrTokenData | undefined;
+      if (delToken) await this.deleteTokens(delToken);
       const transports = data?.Transports as { transports?: unknown; removed_transports?: unknown } | undefined;
       if (transports) await this.applyRelays(transports.transports, transports.removed_transports);
     }
@@ -1459,6 +1470,29 @@ export class DcClient extends EventTarget {
     if (chat) return this.acceptChat(chat.id);
     const fp = typeof id?.ContactFingerprint === 'string' ? id.ContactFingerprint.toUpperCase() : undefined;
     if (fp && this.contacts.get(fp)?.publicKey) await this.singleChat(fp, false);
+  }
+
+  /** Like core's add_qr_token(): an invite another device created. */
+  private async addToken(d: QrTokenData) {
+    if (typeof d.auth !== 'string' || !d.auth || typeof d.invitenumber !== 'string' || this.tokens.has(d.auth)) return;
+    const t: AuthToken = { token: d.auth, grpid: typeof d.grpid === 'string' ? d.grpid : '', created: Date.now(), invitenumber: d.invitenumber };
+    this.tokens.set(t.token, t);
+    await this.store.put(`token/${t.token}`, t);
+  }
+
+  /** Like core's delete_qr_token(): withdrawing an invite withdraws every invite of that chat. */
+  private async deleteTokens(d: QrTokenData) {
+    const grpids = new Set([...this.tokens.values()].filter(t => t.token === d.auth || t.invitenumber === d.invitenumber).map(t => t.grpid));
+    if (d.invitenumber === this.config.inviteNumber) grpids.add('');
+    if (grpids.has('')) {
+      this.config.inviteNumber = createId();
+      await this.saveConfig();
+    }
+    for (const t of [...this.tokens.values()]) {
+      if (!grpids.has(t.grpid)) continue;
+      this.tokens.delete(t.token);
+      await this.store.delete(`token/${t.token}`);
+    }
   }
 
   /** Like core's sync_transports(): relays another device added or removed. */
@@ -1729,7 +1763,9 @@ export class DcClient extends EventTarget {
 
     switch (step) {
       case 'vc-request': {
-        if (p.headers['secure-join-invitenumber'] !== this.config.inviteNumber || !p.autocrypt) return 'ignore';
+        const number = p.headers['secure-join-invitenumber'];
+        const known = number === this.config.inviteNumber || [...this.tokens.values()].some(t => t.invitenumber === number);
+        if (!known || !p.autocrypt) return 'ignore';
         const c = await this.upsertContact(p.autocrypt.fingerprint, p.from.addr, p.autocrypt.key);
         if (c.blocked) return 'ignore';
         await this.sendHandshake(c, 'vc-auth-required');

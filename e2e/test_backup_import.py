@@ -493,3 +493,30 @@ def test_accepting_a_request_syncs_between_devices(imported, make_account):
             wait_accepted(phone_chat)
         expect(request).to_have_count(0)
 
+
+def test_phone_invite_is_answered_by_the_web_client(imported, make_account):
+    page, phone = imported.page, imported.phone
+    qr = phone.get_qr_code()
+    # Sync items arrive in order; the token must be known before Erin's handshake.
+    phone.set_config("displayname", "Alice QR")
+    expect(page.locator(".profile")).to_contain_text("Alice QR")
+    erin = make_account("Erin")
+    erin.secure_join(qr)
+    wait_event(erin, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
+    open_chat(page, "Erin")
+    expect(page.locator(".request")).to_have_count(0)
+
+
+def test_web_invite_is_answered_by_the_phone(imported, make_account):
+    page, phone = imported.page, imported.phone
+    page.get_by_role("button", name="My invite").click()
+    link = page.locator("dialog input").input_value()
+    page.get_by_role("button", name="Close").click()
+    frank = make_account("Frank")
+    frank.secure_join(link)
+    wait_event(frank, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while not ((contact := phone.get_contact_by_addr(addr_of(frank))) and (chat := phone.get_chat_by_contact(contact))):
+        assert time.monotonic() < deadline, "the phone did not answer the web client's invite"
+        time.sleep(0.2)
+    wait_accepted(chat)
