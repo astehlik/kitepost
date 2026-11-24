@@ -286,3 +286,23 @@ def test_adding_existing_addresses_up_to_the_limit(page, make_account, tmp_path)
         expect(relays.filter(has_text=addr)).to_have_count(1)
     expect(relays).to_have_count(5)
     expect(page.locator(".settings").get_by_role("button", name="Add relay")).to_have_count(0)
+
+
+def set_server_password(addr, password):
+    relay_exec("sh", "-c", f"doveadm pw -s SHA512-CRYPT -p '{password}' > /home/vmail/mail/{RELAY}/{addr}/password")
+
+
+def test_password_of_the_sending_relay_changed_on_the_phone(page, make_account, tmp_path):
+    phone, bob, first, second = imported_with_two_relays(page, make_account, tmp_path)
+    phone.delete_transport(first)
+    expect(relays_in_settings(page)).to_have_text([second])
+    password = secrets.token_urlsafe(16)
+    set_server_password(second, password)
+    phone.add_or_update_transport(transport(second, password))
+    # Sync items arrive in order, and the open connection outlives the password change.
+    phone.set_config("displayname", "Alice New Password")
+    expect(page.locator(".profile")).to_contain_text("Alice New Password")
+    reload_and_unlock(page)
+    (bob.get_contact_by_addr(second) or bob.get_contact_by_addr(first)).create_chat().send_text("after logging in again")
+    open_chat(page, "Bob")
+    expect(page.locator(".msg.in", has_text="after logging in again")).to_be_visible()

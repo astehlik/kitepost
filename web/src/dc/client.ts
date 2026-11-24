@@ -1655,7 +1655,11 @@ export class DcClient extends EventTarget {
         continue;
       }
       // Removal wins a tie, like in core.
-      if (tombstones.some(r => r.addr === relay.addr && r.at >= relay.addedAt) || addrEq(relay.addr, c.addr)) continue;
+      if (tombstones.some(r => r.addr === relay.addr && r.at >= relay.addedAt)) continue;
+      if (addrEq(relay.addr, c.addr)) {
+        if (relay.addedAt > (c.addedAt ?? 0)) Object.assign(c, { password: relay.password, addedAt: relay.addedAt });
+        continue;
+      }
       const known = relays.find(r => r.addr === relay.addr);
       if (!known) relays.push(relay);
       else if (relay.addedAt > known.addedAt) Object.assign(known, { password: relay.password, host: relay.host, addedAt: relay.addedAt, entered: relay.entered, configured: relay.configured });
