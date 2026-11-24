@@ -118,6 +118,7 @@ def test_web_client_logs_in_from_invite(admin, context):
     web.route("**/config.json", lambda route: route.fulfill(json={"handoffUrl": INVITE}))
     set_passphrase(web, web_link)
     expect(web.locator(".field", has_text="E-mail address").locator("input")).to_have_value(addr)
+    expect(web.locator(".field", has_text="Chatmail relay")).to_be_hidden()
     expect(web.get_by_role("radio")).to_have_count(0)
     web.get_by_role("button", name="Create profile").click()
     expect(web.get_by_role("heading", name="Use it on your phone too")).to_be_visible()

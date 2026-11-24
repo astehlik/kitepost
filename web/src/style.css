@@ -109,6 +109,7 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .card h1 { margin-top: 0; font-size: 1.4rem; }
 .card form { display: flex; flex-direction: column; gap: .9rem; }
 .field { display: flex; flex-direction: column; gap: .25rem; }
+.field[hidden] { display: none; }
 .field small, small { color: var(--muted); }
 .check { display: flex; gap: .5rem; align-items: center; }
 .check input { width: auto; }
