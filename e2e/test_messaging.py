@@ -1045,6 +1045,19 @@ def test_group_image_from_web(web, dora, make_account, tmp_path):
     expect(page.locator(".chathead .avatar img")).to_have_count(0)
     wait_until(lambda: not dora_group.get_basic_snapshot().profile_image, "Dora still has the group image")
 
+def test_chat_header_survives_the_handshake(web, make_account):
+    page = web.page
+    erin = make_account("Erin")
+    new_chat(page, "Add contact")
+    page.locator("dialog textarea").fill(erin.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    expect(page.locator(".chathead strong")).to_have_text("Erin")
+    header = page.locator(".chathead").element_handle()
+    expect(page.locator(".info", has_text="Secure connection established")).to_be_visible()
+    # A rebuilt header swallows a click that is in progress in Firefox.
+    assert header.evaluate("h => h.isConnected"), "the chat header was rebuilt"
+
+
 def test_core_joins_web_invite(web, make_account):
     erin = make_account("Erin")
     web.page.get_by_role("button", name="My invite").click()

@@ -892,7 +892,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       : chat.type === 'group'
       ? t('chat.members', { n: chat.members.length + 1 })
       : contact?.lastSeen ? t('chat.lastSeen', { when: formatAgo(contact.lastSeen) }) : '';
-    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatar?.slice(-24), chat.avatar?.slice(-24), contact && client.freshness(contact), chat.ephemeralTimer]);
+    const key = JSON.stringify([client.chatTitle(chat), subtitle, chat.type, chat.grpid, contact?.fingerprint, contact?.addr, contact?.avatar?.slice(-24), chat.avatar?.slice(-24), contact && client.freshness(contact) === 'recent', chat.ephemeralTimer]);
     const timerLabel = chat.ephemeralTimer ? t('timer.current', { duration: formatDuration(chat.ephemeralTimer) }) : '';
     const settings = () => {
       if (chat.type === 'single' && chat.contact) return showContact(chat.contact, chat.id);
