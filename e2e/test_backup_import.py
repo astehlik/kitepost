@@ -467,3 +467,29 @@ def test_nicknames_are_imported(page, make_account, tmp_path):
     profile = open_profile(page)
     expect(profile.get_by_role("textbox", name="Name")).to_have_value("Bobby")
     expect(profile).to_contain_text("“Bob”")
+
+
+def wait_accepted(chat):
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while chat.get_basic_snapshot().is_contact_request:
+        assert time.monotonic() < deadline, "the phone kept the contact request"
+        time.sleep(0.2)
+
+
+def test_accepting_a_request_syncs_between_devices(imported, make_account):
+    page, phone = imported.page, imported.phone
+    for name, accept_on_phone in (("Carol", True), ("Dave", False)):
+        writer = make_account(name)
+        [contact] = writer.import_vcard(phone.self_contact.make_vcard())
+        contact.create_chat().send_text(f"hello from {name}")
+        phone_chat = phone.get_chat_by_id(wait_text(phone, f"hello from {name}").chat_id)
+        open_chat(page, name)
+        request = page.locator(".request")
+        expect(request).to_be_visible()
+        if accept_on_phone:
+            phone_chat.accept()
+        else:
+            request.get_by_role("button", name="Accept").click()
+            wait_accepted(phone_chat)
+        expect(request).to_have_count(0)
+

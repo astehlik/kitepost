@@ -512,11 +512,14 @@ export class DcClient extends EventTarget {
     if (chat.visibility === 'archived') chat.visibility = undefined;
   }
 
-  async acceptChat(chatId: string) {
+  /** Like core's ChatId::accept_ext(): only accepting by the user syncs. */
+  async acceptChat(chatId: string, sync = false) {
     const chat = this.chats.get(chatId);
-    if (!chat) return;
+    if (!chat?.isRequest) return;
     chat.isRequest = false;
     await this.saveChat(chat);
+    const id = this.syncId(chat);
+    if (sync && this.config.bccSelf && id) await this.sendSync({ AlterChat: { id, action: 'Accept' } });
   }
 
   isBlockedChat(chat: Chat): boolean {
@@ -1444,9 +1447,18 @@ export class DcClient extends EventTarget {
         if (orig && savable(orig) && !this.savedCopy(orig)) await this.copyToSelf(orig, save.dest);
       }
       for (const id of del?.msgs ?? []) await this.deleteLocally(id);
+      if (alter?.action === 'Accept') await this.applyAccept(alter.id);
       const transports = data?.Transports as { transports?: unknown; removed_transports?: unknown } | undefined;
       if (transports) await this.applyRelays(transports.transports, transports.removed_transports);
     }
+  }
+
+  /** Like core's sync_alter_chat() with SyncAction::Accept. */
+  private async applyAccept(id: Record<string, unknown> | undefined) {
+    const chat = this.chatBySyncId(id);
+    if (chat) return this.acceptChat(chat.id);
+    const fp = typeof id?.ContactFingerprint === 'string' ? id.ContactFingerprint.toUpperCase() : undefined;
+    if (fp && this.contacts.get(fp)?.publicKey) await this.singleChat(fp, false);
   }
 
   /** Like core's sync_transports(): relays another device added or removed. */

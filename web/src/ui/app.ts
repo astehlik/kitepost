@@ -916,7 +916,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     return chat.isRequest
       ? h('div', { class: 'request' },
         h('span', {}, t('chat.request')),
-        h('button', { class: 'primary', onclick: busyClick(() => client.acceptChat(chat.id)) }, t('accept')),
+        h('button', { class: 'primary', onclick: busyClick(() => client.acceptChat(chat.id, true)) }, t('accept')),
         h('button', { onclick: busyClick(async () => { await client.blockChat(chat.id); current = undefined; renderAll(); }) }, t('block')))
       : composer(chat);
   }
