@@ -150,7 +150,16 @@ def create_profile(page: Page, phone, name="Webby"):
     wait_event(phone, EventType.SECUREJOIN_JOINER_PROGRESS, lambda e: e.progress == 1000)
     expect(page.locator(".status.ok")).to_be_visible()
     expect(page.locator(".chatlist li", has_text=phone.get_config("displayname"))).to_be_visible()
-    return page.locator(".profile small").inner_text()
+    return own_addr(page)
+
+
+def own_addr(page: Page):
+    """The profile's sending address, from the settings."""
+    page.get_by_role("button", name="Settings").first.click()
+    settings = page.locator(".settings")
+    addr = settings.locator(".profile-info small", has_text="Address:").inner_text().removeprefix("Address: ")
+    close_view(settings)
+    return addr
 
 
 def new_chat(page: Page, entry):

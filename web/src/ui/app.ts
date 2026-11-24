@@ -507,7 +507,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
     edit.setAttribute('aria-label', label);
     const name = client.config.displayName || t('me');
     me.replaceChildren(avatar(name, client.config.addr, undefined, client.config.avatar),
-      h('span', { class: 'who' }, h('strong', {}, name), h('small', {}, client.config.addr)));
+      h('span', { class: 'who' }, h('strong', {}, name)));
   }
   clear(root());
   root().append(h('div', { class: 'layout' }, sidebar, pane));

@@ -11,7 +11,7 @@ from deltachat_rpc_client import EventType
 from deltachat_rpc_client.const import MessageState
 from playwright.sync_api import expect
 
-from helpers import open_chat_info, EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, open_profile, own_state, set_nickname, set_passphrase, solid_png, wait_event, wait_own_msg, wait_text, web_send
+from helpers import open_chat_info, EVENT_TIMEOUT, PNG, addr_of, mailbox_size, message_action, open_chat, open_profile, own_addr, own_state, set_nickname, set_passphrase, solid_png, wait_event, wait_own_msg, wait_text, web_send
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def imported(page, make_account, tmp_path):
 
 def test_history_is_imported(imported):
     page = imported.page
-    assert page.locator(".profile small").inner_text() == addr_of(imported.phone)
+    assert own_addr(page) == addr_of(imported.phone)
     open_chat(page, "Bob")
     expect(page.locator(".msg.out", has_text="hello from alice")).to_be_visible()
     reply = page.locator(".msg.in", has_text="reply from bob")

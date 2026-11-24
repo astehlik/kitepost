@@ -6,7 +6,7 @@ import pytest
 from deltachat_rpc_client import DeltaChat, EventType
 from playwright.sync_api import expect
 
-from helpers import (INVITE, RELAY, RELAY_IP, addr_of, new_chat, open_chat, set_passphrase, transport, wait_event,
+from helpers import (INVITE, RELAY, RELAY_IP, addr_of, new_chat, open_chat, own_addr, set_passphrase, transport, wait_event,
                      wait_own_msg, wait_text, web_send)
 
 pytestmark = pytest.mark.local_relay
@@ -75,7 +75,7 @@ def test_handoff_at_signup(page, context, rpc, tmp_path):
     expect(page.locator(".chatlist")).to_be_visible()
     expect(page.locator(".profile .icon-button.attention")).to_have_count(0)
 
-    restored = restore(rpc, backup, page.locator(".profile small").inner_text())
+    restored = restore(rpc, backup, own_addr(page))
     try:
         saved = restored.get_contact_by_id(1).create_chat()
         saved.send_text("note from the phone")
@@ -111,7 +111,7 @@ def test_handoff_from_profile_keeps_contacts(page, context, rpc, make_account, t
     page.locator("dialog").get_by_role("button", name="Close").click()
     expect(unsecured).to_have_count(0)
 
-    restored = restore(rpc, backup, page.locator(".profile small").inner_text())
+    restored = restore(rpc, backup, own_addr(page))
     try:
         restored.get_contact_by_addr(addr_of(dora)).create_chat().send_text("from the phone")
         assert wait_text(dora, "from the phone").chat_id == dora_chat.id

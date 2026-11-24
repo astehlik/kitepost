@@ -7,7 +7,7 @@ import pytest
 from deltachat_rpc_client import DeltaChat
 from playwright.sync_api import expect
 
-from helpers import ADMIN_TOKEN, INVITE, INVITE_APP_URL, RELAY, URL, relay_exec, set_passphrase, transport
+from helpers import ADMIN_TOKEN, INVITE, INVITE_APP_URL, RELAY, URL, own_addr, relay_exec, set_passphrase, transport
 
 pytestmark = pytest.mark.local_relay
 
@@ -125,7 +125,7 @@ def test_web_client_logs_in_from_invite(admin, context):
     web.get_by_role("button", name="Continue").click()
     web.get_by_role("button", name="Later").click()
     expect(web.locator(".status.ok")).to_be_visible()
-    assert web.locator(".profile small").inner_text() == addr
+    assert own_addr(web) == addr
 
 
 def test_core_logs_in_from_invite(admin, context, rpc):

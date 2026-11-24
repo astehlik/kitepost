@@ -117,7 +117,7 @@ def test_sending_relay_removed_on_the_phone(page, make_account, tmp_path):
 
     phone.delete_transport(first)
     expect(relays_in_settings(page)).to_have_text([second])
-    expect(page.locator(".profile")).to_contain_text(second)
+    expect(page.locator(".settings .profile-info")).to_contain_text(second)
     open_chat(page, "Bob")
     web_send(page, "from the remaining relay")
     msg = wait_text(bob, "from the remaining relay")
