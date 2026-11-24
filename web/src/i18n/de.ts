@@ -212,6 +212,7 @@ export const de: Record<keyof typeof en, string> = {
   'info.encryption': 'Verschlüsselung',
   'info.e2ee': 'Ende-zu-Ende-verschlüsselt',
   'info.reactions': 'Reaktionen',
+  'reactions.remove': 'Entfernen',
   'info.attachment': 'Anhang',
   'info.error': 'Fehler',
   'info.messageId': 'Message-ID',

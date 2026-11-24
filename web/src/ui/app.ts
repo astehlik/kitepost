@@ -697,10 +697,21 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
       ...m.attachments.map(a => attachmentView(a, urls)),
       m.text ? h('div', { class: 'text' }, ...linkified(m.text, openAddress)) : null,
       h('div', { class: 'meta' }, m.ephemeralTimer ? metaMark(ICONS.timer, 'mark.ephemeral') : null, savedMark(m), m.pinned ? metaMark(ICONS.pin, 'mark.pinned') : null, m.edited ? `${t('chat.edited')} · ` : '', formatTime(m.timestamp), state, m.error ? ` ${t(`sendError.${sendErrorKind(m.error) ?? 'other'}`)}` : ''),
-      counts.size ? h('div', { class: 'reactions' }, ...[...counts].map(([r, n]) => h('button', {
-        type: 'button', class: r === mine ? 'reaction mine' : 'reaction', disabled: !canReact, onclick: busyClick(() => react(r)),
-      }, n > 1 ? `${r} ${n}` : r))) : null,
+      counts.size ? h('button', {
+        type: 'button', class: 'reactions', 'aria-label': t('info.reactions'),
+        onclick: (ev: Event) => openReactedBy(ev.currentTarget as HTMLElement, m, canReact ? () => react(mine!) : undefined),
+      }, ...[...counts].map(([r, n]) => h('span', { class: r === mine ? 'reaction mine' : 'reaction' }, n > 1 ? `${r} ${n}` : r))) : null,
       h('div', { class: 'actions' }, ...hover, more));
+  }
+
+  /** Who reacted, like WhatsApp's overlay on a tap on the reactions; the own one can be removed there. */
+  function openReactedBy(anchor: HTMLElement, m: Message, remove?: () => Promise<unknown>) {
+    const entries = Object.entries(m.reactions).sort(([a], [b]) => Number(b === 'self') - Number(a === 'self'));
+    const box = h('ul', { class: 'reacted-by', 'aria-label': t('info.reactions') }, ...entries.map(([from, r]) => h('li', {},
+      h('span', { class: 'emoji' }, r),
+      h('span', { class: 'name' }, authorName(from)),
+      from === 'self' && remove ? h('button', { type: 'button', class: 'link', onclick: busyClick(async () => { await remove(); close(); }) }, t('reactions.remove')) : null)));
+    const close = popover(anchor, box);
   }
 
   type MsgAction = { label: string; icon: string; run: (anchor: HTMLElement) => unknown };

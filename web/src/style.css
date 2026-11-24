@@ -98,8 +98,8 @@ select { font: inherit; padding: .4rem .5rem; border-radius: 8px; border: 1px so
 .busy { pointer-events: none; }
 button[aria-busy="true"] { opacity: 1; cursor: progress; }
 button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85em; height: .85em; margin-left: .5em; vertical-align: -.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
-:is(.nav-actions button, .msg .actions button, .selbar button, .icon-button, .reaction)[aria-busy="true"]::after { content: none; }
-:is(.nav-actions button, .msg .actions button, .selbar button, .icon-button, .reaction)[aria-busy="true"] { animation: pulse 1s ease-in-out infinite alternate; }
+:is(.nav-actions button, .msg .actions button, .selbar button, .icon-button)[aria-busy="true"]::after { content: none; }
+:is(.nav-actions button, .msg .actions button, .selbar button, .icon-button)[aria-busy="true"] { animation: pulse 1s ease-in-out infinite alternate; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { button[aria-busy="true"], button[aria-busy="true"]::after { animation-duration: 3s; } }
@@ -374,9 +374,12 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .reactions { position: absolute; bottom: 0; transform: translateY(75%); display: flex; padding: 1px; border: 2px solid var(--bg); border-radius: 999px; background: var(--in); box-shadow: 0 1px 2px rgba(0,0,0,.15); white-space: nowrap; }
 .msg.in .reactions { left: .6rem; }
 .msg.out .reactions { right: .6rem; }
-.reaction { padding: 0 .3rem; border: 0; border-radius: 999px; background: none; font-size: .85rem; line-height: 1.45; }
+.reaction { padding: 0 .3rem; border-radius: 999px; font-size: .85rem; line-height: 1.45; }
+.reacted-by { display: flex; flex-direction: column; gap: .2rem; min-width: 200px; margin: 0; padding: .2rem .3rem; list-style: none; }
+.reacted-by li { display: flex; align-items: center; gap: .6rem; }
+.reacted-by .emoji { font-size: 1.3rem; }
+.reacted-by .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reaction.mine { background: var(--out); }
-.reaction:disabled { opacity: 1; cursor: default; }
 .popover { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: .4rem; }
 .quick-reactions { display: flex; gap: .1rem; }
 button.emoji { width: 38px; height: 38px; padding: 0; border: 0; border-radius: 8px; background: none; font-size: 1.45rem; line-height: 1; }

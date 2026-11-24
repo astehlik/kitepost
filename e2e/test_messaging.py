@@ -114,11 +114,18 @@ def test_reactions(web, dora):
     expect(incoming.locator(".reactions")).to_contain_text("👍")
 
     incoming.hover()
-    incoming.get_by_role("button", name="React").click()
-    web.page.locator(".quick-reactions button", has_text="❤️").click()
-    wait_event(dora.acc, EventType.REACTIONS_CHANGED, lambda e: "❤️" in str(msg.get_reactions()))
-    incoming.locator(".reaction.mine").click()
-    wait_event(dora.acc, EventType.REACTIONS_CHANGED, lambda e: "❤️" not in str(msg.get_reactions()))
+    incoming.get_by_role("button", name="React", exact=True).click()
+    web.page.locator(".quick-reactions button", has_text="👍").click()
+    wait_event(dora.acc, EventType.REACTIONS_CHANGED, lambda e: len(msg.get_reactions().reactions_by_contact) == 2)
+    expect(incoming.locator(".reaction.mine")).to_have_text("👍 2")
+
+    incoming.get_by_role("button", name="Reactions").click()
+    reacted_by = web.page.locator(".reacted-by li")
+    expect(reacted_by).to_have_text(["👍MeRemove", "👍Dora"])
+    reacted_by.get_by_role("button", name="Remove").click()
+    wait_event(dora.acc, EventType.REACTIONS_CHANGED, lambda e: len(msg.get_reactions().reactions_by_contact) == 1)
+    expect(reacted_by).to_have_count(0)
+    expect(incoming.locator(".reactions")).to_have_text("👍")
 
 
 def test_messages_of_the_same_second_keep_their_order(web, dora):

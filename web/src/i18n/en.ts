@@ -210,6 +210,7 @@ export const en = {
   'info.encryption': 'Encryption',
   'info.e2ee': 'End-to-end encrypted',
   'info.reactions': 'Reactions',
+  'reactions.remove': 'Remove',
   'info.attachment': 'Attachment',
   'info.error': 'Error',
   'info.messageId': 'Message-ID',
