@@ -292,6 +292,8 @@ button[aria-busy="true"]::after { content: ''; display: inline-block; width: .85
 .settings-body h3 { margin: 0; font-size: 1rem; }
 .settings-body h4 { margin: 0; font-size: .9rem; }
 .relays { margin: -.5rem 0 0; padding: 0; list-style: none; overflow-wrap: anywhere; }
+.relays li { display: flex; align-items: center; gap: .5rem; min-height: 38px; }
+.relays li span { flex: 1; min-width: 0; }
 .settings-body p, .settings-body .profile-info, .settings-body .notify-permission { margin: 0; }
 .settings-body .notify-permission:empty { display: none; }
 .settings-body .row { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .5rem; }

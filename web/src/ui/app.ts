@@ -2066,7 +2066,11 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
           h('small', {}, t('profile.fingerprint', { fp: formatFingerprint(client.config.fingerprint) })))),
       section(t('settings.relays'),
         h('p', {}, t('relays.hint')),
-        h('ul', { class: 'relays' }, ...client.selfAddrs().map(a => h('li', {}, a)))),
+        h('ul', { class: 'relays' }, ...client.selfAddrs().map(a => h('li', {}, h('span', {}, a),
+          client.selfAddrs().length > 1 ? Object.assign(iconButton(ICONS.trash, t('relays.remove'), () => dialog(t('relays.removeAsk', { addr: a }), h('p', {}, t('relays.removeText')), [
+            { label: t('cancel') },
+            { label: t('relays.remove'), primary: true, onClick: () => client.removeRelay(a) },
+          ])), { className: 'icon-button' }) : null)))),
       section(t('settings.appearance'),
         field(t('language'), lang),
         field(t('settings.theme'), theme),

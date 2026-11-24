@@ -1495,6 +1495,28 @@ export class DcClient extends EventTarget {
     }
   }
 
+  /** Like core's delete_transport(): never the last relay; the other devices learn it through a sync message. */
+  async removeRelay(addr: string) {
+    const c = this.config;
+    if (this.selfAddrs().length <= 1) throw new Error('cannot remove the last relay');
+    const addedAt = addrEq(addr, c.addr) ? c.addedAt ?? 0 : c.relays?.find(r => addrEq(r.addr, addr))?.addedAt;
+    if (addedAt === undefined) return;
+    // Not earlier than the addition, or the other devices would ignore the removal.
+    const timestamp = Math.max(Math.floor(Date.now() / 1000), addedAt);
+    await this.applyRelays([], [{ addr: addr.toLowerCase(), timestamp }]);
+    if (c.bccSelf) await this.sendSync({ Transports: this.transportsSyncData() });
+  }
+
+  /** Like core's send_sync_transports(); the relay the profile was created with is never sent, so its password stays here. */
+  private transportsSyncData() {
+    const c = this.config;
+    return {
+      transports: (c.relays ?? []).filter(r => r.entered && r.configured)
+        .map(r => ({ entered: r.entered, configured: r.configured, timestamp: r.addedAt, is_published: true })),
+      removed_transports: (c.removedRelays ?? []).map(r => ({ addr: r.addr, timestamp: r.at })),
+    };
+  }
+
   /** Like core's sync_transports(): relays another device added or removed. */
   private async applyRelays(added: unknown, removed: unknown) {
     const c = this.config;
