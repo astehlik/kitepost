@@ -94,6 +94,9 @@ pub struct OutgoingMessage {
     /// Renders a multi-device sync message with this `multi-device-sync.json`, like core's sync.rs.
     #[serde(default)]
     pub sync_json: Option<String>,
+    /// Renders core's keyupdate body, which only carries the attached key to contacts.
+    #[serde(default)]
+    pub keyupdate: bool,
     pub timestamp: i64,
 }
 
@@ -182,6 +185,20 @@ fn mdn_body(mid: &str, additional: &[String]) -> MimePart<'static> {
     )
 }
 
+/// Like core's keyupdate_body(): a report without Original-Message-ID, as it answers no message.
+fn keyupdate_body() -> MimePart<'static> {
+    MimePart::new(
+        "multipart/report; report-type=disposition-notification",
+        vec![
+            MimePart::new("text/plain", "This message updates the sender's encryption key and relay list."),
+            MimePart::new(
+                "message/disposition-notification",
+                "Disposition: automatic-action/MDN-sent-automatically; processed\r\n",
+            ),
+        ],
+    )
+}
+
 fn body_text(req: &OutgoingMessage) -> String {
     match &req.quote {
         Some(quote) => {
@@ -227,6 +244,7 @@ pub fn render(req: OutgoingMessage) -> Result<RenderedEmail> {
     }
 
     let mut main_part = match (req.mdn_for.split_first(), &req.sync_json) {
+        _ if req.keyupdate => keyupdate_body(),
         (Some((first, rest)), _) => mdn_body(first, rest),
         (None, Some(json)) => MimePart::new(
             "multipart/report; report-type=multi-device-sync",

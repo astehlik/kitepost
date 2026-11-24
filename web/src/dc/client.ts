@@ -78,6 +78,10 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   });
 
 const SMTP_RETRY_DELAYS = [5_000, 15_000, 30_000, 60_000];
+/** Core's KEYUPDATE_CHUNK_CONTACTS, KEYUPDATE_MAX_RECIPIENTS and KEYUPDATE_MAX_SILENCE. */
+const KEYUPDATE_CHUNK = 200;
+const KEYUPDATE_MAX_RECIPIENTS = 5000;
+const KEYUPDATE_MAX_SILENCE = 3 * 365 * 86_400_000;
 
 type HandshakeResult = 'done' | 'ignore' | 'propagate';
 /** Core's QrTokenData in src/sync.rs. */
@@ -1545,6 +1549,45 @@ export class DcClient extends EventTarget {
     const timestamp = Math.max(Math.floor(Date.now() / 1000), addedAt);
     await this.applyRelays([], [{ addr: addr.toLowerCase(), timestamp }]);
     if (c.bccSelf) await this.sendSync({ Transports: this.transportsSyncData() });
+    this.sendKeyupdates().catch(e => console.warn('keyupdate failed', e));
+  }
+
+  /**
+   * Like core's maybe_send_keyupdate_message(): contacts learn the relay list from the own key, so after a change
+   * those who may write without hearing from us get it, unsigned, so no recipient learns who else is in the chunk.
+   */
+  private async sendKeyupdates() {
+    const since = Date.now() - KEYUPDATE_MAX_SILENCE;
+    const freshness = new Map<string, number>();
+    const seen = (fp: string, at: number) => freshness.set(fp, Math.max(freshness.get(fp) ?? 0, at));
+    for (const chat of this.chats.values()) {
+      if (chat.isRequest || chat.left) continue;
+      if (chat.type === 'group') {
+        for (const fp of chat.members) seen(fp, chat.lastActivity);
+      } else if (chat.type === 'single' && chat.contact) {
+        const c = this.contacts.get(chat.contact);
+        const sent = (this.messages.get(chat.id) ?? []).filter(m => m.from === 'self' && !m.info).map(m => m.timestamp);
+        seen(chat.contact, Math.max(c?.lastSeen ?? 0, ...sent));
+      }
+    }
+    const recipients = [...freshness]
+      .filter(([fp, at]) => at > since && fp !== this.config.fingerprint)
+      .map(([fp, at]) => ({ contact: this.contacts.get(fp), at }))
+      .filter((r): r is { contact: Contact; at: number } => !!r.contact?.publicKey && !r.contact.blocked)
+      .sort((a, b) => b.at - a.at).slice(0, KEYUPDATE_MAX_RECIPIENTS).map(r => r.contact);
+    // Freshness decides who is told, but not who shares a chunk.
+    for (let i = recipients.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [recipients[i], recipients[j]] = [recipients[j], recipients[i]];
+    }
+    for (let i = 0; i < recipients.length; i += KEYUPDATE_CHUNK) {
+      const chunk = recipients.slice(i, i + KEYUPDATE_CHUNK);
+      await this.send({
+        to: [], subject: 'Keyupdate', text: '', headers: [], keyupdate: true, from_name: '',
+        encryption: { kind: 'asymmetric', keys: chunk.map(c => c.publicKey) },
+        attach_pubkey: true, sign: false, compress: false,
+      }, chunk.flatMap(c => c.relays));
+    }
   }
 
   /** Like core's send_sync_transports(); the relay the profile was created with is never sent, so its password stays here. */

@@ -86,6 +86,7 @@ export interface OutgoingMessage {
   wrap_multipart_mixed?: boolean;
   attachment?: AttachmentData;
   mdn_for?: string[];
+  keyupdate?: boolean;
   timestamp: number;
 }
 

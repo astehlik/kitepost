@@ -330,7 +330,7 @@ export const de: Record<keyof typeof en, string> = {
   'relays.hint': 'Deine Kontakte schreiben an alle diese Adressen, und Kitepost empfängt über alle. Relays kannst du in Delta Chat hinzufügen, die Änderungen erreichen diesen Browser.',
   'relays.remove': 'Relay entfernen',
   'relays.removeAsk': 'Relay „{addr}“ entfernen?',
-  'relays.removeText': 'Kitepost empfängt dann nicht mehr über diese Adresse, auch auf deinen anderen Geräten.',
+  'relays.removeText': 'Kitepost empfängt dann nicht mehr über diese Adresse, auch auf deinen anderen Geräten, und teilt deinen Kontakten mit, nur noch an die übrigen Relays zu schreiben.',
   'settings.devices': 'Backup und Geräte',
   'settings.browser': 'Dieser Browser',
   'export.title': 'Backup exportieren',

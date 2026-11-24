@@ -328,7 +328,7 @@ export const en = {
   'relays.hint': 'Your contacts write to all of these addresses, and Kitepost receives from all of them. You can add relays in Delta Chat; the changes reach this browser.',
   'relays.remove': 'Remove relay',
   'relays.removeAsk': 'Remove relay "{addr}"?',
-  'relays.removeText': 'Kitepost stops receiving from this address, on your other devices too.',
+  'relays.removeText': 'Kitepost stops receiving from this address, on your other devices too, and tells your contacts to write only to the remaining relays.',
   'settings.devices': 'Backup and devices',
   'settings.browser': 'This browser',
   'export.title': 'Export backup',

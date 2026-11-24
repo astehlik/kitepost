@@ -180,3 +180,25 @@ def test_sending_switches_to_a_working_relay(page, make_account, tmp_path):
     web_send(page, "through the working relay")
     msg = wait_text(bob, "through the working relay")
     assert bob.get_contact_by_id(msg.sender.id).get_snapshot().address == second
+
+
+def test_contacts_learn_about_a_removed_relay(page, make_account, tmp_path):
+    phone, bob, first, second = imported_with_two_relays(page, make_account, tmp_path)
+    bob.get_contact_by_addr(first).create_chat().send_text("hello before")
+    wait_text(phone, "hello before")
+    bob_addr = addr_of(bob)
+    bob.stop_io()
+    before = mailbox_size(bob_addr)
+    remove_in_settings(page, second)
+    wait_mailbox(bob_addr, before)
+    bob.start_io()
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while mailbox_size(bob_addr) > before:
+        assert time.monotonic() < deadline, "Bob did not fetch the keyupdate"
+        time.sleep(0.2)
+
+    on_second = mailbox_size(second)
+    bob.get_contact_by_addr(first).create_chat().send_text("only to the first relay")
+    wait_text(phone, "only to the first relay")
+    time.sleep(2)
+    assert mailbox_size(second) == on_second

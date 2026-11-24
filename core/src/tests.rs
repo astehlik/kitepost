@@ -48,6 +48,7 @@ fn message(from: &Account, encryption: Encryption, sign: bool) -> OutgoingMessag
         attachment: None,
         mdn_for: vec![],
         sync_json: None,
+        keyupdate: false,
         timestamp: 1_800_000_000,
     }
 }
@@ -234,4 +235,18 @@ fn sync_roundtrip() {
     let parsed = bob_parses(msg, &alice);
     assert!(parsed.is_sync);
     assert_eq!(parsed.sync_json.as_deref(), Some(json));
+}
+
+#[test]
+fn keyupdate_is_unsigned_and_carries_the_key() {
+    let alice = account("alice@example.org");
+    let bob = account("bob@example.net");
+    let mut msg = message(&alice, Encryption::Asymmetric { keys: vec![bob.public.clone()] }, false);
+    msg.keyupdate = true;
+    msg.headers = vec![];
+    let parsed = bob_parses(msg, &bob);
+    assert!(parsed.encrypted);
+    assert_eq!(parsed.signature, None);
+    assert_eq!(parsed.autocrypt.map(|k| k.fingerprint), Some(alice.fp));
+    assert!(parsed.headers["content-type"].contains("disposition-notification"));
 }
