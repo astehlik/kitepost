@@ -250,3 +250,21 @@ fn keyupdate_is_unsigned_and_carries_the_key() {
     assert_eq!(parsed.autocrypt.map(|k| k.fingerprint), Some(alice.fp));
     assert!(parsed.headers["content-type"].contains("disposition-notification"));
 }
+
+#[test]
+fn merging_keeps_the_newer_relay_list() {
+    let secret = create_keypair("alice@example.org").unwrap();
+    let both = secret_key_to_public_key(secret.clone(), 4_000_000_000, "alice@example.org", "alice@example.org,alice@example.net").unwrap();
+    let one = secret_key_to_public_key(secret, 4_000_000_100, "alice@example.org", "alice@example.org").unwrap();
+    let newer = crate::keys::merge_public_keys(both.clone(), one.clone()).unwrap();
+    assert_eq!(crate::keys::addresses_from_public_key(&newer).unwrap(), ["alice@example.org"]);
+    let replayed = crate::keys::merge_public_keys(one, both).unwrap();
+    assert_eq!(crate::keys::addresses_from_public_key(&replayed).unwrap(), ["alice@example.org"]);
+}
+
+#[test]
+fn merging_rejects_another_key() {
+    let alice = secret_key_to_public_key(create_keypair("alice@example.org").unwrap(), 1_700_000_000, "alice@example.org", "alice@example.org").unwrap();
+    let bob = secret_key_to_public_key(create_keypair("bob@example.net").unwrap(), 1_700_000_000, "bob@example.net", "bob@example.net").unwrap();
+    assert!(crate::keys::merge_public_keys(alice, bob).is_err());
+}

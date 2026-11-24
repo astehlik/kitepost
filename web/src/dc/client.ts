@@ -5,7 +5,7 @@ import type { Store } from '../store';
 import { relayFromCore, type BackupProfile } from './backup';
 import { backupFileName, buildBackup } from './backup-export';
 import {
-  generateKeypair, importKeypair, parseMessage, publicKeyInfo, renderMessage,
+  generateKeypair, importKeypair, mergedKeyInfo, parseMessage, publicKeyInfo, renderMessage,
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
 } from '../wasm';
 import { avatarBase64, avatarDataUrl, avatarHeader, parseAvatarHeader } from './avatar';
@@ -324,7 +324,7 @@ export class DcClient extends EventTarget {
 
   private async upsertContact(fp: string, addr: string, key: string, name?: string): Promise<Contact> {
     const existing = this.contacts.get(fp);
-    const info = publicKeyInfo(addr, key);
+    const info = existing?.publicKey ? mergedKeyInfo(addr, existing.publicKey, key) : publicKeyInfo(addr, key);
     if (info.fingerprint !== fp) throw new Error('fingerprint mismatch');
     const contact: Contact = {
       ...existing,
@@ -338,6 +338,14 @@ export class DcClient extends EventTarget {
     };
     await this.saveContact(contact);
     return contact;
+  }
+
+  /** Like core's import_public_key() for a key that did not come with its owner's signature: only the key changes. */
+  private async mergeKey(fp: string, key: string) {
+    const c = this.contacts.get(fp);
+    if (!c?.publicKey) return;
+    const merged = await this.upsertContact(fp, c.addr, key).catch(e => console.warn('key not merged', fp, e));
+    if (merged && merged.relays.join() !== c.relays.join()) this.changed('contacts');
   }
 
   /** "Saved messages", core's self-talk chat. */
@@ -389,7 +397,7 @@ export class DcClient extends EventTarget {
 
   /**
    * Like core's import_vcard_contact(): returns the contact's fingerprint, or undefined for the own card.
-   * A key that is known already keeps its contact unchanged, so a card cannot rename or readdress it.
+   * A contact that is known already only gets the card's key merged, so a card cannot rename or readdress it.
    */
   async importVcardContact(card: VcardContact): Promise<string | undefined> {
     let info: ReturnType<typeof publicKeyInfo> | undefined;
@@ -400,7 +408,10 @@ export class DcClient extends EventTarget {
     }
     if (!info?.can_encrypt) throw new Error(t('contact.cardNoKey'));
     if (info.fingerprint === this.config.fingerprint) return undefined;
-    if (this.contacts.get(info.fingerprint)?.publicKey) return info.fingerprint;
+    if (this.contacts.get(info.fingerprint)?.publicKey) {
+      await this.mergeKey(info.fingerprint, card.key!);
+      return info.fingerprint;
+    }
     const c = await this.upsertContact(info.fingerprint, card.addr, card.key!, card.name);
     const avatar = card.photo ? avatarDataUrl(card.photo) : undefined;
     if (avatar) await this.saveContact({ ...c, avatar });
@@ -1367,6 +1378,8 @@ export class DcClient extends EventTarget {
       const res = await this.handleSecureJoin(p);
       if (res !== 'propagate') return res === 'done';
     }
+    // Like core, the key is merged before the signature counts: keyupdates come unsigned.
+    if (p.autocrypt && !p.signature) await this.mergeKey(p.autocrypt.fingerprint, p.autocrypt.key);
     if (!p.encrypted || !p.signature) return false;
 
     const sender = await this.senderContact(p);
@@ -1382,9 +1395,9 @@ export class DcClient extends EventTarget {
     if (avatar !== undefined) await this.applyAvatar(sender.fingerprint, avatar, this.timestamp(p));
 
     for (const g of p.gossip) {
-      if (g.fingerprint !== this.config.fingerprint && g.can_encrypt && !this.contacts.get(g.fingerprint)?.publicKey) {
-        await this.upsertContact(g.fingerprint, g.addr, g.key).catch(() => undefined);
-      }
+      if (g.fingerprint === this.config.fingerprint || !g.can_encrypt) continue;
+      if (this.contacts.get(g.fingerprint)?.publicKey) await this.mergeKey(g.fingerprint, g.key);
+      else await this.upsertContact(g.fingerprint, g.addr, g.key).catch(() => undefined);
     }
 
     if (p.mdn_for.length) {
@@ -1420,9 +1433,9 @@ export class DcClient extends EventTarget {
     if (p.is_sync) return this.applySync(p.sync_json);
     if (p.headers['secure-join'] || p.headers['secure-join-invitenumber']) return;
     for (const g of p.gossip) {
-      if (g.fingerprint !== this.config.fingerprint && g.can_encrypt && !this.contacts.get(g.fingerprint)?.publicKey) {
-        await this.upsertContact(g.fingerprint, g.addr, g.key).catch(() => undefined);
-      }
+      if (g.fingerprint === this.config.fingerprint || !g.can_encrypt) continue;
+      if (this.contacts.get(g.fingerprint)?.publicKey) await this.mergeKey(g.fingerprint, g.key);
+      else await this.upsertContact(g.fingerprint, g.addr, g.key).catch(() => undefined);
     }
     const grpid = p.headers['chat-group-id'];
     let chat: Chat | undefined;

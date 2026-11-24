@@ -102,6 +102,11 @@ export function publicKeyInfo(addr: string, key: string): KeyInfo {
   return JSON.parse(core.public_key_info(addr, key));
 }
 
+/** Like core's merge_openpgp_certificates(): `key` merged into the stored `old`, the newest relay list wins. */
+export function mergedKeyInfo(addr: string, old: string, key: string): KeyInfo {
+  return JSON.parse(core.merged_key_info(addr, old, key));
+}
+
 export function normalizeFingerprint(fp: string): string {
   return core.normalize_fingerprint(fp);
 }

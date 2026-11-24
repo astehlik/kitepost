@@ -60,6 +60,18 @@ pub fn public_key_info(addr: &str, public_b64: &str) -> Result<String, JsError> 
     let key = keys::public_from_base64(public_b64).map_err(js_err)?;
     key.verify_bindings()
         .map_err(|e| JsError::new(&e.to_string()))?;
+    key_info(addr, key)
+}
+
+/// The key info of `new_b64` merged into the stored `old_b64`, see [`keys::merge_public_keys`].
+#[wasm_bindgen]
+pub fn merged_key_info(addr: &str, old_b64: &str, new_b64: &str) -> Result<String, JsError> {
+    let old = keys::public_from_base64(old_b64).map_err(js_err)?;
+    let new = keys::public_from_base64(new_b64).map_err(js_err)?;
+    key_info(addr, keys::merge_public_keys(old, new).map_err(js_err)?)
+}
+
+fn key_info(addr: &str, key: pgp::composed::SignedPublicKey) -> Result<String, JsError> {
     to_json(&parse::KeyInfo {
         addr: addr::addr_normalize(addr),
         key: keys::to_base64(&key),

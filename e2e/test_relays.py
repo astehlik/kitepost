@@ -4,7 +4,7 @@ import time
 from deltachat_rpc_client import DeltaChat, EventType
 from playwright.sync_api import expect
 
-from helpers import EVENT_TIMEOUT, RELAY, URL, addr_of, mailbox_size, open_chat, relay_exec, reload_and_unlock, set_passphrase, transport, wait_event, wait_text, web_send
+from helpers import EVENT_TIMEOUT, RELAY, URL, addr_of, close_view, new_chat, open_profile, mailbox_size, open_chat, relay_exec, reload_and_unlock, set_passphrase, transport, wait_event, wait_text, web_send
 
 
 def add_relay(acc):
@@ -200,5 +200,30 @@ def test_contacts_learn_about_a_removed_relay(page, make_account, tmp_path):
     on_second = mailbox_size(second)
     bob.get_contact_by_addr(first).create_chat().send_text("only to the first relay")
     wait_text(phone, "only to the first relay")
+    time.sleep(2)
+    assert mailbox_size(second) == on_second
+
+
+def test_relay_removed_by_a_contact(web, make_account):
+    page = web.page
+    carol = make_account("Carol")
+    carol.set_config("keyupdate_debounce", "0")
+    first = addr_of(carol)
+    second = add_relay(carol)
+    new_chat(page, "Add contact")
+    page.locator("dialog textarea").fill(carol.get_qr_code())
+    page.get_by_role("button", name="Connect").click()
+    expect(page.locator(".info", has_text="Secure connection established")).to_be_visible()
+    carol.get_contact_by_addr(web.addr).create_chat().send_text("Carol here")
+    expect(page.locator(".msg.in", has_text="Carol here")).to_be_visible()
+    relays = open_profile(page).locator(".relays li")
+    expect(relays).to_have_text([first, second])
+
+    carol.delete_transport(second)
+    expect(relays).to_have_text([first])
+    close_view(page.locator(".settings.contact"))
+    on_second = mailbox_size(second)
+    web_send(page, "only to your first relay")
+    wait_text(carol, "only to your first relay")
     time.sleep(2)
     assert mailbox_size(second) == on_second

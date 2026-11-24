@@ -14,11 +14,11 @@ use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{
-    Features, KeyFlags, Notation, PacketTrait as _, SignatureConfig, SignatureType, Subpacket,
-    SubpacketData,
+    Features, KeyFlags, Notation, PacketTrait as _, Signature, SignatureConfig, SignatureType,
+    Subpacket, SubpacketData,
 };
 use pgp::ser::Serialize;
-use pgp::types::{CompressionAlgorithm, KeyDetails, KeyVersion};
+use pgp::types::{CompressionAlgorithm, Imprint as _, KeyDetails, KeyVersion, SignedUser};
 use rand_old::thread_rng;
 use smallvec::smallvec;
 
@@ -274,4 +274,51 @@ pub fn pubkey_supports_seipdv2(key: &SignedPublicKey) -> bool {
         .iter()
         .chain(key.details.users.iter().flat_map(|u| u.signatures.iter()))
         .any(|sig| sig.features().is_some_and(|f| f.seipd_v2()))
+}
+
+/// Like core's merge_openpgp_certificates(): keeps the newest direct key signature, which carries
+/// the relay list, and the newest User ID; the subkeys stay the old ones. A key may come from
+/// gossip or an old message, so it is not necessarily newer. Ties go to `new`.
+pub fn merge_public_keys(old: SignedPublicKey, new: SignedPublicKey) -> Result<SignedPublicKey> {
+    old.verify_bindings().context("First key cannot be verified")?;
+    new.verify_bindings().context("Second key cannot be verified")?;
+    let SignedPublicKey { primary_key, details: old_details, public_subkeys } = old;
+    let SignedPublicKey { primary_key: new_primary_key, details: new_details, .. } = new;
+    ensure!(
+        primary_key.imprint::<sha2::Sha256>()? == new_primary_key.imprint::<sha2::Sha256>()?,
+        "Cannot merge keys with different primary keys"
+    );
+    let direct_signatures: Vec<Signature> = old_details
+        .direct_signatures
+        .into_iter()
+        .chain(new_details.direct_signatures)
+        .filter(|s| s.verify_key(&primary_key).is_ok())
+        .max_by_key(|s| s.created())
+        .into_iter()
+        .collect();
+    let users: Vec<SignedUser> = old_details
+        .users
+        .into_iter()
+        .chain(new_details.users)
+        .filter_map(|SignedUser { id, signatures }| {
+            signatures
+                .into_iter()
+                .filter(|s| s.verify_certification(&primary_key, pgp::types::Tag::UserId, &id).is_ok())
+                .max_by_key(|s| s.created())
+                .map(|s| (id, s))
+        })
+        .max_by_key(|(_, s)| s.created())
+        .map(|(id, s)| SignedUser { id, signatures: vec![s] })
+        .into_iter()
+        .collect();
+    Ok(SignedPublicKey {
+        primary_key,
+        details: SignedKeyDetails {
+            revocation_signatures: vec![],
+            direct_signatures,
+            users,
+            user_attributes: vec![],
+        },
+        public_subkeys,
+    })
 }
