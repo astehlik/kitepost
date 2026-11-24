@@ -47,7 +47,8 @@ function params(entries: [string, string | number | undefined][]): string {
   return entries.filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${String(v).replaceAll('\n', '\n\n')}`).join('\n');
 }
 
-function loginParams(addr: string, password: string, host: string) {
+/** Core's entered and configured login parameters of a chatmail address. */
+export function loginParams(addr: string, password: string, host: string) {
   const server = (port: number) => ({ connection: { host, port, security: 'Tls' }, user: addr });
   return {
     entered: {

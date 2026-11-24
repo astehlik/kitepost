@@ -124,10 +124,10 @@ def test_sending_relay_removed_on_the_phone(page, make_account, tmp_path):
     assert bob.get_contact_by_id(msg.sender.id).get_snapshot().address == second
 
 
-def imported_with_two_relays(page, make_account, tmp_path):
+def imported_with_two_relays(page, make_account, tmp_path, second_relay=True):
     phone = make_account("Alice Phone")
     first = addr_of(phone)
-    second = add_relay(phone)
+    second = add_relay(phone) if second_relay else None
     bob = make_account("Bob")
     bob.secure_join(phone.get_qr_code())
     wait_event(phone, EventType.SECUREJOIN_INVITER_PROGRESS, lambda e: e.progress == 1000)
@@ -227,3 +227,62 @@ def test_relay_removed_by_a_contact(web, make_account):
     wait_text(carol, "only to your first relay")
     time.sleep(2)
     assert mailbox_size(second) == on_second
+
+
+def submit_add_relay(page, relay=None, login=None):
+    """Fills the "Add relay" dialog with a relay for a new address, or with the login of an existing one."""
+    page.locator(".settings").get_by_role("button", name="Add relay").click()
+    dialog = page.locator("dialog", has_text="Add relay")
+    if login:
+        dialog.get_by_label("Use an existing address").check()
+        dialog.get_by_label("E-mail address").fill(login[0])
+        dialog.get_by_label("Password").fill(login[1])
+    else:
+        dialog.get_by_label("Chatmail relay").fill(relay)
+    dialog.get_by_role("button", name="Add relay").click()
+    return dialog
+
+
+def add_in_settings(page, relay=None, login=None):
+    relays = relays_in_settings(page)
+    expect(submit_add_relay(page, relay, login)).to_have_count(0)
+    return relays
+
+
+def test_adding_a_relay(page, make_account, tmp_path):
+    phone, bob, first, _ = imported_with_two_relays(page, make_account, tmp_path, second_relay=False)
+    bob_addr = addr_of(bob)
+    bob.stop_io()
+    before = mailbox_size(bob_addr)
+    relays = add_in_settings(page, relay=RELAY)
+    expect(relays).to_have_count(2)
+    added = relays.nth(1).inner_text()
+    assert added != first and added.endswith(f"@{RELAY}")
+    wait_transports(phone, [first, added])
+    wait_mailbox(bob_addr, before)
+    bob.start_io()
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while mailbox_size(bob_addr) > before:
+        assert time.monotonic() < deadline, "Bob did not fetch the keyupdate"
+        time.sleep(0.2)
+
+    only_on_second_relay(bob, phone, first, added, "also to the added relay")
+    open_chat(page, "Bob")
+    expect(page.locator(".msg.in", has_text="also to the added relay")).to_be_visible()
+
+
+def test_adding_existing_addresses_up_to_the_limit(page, make_account, tmp_path):
+    _, bob, _, _ = imported_with_two_relays(page, make_account, tmp_path)
+    for relay, login, error in ((None, (addr_of(bob), "wrong password"), "The relay rejected the address or the password."),
+                                ("example.invalid", None, "Kitepost cannot reach example.invalid.")):
+        relays_in_settings(page)
+        dialog = submit_add_relay(page, relay, login)
+        expect(dialog.locator(".error")).to_contain_text(error)
+        dialog.get_by_role("button", name="Cancel").click()
+
+    for _ in range(3):
+        addr = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(9)) + f"@{RELAY}"
+        relays = add_in_settings(page, login=(addr, secrets.token_urlsafe(16)))
+        expect(relays.filter(has_text=addr)).to_have_count(1)
+    expect(relays).to_have_count(5)
+    expect(page.locator(".settings").get_by_role("button", name="Add relay")).to_have_count(0)

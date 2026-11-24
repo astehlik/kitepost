@@ -3,7 +3,7 @@ import { ImapClient } from '../net/imap';
 import { SmtpClient, SmtpError } from '../net/smtp';
 import type { Store } from '../store';
 import { relayFromCore, type BackupProfile } from './backup';
-import { backupFileName, buildBackup } from './backup-export';
+import { backupFileName, buildBackup, loginParams } from './backup-export';
 import {
   generateKeypair, importKeypair, mergedKeyInfo, parseMessage, publicKeyInfo, renderMessage,
   type AttachmentData, type OutgoingMessage, type ParsedMessage,
@@ -78,6 +78,8 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   });
 
 const SMTP_RETRY_DELAYS = [5_000, 15_000, 30_000, 60_000];
+/** Core's MAX_RELAYS. */
+export const MAX_RELAYS = 5;
 /** Core's KEYUPDATE_CHUNK_CONTACTS, KEYUPDATE_MAX_RECIPIENTS and KEYUPDATE_MAX_SILENCE. */
 const KEYUPDATE_CHUNK = 200;
 const KEYUPDATE_MAX_RECIPIENTS = 5000;
@@ -1550,6 +1552,28 @@ export class DcClient extends EventTarget {
       this.tokens.delete(t.token);
       await this.store.delete(`token/${t.token}`);
     }
+  }
+
+  /** Like core's add_or_update_transport(): on a chatmail relay the first login creates the account. */
+  async addRelay(addr: string, password: string) {
+    addr = addr.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+$/.test(addr)) throw new Error(t('relays.invalid'));
+    if (this.isSelfAddr(addr)) throw new Error(t('relays.known'));
+    if (this.selfAddrs().length >= MAX_RELAYS) throw new Error(t('relays.limit', { n: MAX_RELAYS }));
+    const host = addr.split('@')[1];
+    const imap = await ImapClient.connect(this.config.bridgeUrl, host).catch(() => {
+      throw new Error(t('relays.unreachable', { host }));
+    });
+    try {
+      await imap.login(addr, password).catch(() => {
+        throw new Error(t('relays.loginFailed'));
+      });
+    } finally {
+      imap.close();
+    }
+    await this.applyRelays([{ ...loginParams(addr, password, host), timestamp: Math.floor(Date.now() / 1000) }], []);
+    if (this.config.bccSelf) await this.sendSync({ Transports: this.transportsSyncData() });
+    this.sendKeyupdates().catch(e => console.warn('keyupdate failed', e));
   }
 
   /** Like core's delete_transport(): never the last relay; the other devices learn it through a sync message. */

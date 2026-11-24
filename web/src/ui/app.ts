@@ -1,5 +1,5 @@
 import { fileReader, readBackup } from '../dc/backup';
-import { canDeleteForAll, canResend, DcClient, formatDuration, pinnable, savable } from '../dc/client';
+import { canDeleteForAll, canResend, DcClient, formatDuration, MAX_RELAYS, pinnable, savable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
 import { looksLikeBackupQr, receiveBackup } from '../dc/transfer';
 import { byChatOrder, type Chat, type Message } from '../dc/types';
@@ -1575,6 +1575,30 @@ async function showInvite(client: DcClient, chatId?: string) {
   ]);
 }
 
+/** Like the setup: a new random address on a chatmail relay, or the login of an existing address. */
+function addRelayDialog(client: DcClient) {
+  const relay = h('input', { type: 'text', spellcheck: 'false', placeholder: DEFAULT_RELAY });
+  const existing = h('input', { type: 'checkbox' });
+  const addr = h('input', { type: 'text', inputmode: 'email', spellcheck: 'false', placeholder: 'you@example.org', autocomplete: 'off' });
+  const password = h('input', { type: 'password', autocomplete: 'new-password' });
+  const relayField = field(t('setup.relay'), relay, t('setup.relayHint'));
+  const existingFields = h('div', { class: 'existing', hidden: true }, field(t('setup.email'), addr), field(t('setup.password'), password));
+  existing.addEventListener('change', () => {
+    existingFields.hidden = !existing.checked;
+    relayField.hidden = existing.checked;
+  });
+  dialog(t('relays.add'), h('div', {}, h('p', {}, t('relays.addText')), relayField,
+    h('div', { class: 'remember' }, h('label', { class: 'check' }, existing, t('relays.existing'))), existingFields), [
+    { label: t('cancel') },
+    {
+      label: t('relays.add'), primary: true, onClick: () => existing.checked
+        ? client.addRelay(addr.value, password.value)
+        : client.addRelay(`${randomAlnum(9)}@${relay.value.trim().toLowerCase() || DEFAULT_RELAY}`, randomAlnum(22)),
+    },
+  ]);
+  relay.focus();
+}
+
 function joinDialog(client: DcClient, open: (id: string) => void) {
   const input = h('textarea', { rows: '3', placeholder: 'https://i.delta.chat/#…', spellcheck: 'false' });
   dialog(t('join.title'), h('div', {}, h('p', {}, t('join.text')), input), [
@@ -2070,7 +2094,8 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
           client.selfAddrs().length > 1 ? Object.assign(iconButton(ICONS.trash, t('relays.remove'), () => dialog(t('relays.removeAsk', { addr: a }), h('p', {}, t('relays.removeText')), [
             { label: t('cancel') },
             { label: t('relays.remove'), primary: true, onClick: () => client.removeRelay(a) },
-          ])), { className: 'icon-button' }) : null)))),
+          ])), { className: 'icon-button' }) : null))),
+        client.selfAddrs().length < MAX_RELAYS ? h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => addRelayDialog(client) }, t('relays.add'))) : null),
       section(t('settings.appearance'),
         field(t('language'), lang),
         field(t('settings.theme'), theme),
