@@ -1561,6 +1561,32 @@ export class DcClient extends EventTarget {
     if (this.isSelfAddr(addr)) throw new Error(t('relays.known'));
     if (this.selfAddrs().length >= MAX_RELAYS) throw new Error(t('relays.limit', { n: MAX_RELAYS }));
     const host = addr.split('@')[1];
+    await this.checkLogin(addr, password, host);
+    await this.applyRelays([{ ...loginParams(addr, password, host), timestamp: Math.floor(Date.now() / 1000) }], []);
+    if (this.config.bccSelf) await this.sendSync({ Transports: this.transportsSyncData() });
+    this.sendKeyupdates().catch(e => console.warn('keyupdate failed', e));
+  }
+
+  /** Like Delta Chat's "Edit relay": stores a new password after checking it; the password on the relay stays. */
+  async changeRelayPassword(addr: string, password: string) {
+    const c = this.config;
+    const box = this.mailbox(addr);
+    if (!box) return;
+    await this.checkLogin(box.addr, password, box.host);
+    // Like core's add_timestamp after reconfiguring, so the other devices take the new password.
+    const timestamp = Math.max(Math.floor(Date.now() / 1000), box.addedAt + 1);
+    const relay = c.relays?.find(r => addrEq(r.addr, addr));
+    if (relay) Object.assign(relay, { password, addedAt: timestamp, ...loginParams(relay.addr, password, relay.host) });
+    else Object.assign(c, { password, addedAt: timestamp });
+    c.smtpFailed = c.smtpFailed?.filter(f => !addrEq(f, addr));
+    await this.saveConfig();
+    this.loops.get(box.addr)?.abort();
+    this.loops.delete(box.addr);
+    this.startLoops();
+    if (relay && c.bccSelf) await this.sendSync({ Transports: this.transportsSyncData() });
+  }
+
+  private async checkLogin(addr: string, password: string, host: string) {
     const imap = await ImapClient.connect(this.config.bridgeUrl, host).catch(() => {
       throw new Error(t('relays.unreachable', { host }));
     });
@@ -1571,9 +1597,6 @@ export class DcClient extends EventTarget {
     } finally {
       imap.close();
     }
-    await this.applyRelays([{ ...loginParams(addr, password, host), timestamp: Math.floor(Date.now() / 1000) }], []);
-    if (this.config.bccSelf) await this.sendSync({ Transports: this.transportsSyncData() });
-    this.sendKeyupdates().catch(e => console.warn('keyupdate failed', e));
   }
 
   /** Like core's delete_transport(): never the last relay; the other devices learn it through a sync message. */
@@ -1657,7 +1680,7 @@ export class DcClient extends EventTarget {
       // Removal wins a tie, like in core.
       if (tombstones.some(r => r.addr === relay.addr && r.at >= relay.addedAt)) continue;
       if (addrEq(relay.addr, c.addr)) {
-        if (relay.addedAt > (c.addedAt ?? 0)) Object.assign(c, { password: relay.password, addedAt: relay.addedAt });
+            if (relay.addedAt > (c.addedAt ?? 0)) Object.assign(c, { password: relay.password, addedAt: relay.addedAt });
         continue;
       }
       const known = relays.find(r => r.addr === relay.addr);

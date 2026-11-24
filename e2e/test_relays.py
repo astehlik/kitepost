@@ -292,6 +292,31 @@ def set_server_password(addr, password):
     relay_exec("sh", "-c", f"doveadm pw -s SHA512-CRYPT -p '{password}' > /home/vmail/mail/{RELAY}/{addr}/password")
 
 
+def test_editing_a_relay_password(page, make_account, tmp_path):
+    phone, bob, first, second = imported_with_two_relays(page, make_account, tmp_path)
+    password = secrets.token_urlsafe(16)
+    set_server_password(second, password)
+    only_on_second_relay(bob, phone, first, second, "while the password was outdated")
+
+    relays = relays_in_settings(page)
+    relays.filter(has_text=second).get_by_role("button", name="Edit relay").click()
+    dialog = page.locator("dialog", has_text=f'Edit relay "{second}"')
+    expect(dialog).not_to_contain_text("is not sent to your other devices")
+    dialog.get_by_label("Password").fill("wrong")
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog.locator(".error")).to_contain_text("The relay rejected the address or the password.")
+    dialog.get_by_label("Password").fill(password)
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog).to_have_count(0)
+
+    open_chat(page, "Bob")
+    expect(page.locator(".msg.in", has_text="while the password was outdated")).to_be_visible()
+    deadline = time.monotonic() + EVENT_TIMEOUT
+    while next(t for t in phone.list_transports() if t["addr"] == second).get("password") != password:
+        assert time.monotonic() < deadline, "the phone kept the old password"
+        time.sleep(0.2)
+
+
 def test_password_of_the_sending_relay_changed_on_the_phone(page, make_account, tmp_path):
     phone, bob, first, second = imported_with_two_relays(page, make_account, tmp_path)
     phone.delete_transport(first)

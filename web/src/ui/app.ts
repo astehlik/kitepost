@@ -1575,6 +1575,18 @@ async function showInvite(client: DcClient, chatId?: string) {
   ]);
 }
 
+/** Like Delta Chat's "Edit relay", for the password only. */
+function editRelayDialog(client: DcClient, addr: string) {
+  const password = h('input', { type: 'password', autocomplete: 'new-password' });
+  const first = addr === client.config.addr;
+  dialog(t('relays.editTitle', { addr }), h('div', {}, h('p', {}, t('relays.editText')), field(t('setup.password'), password),
+    first ? h('p', { class: 'hint' }, t('relays.editFirst')) : null), [
+    { label: t('cancel') },
+    { label: t('save'), primary: true, onClick: () => client.changeRelayPassword(addr, password.value) },
+  ]);
+  password.focus();
+}
+
 /** Like the setup: a new random address on a chatmail relay, or the login of an existing address. */
 function addRelayDialog(client: DcClient) {
   const relay = h('input', { type: 'text', spellcheck: 'false', placeholder: DEFAULT_RELAY });
@@ -2091,6 +2103,7 @@ function settingsView(client: DcClient, rebuild: () => void, close: () => void):
       section(t('settings.relays'),
         h('p', {}, t('relays.hint')),
         h('ul', { class: 'relays' }, ...client.selfAddrs().map(a => h('li', {}, h('span', {}, a),
+          Object.assign(iconButton(ICONS.edit, t('relays.edit'), () => editRelayDialog(client, a)), { className: 'icon-button' }),
           client.selfAddrs().length > 1 ? Object.assign(iconButton(ICONS.trash, t('relays.remove'), () => dialog(t('relays.removeAsk', { addr: a }), h('p', {}, t('relays.removeText')), [
             { label: t('cancel') },
             { label: t('relays.remove'), primary: true, onClick: () => client.removeRelay(a) },
