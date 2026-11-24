@@ -55,6 +55,9 @@ export interface Config {
   relays?: Relay[];
   /** Like core's removed_transports: address and removal time in seconds. */
   removedRelays?: { addr: string; at: number }[];
+  /** Like core's smtp_success and smtp_failure: the relay that sent last, and those that failed, oldest first. */
+  smtpLast?: string;
+  smtpFailed?: string[];
 }
 
 export interface Contact {

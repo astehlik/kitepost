@@ -171,3 +171,12 @@ def test_removing_the_sending_relay(page, make_account, tmp_path):
     web_send(page, "after removing the first relay")
     msg = wait_text(bob, "after removing the first relay")
     assert bob.get_contact_by_id(msg.sender.id).get_snapshot().address == second
+
+
+def test_sending_switches_to_a_working_relay(page, make_account, tmp_path):
+    _, bob, first, second = imported_with_two_relays(page, make_account, tmp_path)
+    relay_exec("sh", "-c", f"echo '{{SHA512-CRYPT}}$6$broken$broken' > /home/vmail/mail/{RELAY}/{first}/password")
+    open_chat(page, "Bob")
+    web_send(page, "through the working relay")
+    msg = wait_text(bob, "through the working relay")
+    assert bob.get_contact_by_id(msg.sender.id).get_snapshot().address == second

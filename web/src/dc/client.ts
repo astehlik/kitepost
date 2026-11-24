@@ -856,36 +856,76 @@ export class DcClient extends EventTarget {
     bccSelf = false,
   ): Promise<string> {
     const { config } = this;
-    if (bccSelf && config.bccSelf) recipients = [...recipients, config.addr];
-    const rendered = renderMessage({
-      rfc724_mid: createMid(),
-      from_addr: config.addr,
-      from_name: config.displayName,
-      self_secret_key: config.secretKey,
-      self_public_key: config.publicKey,
-      gossip: [],
-      timestamp: Math.floor(Date.now() / 1000),
-      ...msg,
-    });
+    const mid = msg.rfc724_mid ?? createMid();
+    const timestamp = Math.floor(Date.now() / 1000);
     // 4xx is temporary, e.g. chatmail's rate limit; like core, try again later with the same message.
     for (let attempt = 0; ; attempt++) {
-      try {
-        const smtp = await SmtpClient.connect(config.bridgeUrl, config.smtpHost);
+      let error: unknown;
+      for (const relay of this.sendingRelays()) {
+        const rendered = renderMessage({
+          rfc724_mid: mid,
+          from_addr: relay.addr,
+          from_name: config.displayName,
+          self_secret_key: config.secretKey,
+          self_public_key: config.publicKey,
+          gossip: [],
+          timestamp,
+          ...msg,
+        });
+        let smtp: SmtpClient | undefined;
         try {
-          await smtp.login(config.addr, config.password);
-          await smtp.send(config.addr, [...new Set(recipients)], rendered.raw);
+          // Like core's connect(), a relay that cannot be reached or rejects the login is skipped.
+          smtp = await SmtpClient.connect(config.bridgeUrl, relay.host);
+          await smtp.login(relay.addr, relay.password);
+        } catch (e) {
+          error = e;
+          await smtp?.quit().catch(() => undefined);
+          continue;
+        }
+        try {
+          await smtp.send(relay.addr, [...new Set(bccSelf && config.bccSelf ? [...recipients, relay.addr] : recipients)], rendered.raw);
+          await this.recordSmtp(relay.addr, true);
+          error = undefined;
+        } catch (e) {
+          if (e instanceof SmtpError) await this.recordSmtp(relay.addr, false);
+          error = e;
         } finally {
-          await smtp.quit();
+          await smtp.quit().catch(() => undefined);
         }
         break;
-      } catch (e) {
-        const temporary = e instanceof SmtpError && e.code >= 400 && e.code < 500;
-        if (!temporary || attempt >= SMTP_RETRY_DELAYS.length) throw e;
-        await sleep(SMTP_RETRY_DELAYS[attempt]);
       }
+      if (!error) break;
+      const temporary = error instanceof SmtpError && error.code >= 400 && error.code < 500;
+      if (!temporary || attempt >= SMTP_RETRY_DELAYS.length) throw error;
+      await sleep(SMTP_RETRY_DELAYS[attempt]);
     }
-    this.seen.add(rendered.rfc724_mid);
-    return rendered.rfc724_mid;
+    this.seen.add(mid);
+    return mid;
+  }
+
+  /** Like core's sorted_transports(): the relay that worked last first, failed ones last, oldest failure first. */
+  private sendingRelays(): { addr: string; password: string; host: string }[] {
+    const c = this.config;
+    const all = [{ addr: c.addr, password: c.password, host: c.smtpHost }, ...(c.relays ?? []).map(r => ({ addr: r.addr, password: r.password, host: r.host }))];
+    const failed = c.smtpFailed ?? [];
+    const rank = (addr: string) => [addrEq(addr, c.smtpLast ?? '') ? 0 : 1, failed.findIndex(f => addrEq(f, addr)) + 1];
+    return all.map((r, i) => ({ r, k: [...rank(r.addr), i] }))
+      .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2]).map(x => x.r);
+  }
+
+  /** Like core's record_success() and record_failure(). */
+  private async recordSmtp(addr: string, ok: boolean) {
+    const c = this.config;
+    const failed = (c.smtpFailed ?? []).filter(f => !addrEq(f, addr));
+    if (ok) {
+      if (addrEq(c.smtpLast ?? '', addr) && failed.length === (c.smtpFailed ?? []).length) return;
+      c.smtpLast = addr;
+    } else {
+      failed.push(addr);
+      if (addrEq(c.smtpLast ?? '', addr)) c.smtpLast = undefined;
+    }
+    c.smtpFailed = failed;
+    await this.saveConfig();
   }
 
   private memberContacts(chat: Chat): Contact[] {
