@@ -55,6 +55,8 @@ services:
       ADMIN_TOKEN: test-admin-token-0123456789abcdef
       APP_URL: http://127.0.0.1:8099/
       PUBLIC_URL: http://127.0.0.1:8084/
+      # Small chunks, so that the handoff tests upload several.
+      HANDOFF_CHUNK_SIZE: "131072"
     volumes:
       - mail:/vmail
     ports: ["127.0.0.1:8084:8080"]

@@ -137,11 +137,13 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
   get.delta.chat) and a `dclogin:` QR code and button for the app. Set `INVITE_PUBLIC_URL` if the
   service is not reachable at `https://<host>/join/`.
 - **Handoff to the phone**: after creating a profile, and later under *Settings → Set up phone*,
-  the web client encrypts a backup with a random AES-GCM key, uploads the ciphertext to
-  `/join/handoff` (authenticated with the account's password, so only accounts of this relay can
-  store anything) and shows a QR code for `/join/h/<id>#<key>`. The phone page decrypts it locally,
-  saves the file and explains *Restore from backup* in Delta Chat. The ciphertext can be fetched once
-  and expires after 15 minutes. Logging in on both devices with the `dclogin:` code instead would give
+  the web client encrypts a backup with a random AES-GCM key in chunks of 8 MB, uploads the
+  ciphertext to `/join/handoff` (authenticated with the account's password, so only accounts of
+  this relay can store anything) and shows a QR code for `/join/h/<id>#<key>`. The service keeps
+  the chunks in its data volume, up to `INVITE_HANDOFF_MAX_MB` per profile and
+  `INVITE_HANDOFF_TOTAL_MB` in all. The phone page decrypts them locally while downloading, saves
+  the file and explains *Restore from backup* in Delta Chat. The ciphertext can be fetched once and
+  expires after 15 minutes. Logging in on both devices with the `dclogin:` code instead would give
   them different keys. The client finds the service through `HANDOFF_URL` (default `../join/`);
   uploads need `client_max_body_size` raised for `/join/`, as in `docker/chatmail/webapps.conf`.
 

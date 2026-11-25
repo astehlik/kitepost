@@ -31,7 +31,15 @@ const DOWNLOAD_URL = 'https://get.delta.chat';
 if (!MAIL_DOMAIN) throw new Error('MAIL_DOMAIN is required');
 if (ADMIN_TOKEN && ADMIN_TOKEN.length < 24) throw new Error('ADMIN_TOKEN must be at least 24 characters');
 
-const handoff = handoffs({ mailDomain: MAIL_DOMAIN, mailboxesDir: MAILBOXES_DIR });
+const MiB = 1024 * 1024;
+const handoff = handoffs({
+  mailDomain: MAIL_DOMAIN,
+  mailboxesDir: MAILBOXES_DIR,
+  dir: process.env.HANDOFF_DIR ?? join(dirname(DATA_FILE), 'handoff'),
+  chunkSize: Number(process.env.HANDOFF_CHUNK_SIZE ?? 8 * MiB),
+  maxSize: Number(process.env.HANDOFF_MAX_MB ?? 512) * MiB,
+  maxTotal: Number(process.env.HANDOFF_TOTAL_MB ?? 2048) * MiB,
+});
 const setup = setupLinks({ file: SETUP_FILE, mailboxesDir: MAILBOXES_DIR });
 
 const sha256 = s => createHash('sha256').update(s).digest('hex');
@@ -94,7 +102,7 @@ async function deleteAccount(addr) {
   const dir = join(MAILBOXES_DIR, addr);
   await rm(join(dir, 'password'), { force: true });
   await rm(dir, { recursive: true, force: true, maxRetries: 3 });
-  handoff.forget(addr);
+  await handoff.forget(addr);
 }
 
 function dclogin(addr, password) {
@@ -247,7 +255,7 @@ function handoffPage(lang, id) {
     <p class="small">${T('handoffInstallOther', { url: DOWNLOAD_URL })}</p></li>
   <li><h2>${T('handoffSaveHeading')}</h2>
     <div id="handoff" data-src="${esc(id)}/data" data-filename="${esc(filename)}"
-      data-gone="${esc(plain(T('handoffGone')))}" data-failed="${esc(T('handoffFailed'))}">
+      data-gone="${esc(plain(T('handoffGone')))}" data-failed="${esc(T('handoffFailed'))}" data-loading="${esc(T('handoffLoading'))}">
       <p class="status" hidden>${T('handoffLoading')}</p>
       <p><button class="primary" type="button">${T('handoffSave')}</button></p>
     </div>
@@ -375,8 +383,8 @@ const server = createServer(async (req, res) => {
     // The data can be fetched only once, so link previews and prefetching must not reach it with a GET.
     if (h && h[2]) {
       if (req.method !== 'POST') return send(res, 405, '', 'text/plain', { Allow: 'POST' });
-      const data = handoff.take(h[1]);
-      return data ? send(res, 200, data, 'application/octet-stream') : send(res, 410, '', 'text/plain');
+      if (!(await handoff.download(h[1], res, SECURITY_HEADERS))) send(res, 410, '', 'text/plain');
+      return;
     }
     const s = /^s\/([A-Za-z0-9_-]{22})$/.exec(path);
     if (s && req.method === 'GET') {

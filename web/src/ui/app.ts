@@ -1,6 +1,6 @@
 import { fileReader, readBackup } from '../dc/backup';
 import { canDeleteForAll, canResend, DcClient, formatDuration, MAX_RELAYS, pinnable, savable } from '../dc/client';
-import { createHandoff, handoffAvailable, handoffState } from '../dc/handoff';
+import { createHandoff, handoffAvailable, handoffState, HandoffTooLarge } from '../dc/handoff';
 import { looksLikeBackupQr, receiveBackup } from '../dc/transfer';
 import { byChatOrder, type Chat, type Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
@@ -361,9 +361,12 @@ function phoneSetup(client: DcClient, signal: AbortSignal): HTMLElement {
   const box = h('div', { class: 'phone-setup' });
   const newCode = () => h('button', { type: 'button', onclick: () => void show() }, t('phone.newCode'));
   const show = async () => {
-    box.replaceChildren(h('p', { class: 'hint' }, t('phone.preparing')));
+    const status = h('p', { class: 'hint' }, t('phone.preparing'));
+    box.replaceChildren(status);
     try {
-      const handoff = await createHandoff(handoffBase(), client);
+      const handoff = await createHandoff(handoffBase(), client, share => {
+        status.textContent = t('phone.uploading', { percent: Math.round(share * 100) });
+      });
       box.replaceChildren(h('div', { class: 'qr' }, trustedSvg(qrSvg(handoff.url))),
         h('p', { class: 'hint' }, t('phone.waiting')),
         h('p', { class: 'hint' }, h('a', { href: handoff.url, target: '_blank', rel: 'noopener noreferrer' }, t('phone.thisDevice'))));
@@ -379,6 +382,11 @@ function phoneSetup(client: DcClient, signal: AbortSignal): HTMLElement {
       }
     } catch (e) {
       console.warn('handoff failed', e);
+      if (e instanceof HandoffTooLarge) {
+        const mb = (n: number) => String(Math.ceil(n / 1024 / 1024));
+        return box.replaceChildren(h('p', { class: 'error' }, t('phone.tooLarge', { size: mb(e.size), max: mb(e.max) })),
+          h('button', { type: 'button', onclick: () => exportDialog(client) }, t('profile.export')));
+      }
       box.replaceChildren(h('p', { class: 'error' }, t('phone.failed')), newCode());
     }
   };

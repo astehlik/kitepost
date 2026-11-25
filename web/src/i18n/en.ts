@@ -82,6 +82,8 @@ export const en = {
   'phone.title': 'Use it on your phone too',
   'phone.text': "Scan this code with your phone's camera. The page that opens helps you install Delta Chat and copies this profile into it, so your phone and this browser share the same chats.",
   'phone.preparing': 'Preparing the code…',
+  'phone.uploading': 'Preparing the code… {percent} %',
+  'phone.tooLarge': 'Your profile is too large for the code ({size} MB, at most {max} MB). Export a backup instead and restore it in Delta Chat: "I already have a profile" → "Restore from backup".',
   'phone.waiting': "The code works once and for 15 minutes. It unlocks your profile, so don't show it to anyone.",
   'phone.fetched': '✓ Your phone has the profile. Restore it in Delta Chat: "I already have a profile" → "Restore from backup".',
   'phone.expired': 'The code has expired.',

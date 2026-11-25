@@ -84,6 +84,8 @@ export const de: Record<keyof typeof en, string> = {
   'phone.title': 'Auch auf dem Handy nutzen',
   'phone.text': 'Scanne diesen Code mit der Kamera deines Handys. Die Seite, die sich öffnet, hilft dir, Delta Chat zu installieren, und überträgt dieses Profil dorthin. Handy und Browser haben dann dieselben Chats.',
   'phone.preparing': 'Code wird vorbereitet …',
+  'phone.uploading': 'Code wird vorbereitet … {percent} %',
+  'phone.tooLarge': 'Dein Profil ist zu groß für den Code ({size} MB, höchstens {max} MB). Exportiere stattdessen ein Backup und stelle es in Delta Chat wieder her: „Ich habe bereits ein Profil“ → „Aus Backup wiederherstellen“.',
   'phone.waiting': 'Der Code funktioniert einmal und 15 Minuten lang. Er öffnet dein Profil, zeige ihn also niemandem.',
   'phone.fetched': '✓ Dein Handy hat das Profil. Stelle es in Delta Chat wieder her: „Ich habe bereits ein Profil“ → „Aus Backup wiederherstellen“.',
   'phone.expired': 'Der Code ist abgelaufen.',

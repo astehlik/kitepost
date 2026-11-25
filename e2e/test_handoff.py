@@ -18,12 +18,16 @@ def page(page):
     return page
 
 
-def create_web_profile(page):
+def create_web_profile_without_code(page):
     set_passphrase(page)
     page.locator(".field", has_text="Display name").locator("input").fill("Webby")
     page.locator(".field", has_text="Chatmail relay").locator("input").fill(RELAY)
     page.get_by_role("button", name="Create profile").click()
     expect(page.get_by_role("heading", name="Use it on your phone too")).to_be_visible()
+
+
+def create_web_profile(page):
+    create_web_profile_without_code(page)
     return page.get_by_role("link", name="Open the link instead").get_attribute("href")
 
 
@@ -137,3 +141,17 @@ def test_handoff_needs_the_account_password(context):
     auth = base64.b64encode(f"nobody@{RELAY}:wrong".encode()).decode()
     res = context.request.post(INVITE + "handoff", headers={"Authorization": f"Basic {auth}"}, data=b"x" * 64)
     assert res.status == 403
+
+
+def test_handoff_too_large_offers_the_backup_file(page):
+    def refuse(route):
+        if route.request.method == "POST":
+            route.fulfill(status=413, json={"error": "too large", "max": 1024 * 1024})
+        else:
+            route.continue_()
+
+    page.route("**/handoff", refuse)
+    create_web_profile_without_code(page)
+    expect(page.locator(".phone-setup .error")).to_contain_text("too large for the code")
+    page.locator(".phone-setup").get_by_role("button", name="Export backup").click()
+    expect(page.get_by_role("dialog")).to_be_visible()

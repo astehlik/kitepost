@@ -56,6 +56,8 @@ services:
       APP_URL: ${INVITE_APP_URL:-../app/}
       PUBLIC_URL: ${INVITE_PUBLIC_URL:-}
       SITE_NAME: ${INVITE_SITE_NAME:-}
+      HANDOFF_MAX_MB: ${INVITE_HANDOFF_MAX_MB:-512}
+      HANDOFF_TOTAL_MB: ${INVITE_HANDOFF_TOTAL_MB:-2048}
     volumes:
       - ${CHATMAIL_MAILBOXES_DIR:-/srv/chatmail/data/mail/mail/${MAIL_DOMAIN:-unset}}:/mailboxes
       - invite_data:/data
