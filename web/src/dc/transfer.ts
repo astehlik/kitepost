@@ -1,4 +1,6 @@
-// "Add second device" receiver; the iroh module is large, so it is only loaded when needed.
+// Delta Chat's "Add second device" over the relay's iroh relay; the iroh module is large, so it is only loaded when needed.
+
+import { BACKUP_VERSION } from './backup-export';
 
 type TransferModule = typeof import('../wasm/kitepost_transfer.js');
 let mod: Promise<TransferModule> | undefined;
@@ -44,4 +46,25 @@ export async function receiveBackup(
     },
   );
   if (failure) throw failure;
+}
+
+/**
+ * Offers `backup` to Delta Chat's "Add as second device" through the iroh relay at `relayUrl`.
+ * `onQr` gets the code for the other device; resolves once it confirmed the transfer.
+ */
+export async function provideBackup(
+  relayUrl: string,
+  backup: Blob,
+  onQr: (qr: string) => void,
+  progress: (sent: number, total: number) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const m = await load();
+  const cancel = new Promise<void>(resolve => {
+    if (signal.aborted) resolve();
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+  await m.provide_backup(relayUrl, BACKUP_VERSION, backup.size, onQr,
+    async (offset: number, length: number) => new Uint8Array(await backup.slice(offset, offset + length).arrayBuffer()),
+    progress, cancel);
 }

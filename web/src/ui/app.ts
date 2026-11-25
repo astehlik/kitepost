@@ -1,7 +1,7 @@
 import { fileReader, readBackup } from '../dc/backup';
 import { canDeleteForAll, canResend, DcClient, formatDuration, MAX_RELAYS, pinnable, savable } from '../dc/client';
 import { createHandoff, handoffAvailable, handoffState, HandoffTooLarge } from '../dc/handoff';
-import { looksLikeBackupQr, receiveBackup } from '../dc/transfer';
+import { looksLikeBackupQr, provideBackup, receiveBackup } from '../dc/transfer';
 import { byChatOrder, type Chat, type Message } from '../dc/types';
 import { getLanguage, LANGUAGES, setLanguage, t, type Lang } from '../i18n';
 import { avatarDataUrl } from '../dc/avatar';
@@ -391,6 +391,56 @@ function phoneSetup(client: DcClient, signal: AbortSignal): HTMLElement {
     }
   };
   void show();
+  const handoff = h('div', {}, h('p', {}, t('phone.text')), box);
+  return h('div', {}, handoff, secondDevice(client, signal, handoff));
+}
+
+/**
+ * For Delta Chat apps that add a second device through the relay's iroh relay; hidden without one.
+ * While its code is shown, `handoff` is hidden.
+ */
+function secondDevice(client: DcClient, signal: AbortSignal, handoff: HTMLElement): HTMLElement {
+  const box = h('div', { class: 'phone-setup second-device', hidden: true });
+  const offer = (relayUrl: string) => {
+    handoff.hidden = false;
+    box.replaceChildren(h('button', { type: 'button', class: 'link', onclick: () => void start(relayUrl) }, t('phone.secondDevice')));
+  };
+  const start = async (relayUrl: string) => {
+    const stop = new AbortController();
+    const abort = () => stop.abort();
+    signal.addEventListener('abort', abort, { once: true });
+    const status = h('p', { class: 'hint' }, t('phone.preparing'));
+    const back = h('button', { type: 'button', class: 'link', onclick: () => { stop.abort(); offer(relayUrl); } }, t('phone.cameraCode'));
+    handoff.hidden = true;
+    box.replaceChildren(h('p', {}, t('phone.secondDeviceNote')), status, h('p', {}, back));
+    try {
+      const { blob } = await client.exportBackup();
+      const shown = (qr: string) => {
+        const copy: HTMLButtonElement = h('button', {
+          type: 'button', onclick: () => navigator.clipboard.writeText(qr).then(() => flashLabel(copy, t('invite.copied')), () => {}),
+        }, t('phone.copyCode'));
+        box.insertBefore(h('div', { class: 'qr' }, trustedSvg(qrSvg(qr))), status);
+        box.insertBefore(h('p', {}, copy), status);
+        status.textContent = t('phone.waitingPhone');
+      };
+      await provideBackup(relayUrl, blob, shown,
+        (sent, total) => { status.textContent = t('phone.sending', { percent: Math.round((sent / total) * 100) }); }, stop.signal);
+      void client.markSecured();
+      box.replaceChildren(h('p', { class: 'ok' }, t('phone.transferred')));
+    } catch (e) {
+      if (stop.signal.aborted) return;
+      console.warn('second device transfer failed', e);
+      offer(relayUrl);
+      box.prepend(h('p', { class: 'error' }, t('phone.transferFailed')));
+    } finally {
+      signal.removeEventListener('abort', abort);
+    }
+  };
+  void client.irohRelay().then(relayUrl => {
+    if (!relayUrl || signal.aborted) return;
+    offer(relayUrl);
+    box.hidden = false;
+  }, () => {});
   return box;
 }
 
@@ -399,7 +449,6 @@ function renderPhoneSetup(client: DcClient) {
   const setup = phoneSetup(client, polling.signal);
   const leave = (next: () => unknown) => () => { polling.abort(); void next(); };
   const render = () => screen(t('phone.title'), render,
-    h('p', {}, t('phone.text')),
     setup,
     h('button', { class: 'primary', onclick: leave(() => client.config.secured ? startMain(client) : renderBackupReminder(client)) }, t('continue')),
     h('p', {}, h('button', { type: 'button', class: 'link', onclick: busyClick(() => { polling.abort(); return renderConnectPhone(client); }) }, t('phone.otherProfile'))));
@@ -417,7 +466,7 @@ function renderBackupReminder(client: DcClient) {
 
 function phoneDialog(client: DcClient) {
   const polling = new AbortController();
-  const dlg = dialog(t('profile.phone'), h('div', { class: 'invite' }, h('p', {}, t('phone.text')), phoneSetup(client, polling.signal)),
+  const dlg = dialog(t('profile.phone'), h('div', { class: 'invite' }, phoneSetup(client, polling.signal)),
     [{ label: t('close'), primary: true }]);
   dlg.addEventListener('close', () => polling.abort());
 }

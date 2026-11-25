@@ -1,4 +1,4 @@
-"""Delta Chat's "Add second device" received by the web client over the relay's iroh relay.
+"""Delta Chat's "Add second device" between the web client and core over the relay's iroh relay.
 
 Needs a deltachat-rpc-server with docs/upstream/0003-backup-transfer-relay.patch in
 DC_RPC_SERVER and the `iroh` service of e2e/relay.
@@ -11,7 +11,8 @@ from deltachat_rpc_client import DeltaChat, EventType
 from playwright.sync_api import expect
 
 from conftest import start_rpc
-from helpers import addr_of, configure, open_chat, set_passphrase, wait_event, wait_text, web_send
+from helpers import (INVITE, RELAY, RELAY_IP, addr_of, capture_clipboard, configure, open_chat, own_addr, set_passphrase, transport,
+                     wait_event, wait_own_msg, wait_text, web_send)
 
 pytestmark = [
     pytest.mark.local_relay,
@@ -52,3 +53,33 @@ def test_second_device_by_qr(page, patched_rpc):
     expect(page.locator(".msg.out", has_text="before the transfer")).to_be_visible()
     web_send(page, "after the transfer")
     assert wait_text(bob, "after the transfer").chat_id == bob_chat.id
+
+
+def test_second_device_from_the_web(page, patched_rpc):
+    page.route("**/config.json", lambda route: route.fulfill(json={"handoffUrl": INVITE}))
+    set_passphrase(page)
+    page.locator(".field", has_text="Display name").locator("input").fill("Webby")
+    page.locator(".field", has_text="Chatmail relay").locator("input").fill(RELAY)
+    page.get_by_role("button", name="Create profile").click()
+    capture_clipboard(page)
+    page.get_by_role("button", name="Show the code for “Add as second device”").click()
+    page.get_by_role("button", name="Copy code").click()
+    qr = page.wait_for_function("window.copied").json_value()
+    assert '"relay_url"' in qr and "127.0.0.1:3340" in qr, qr
+
+    phone = DeltaChat(patched_rpc).add_account()
+    patched_rpc.get_backup(phone.id, qr)
+    expect(page.locator(".second-device .ok")).to_have_text("✓ Your phone has the profile.")
+    page.get_by_role("button", name="Continue").click()
+    login = phone.list_transports()[0]
+    assert login["addr"] == own_addr(page), login
+    if RELAY_IP:
+        phone.add_or_update_transport(transport(login["addr"], login["password"]))
+    phone.start_io()
+    try:
+        saved = phone.get_contact_by_id(1).create_chat()
+        open_chat(page, "Saved messages")
+        web_send(page, "note from the browser")
+        assert wait_own_msg(phone, "note from the browser").chat_id == saved.id
+    finally:
+        phone.stop_io()

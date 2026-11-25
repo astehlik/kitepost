@@ -1586,6 +1586,18 @@ export class DcClient extends EventTarget {
     if (relay && c.bccSelf) await this.sendSync({ Transports: this.transportsSyncData() });
   }
 
+  /** The iroh relay the primary relay announces for "Add second device", like core's metadata. */
+  async irohRelay(): Promise<string | undefined> {
+    const c = this.config;
+    const imap = await ImapClient.connect(c.bridgeUrl, c.imapHost);
+    try {
+      await imap.login(c.addr, c.password);
+      return await imap.serverMetadata('/shared/vendor/deltachat/irohrelay');
+    } finally {
+      imap.close();
+    }
+  }
+
   private async checkLogin(addr: string, password: string, host: string) {
     const imap = await ImapClient.connect(this.config.bridgeUrl, host).catch(() => {
       throw new Error(t('relays.unreachable', { host }));

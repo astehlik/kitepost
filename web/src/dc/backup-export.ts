@@ -8,7 +8,7 @@ import { byChatOrder, contactName, SELF_CHAT, type AuthToken, type Chat, type Co
 // The schema is a fresh profile of core; core migrates it to its own version on import.
 
 const DB_NAME = 'dc_database_backup.sqlite';
-const BACKUP_VERSION = 5;
+export const BACKUP_VERSION = 5;
 
 const CONTACT_SELF = 1;
 const CONTACT_INFO = 2;

@@ -1,7 +1,8 @@
-//! Receives a backup from Delta Chat's "Add second device" (core src/imex/transfer.rs).
+//! Delta Chat's "Add second device" over the chatmail relay's iroh relay (core src/imex/transfer.rs).
 
-use anyhow::{Context as _, Result, bail, ensure};
-use iroh::{Endpoint, NodeAddr, RelayMode};
+use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use futures_lite::FutureExt as _;
+use iroh::{Endpoint, NodeAddr, RelayMode, RelayUrl};
 use js_sys::{Function, Promise, Uint8Array};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
@@ -9,6 +10,7 @@ use wasm_bindgen_futures::JsFuture;
 const BACKUP_ALPN: &[u8] = b"/deltachat/backup";
 const MAX_BACKUP_VERSION: u32 = 5;
 const BLOCK: usize = 512;
+const SEND_CHUNK: f64 = 256.0 * 1024.0;
 
 pub struct BackupQr {
     pub auth_token: String,
@@ -147,6 +149,118 @@ async fn receive(qr: &str, on_data: &Function, confirm: &Function) -> Result<()>
 #[wasm_bindgen]
 pub async fn receive_backup(qr: String, on_data: Function, confirm: Function) -> Result<(), JsError> {
     receive(&qr, &on_data, &confirm)
+        .await
+        .map_err(|e| JsError::new(&format!("{e:#}")))
+}
+
+fn js_err(e: JsValue) -> anyhow::Error {
+    anyhow!("{}", e.as_string().unwrap_or_else(|| format!("{e:?}")))
+}
+
+async fn call_async(f: &Function, a: &JsValue, b: &JsValue) -> Result<JsValue> {
+    JsFuture::from(Promise::from(f.call2(&JsValue::NULL, a, b).map_err(js_err)?))
+        .await
+        .map_err(js_err)
+}
+
+fn auth_token() -> Result<String> {
+    let mut bytes = [0u8; 16];
+    getrandom03::fill(&mut bytes).map_err(|e| anyhow!("{e}"))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// Serves one connection; `Ok(false)` if the peer did not know the token.
+async fn serve(
+    connecting: iroh::endpoint::Connecting,
+    auth_token: &str,
+    size: f64,
+    read: &Function,
+    progress: &Function,
+) -> Result<bool> {
+    let authenticated = async {
+        let conn = connecting.await?;
+        let (send, mut recv) = conn.accept_bi().await?;
+        let mut token = vec![0u8; auth_token.len()];
+        recv.read_exact(&mut token).await?;
+        anyhow::Ok((conn, send, recv, token == auth_token.as_bytes()))
+    };
+    let Ok((_conn, mut send, mut recv, true)) = authenticated.await else {
+        return Ok(false);
+    };
+    send.write_all(&(size as u64).to_be_bytes()).await?;
+    let mut sent = 0f64;
+    while sent < size {
+        let chunk = call_async(read, &sent.into(), &SEND_CHUNK.min(size - sent).into()).await?;
+        let chunk = Uint8Array::from(chunk).to_vec();
+        ensure!(!chunk.is_empty(), "the backup ended early");
+        send.write_all(&chunk).await?;
+        sent += chunk.len() as f64;
+        progress
+            .call2(&JsValue::NULL, &sent.into(), &size.into())
+            .map_err(js_err)?;
+    }
+    let mut ack = [0u8; 1];
+    recv.read_exact(&mut ack)
+        .await
+        .context("the other device did not confirm the transfer")?;
+    Ok(true)
+}
+
+async fn provide(
+    relay_url: &str,
+    version: u32,
+    size: f64,
+    on_qr: &Function,
+    read: &Function,
+    progress: &Function,
+    cancel: Promise,
+) -> Result<()> {
+    let relay_url: RelayUrl = relay_url.parse().context("invalid iroh relay URL")?;
+    let endpoint = Endpoint::builder()
+        .tls_x509()
+        .alpns(vec![BACKUP_ALPN.to_vec()])
+        .relay_mode(RelayMode::Custom(relay_url.into()))
+        .bind()
+        .await?;
+    let cancelled = async {
+        JsFuture::from(cancel).await.map_err(js_err)?;
+        bail!("cancelled")
+    };
+    let result = async {
+        // In browsers this waits for the home relay, the only way to reach this endpoint.
+        let node_addr = endpoint.node_addr().await?;
+        let auth_token = auth_token()?;
+        let qr = format!("DCBACKUP{version}:{auth_token}&{}", serde_json::to_string(&node_addr)?);
+        on_qr.call1(&JsValue::NULL, &qr.into()).map_err(js_err)?;
+        loop {
+            let incoming = endpoint.accept().await.context("iroh endpoint closed")?;
+            let Ok(connecting) = incoming.accept() else { continue };
+            if serve(connecting, &auth_token, size, read, progress).await? {
+                return Ok(());
+            }
+        }
+    }
+    .or(cancelled)
+    .await;
+    endpoint.close().await;
+    result
+}
+
+/// Offers a backup of `size` bytes to Delta Chat's "Add as second device" through `relay_url`.
+/// Calls `on_qr(qr)` once reachable and `read(offset, length)` for the archive's bytes, which
+/// returns a promise of a `Uint8Array`, and `progress(sent, total)`. Resolves after the other
+/// device confirmed the transfer, rejects once `cancel` resolves.
+#[wasm_bindgen]
+pub async fn provide_backup(
+    relay_url: String,
+    version: u32,
+    size: f64,
+    on_qr: Function,
+    read: Function,
+    progress: Function,
+    cancel: Promise,
+) -> Result<(), JsError> {
+    provide(&relay_url, version, size, &on_qr, &read, &progress, cancel)
         .await
         .map_err(|e| JsError::new(&format!("{e:#}")))
 }

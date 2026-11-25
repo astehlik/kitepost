@@ -78,6 +78,16 @@ export class ImapClient {
     }
   }
 
+  /** A server annotation (RFC 5464), e.g. `/shared/vendor/deltachat/irohrelay`. */
+  async serverMetadata(entry: string): Promise<string | undefined> {
+    if (!this.capabilities.has('METADATA') && !this.capabilities.has('METADATA-SERVER')) return undefined;
+    for (const r of await this.command(`GETMETADATA "" ${entry}`)) {
+      const m = /^\* METADATA "" \(\S+ (?:"((?:[^"\\]|\\.)*)"|\{LITERAL(\d+)\})\)/i.exec(r.line);
+      if (m) return m[1] !== undefined ? m[1].replace(/\\(.)/g, '$1') : new TextDecoder().decode(r.literals[Number(m[2])]);
+    }
+    return undefined;
+  }
+
   async select(mailbox = 'INBOX'): Promise<{ uidValidity: number; uidNext: number; exists: number }> {
     const resp = await this.command(`SELECT ${quote(mailbox)}`);
     let uidValidity = 0;

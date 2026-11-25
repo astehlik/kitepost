@@ -60,4 +60,5 @@ which core uses for webxdc realtime channels. The patch uses that relay for the 
 
 No third-party relay is involved: the data only passes the user's own chatmail server, end-to-end
 encrypted by QUIC between the devices and authenticated by the node id and auth token from the QR
-code. Kitepost's `e2e/test_transfer.py` tests the patched provider against the browser receiver.
+code. Kitepost's `e2e/test_transfer.py` tests the patched provider against the browser receiver
+and the patched getter against the browser provider.

@@ -23,10 +23,12 @@ sees ciphertext.
 - **Same profile as the phone:** "Import backup file…" reads a backup exported in Delta Chat
   (unencrypted, as the apps export it). Afterwards both devices receive all messages, and copies
   of sent messages, read state and edits are kept in sync like between two Delta Chat devices.
-  "Scan QR from phone" receives the profile through Delta Chat's *Add second device* QR code
-  (`web/src/dc/transfer.ts`, `core/transfer`), but does not work with current Delta Chat releases
-  yet: they only offer the transfer on the local network, which browsers cannot reach, see
-  `docs/upstream/0003-backup-transfer-relay.patch`.
+  "Scan QR from phone" receives the profile through Delta Chat's *Add second device* QR code, and
+  *Set up phone* offers a code for *Add as second device* in the other direction
+  (`web/src/dc/transfer.ts`, `core/transfer`). Neither works with current Delta Chat releases yet:
+  they only transfer on the local network, which browsers cannot reach, see
+  `docs/upstream/0003-backup-transfer-relay.patch`. The code is only offered when the relay
+  announces an iroh relay.
 - **Moving the profile to a phone:** Profile → "Export backup" writes a backup that Delta Chat
   imports with "Restore from backup". Its database starts from `web/src/dc/backup-schema.sql`, a
   fresh profile of the pinned Delta Chat core; core migrates it on import. After updating
@@ -47,7 +49,7 @@ language needs `web/src/i18n/<code>.ts` (the compiler reports missing keys), an 
 | Path        | What                                                                  |
 |-------------|-----------------------------------------------------------------------|
 | `core/`     | Rust → WASM: keys, OpenPGP, message rendering/parsing, sans-I/O TLS    |
-| `core/transfer/` | Rust → WASM, loaded on demand: iroh receiver for *Add second device* |
+| `core/transfer/` | Rust → WASM, loaded on demand: iroh receiver and provider for *Add second device* |
 | `web/`      | TypeScript client: IMAP/SMTP, SecureJoin, encrypted IndexedDB, UI      |
 | `bridge/`   | Node WebSocket → TCP relay (SSRF-safe: public IPs and mail ports only)  |
 | `site/`     | Static landing page                                                    |
@@ -165,10 +167,10 @@ docker compose --profile invite up -d   # set MAIL_DOMAIN, INVITE_ADMIN_TOKEN, C
   optional host allowlist. Restrict it to your relay with `BRIDGE_ALLOWED_HOSTS`. A profile with
   several relays receives from and sends through each of them, so the list needs every relay your
   users add in Delta Chat.
-- **Second device**: the backup is received end-to-end encrypted over iroh (QUIC), authenticated
-  by the node id and token in the QR code; the relay only forwards ciphertext. The browser
-  connects to the relay itself, so its origin must be allowed by the CSP: same-origin relays are
-  covered by `'self'`, others need `CONNECT_SRC` (e.g. `wss://chat.example.org
+- **Second device**: the backup is received or sent end-to-end encrypted over iroh (QUIC),
+  authenticated by the node id and token in the QR code; the relay only forwards ciphertext. The
+  browser connects to the relay itself, so its origin must be allowed by the CSP: same-origin
+  relays are covered by `'self'`, others need `CONNECT_SRC` (e.g. `wss://chat.example.org
   https://chat.example.org`). The camera is only used while the scanner is open.
 - **Limit of any web app**: the code is delivered by the server on each visit. Users trust the
   operator every time they load it.

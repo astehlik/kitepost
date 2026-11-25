@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = "1"
+futures-lite = "2"
 getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
 getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 # Must stay protocol compatible with the iroh version of Delta Chat core.
