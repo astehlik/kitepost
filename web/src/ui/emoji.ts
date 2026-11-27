@@ -1,6 +1,6 @@
 import { getLanguage, t, type Lang } from '../i18n';
 import { h } from './dom';
-import { completionQuery } from './emoji-text';
+import { completionQuery, trailingSmiley } from './emoji-text';
 
 // Emoji names and keywords come from Unicode CLDR via emojibase, in the UI language, plus the
 // GitHub shortcodes (:thumbsup:) that people type in any language. Loaded on first use.
@@ -209,6 +209,7 @@ function charLeft(input: HTMLTextAreaElement, index: number): number {
 
 /**
  * Suggests emojis while typing `:query`: arrow keys choose, Enter or Tab insert, Escape closes.
+ * Replaces smileys like `:)` once a space or line break follows.
  */
 export function attachEmojiCompletion(input: HTMLTextAreaElement, container: HTMLElement) {
   const list = h('ul', { class: 'emoji-suggest', role: 'listbox', hidden: true });
@@ -238,7 +239,13 @@ export function attachEmojiCompletion(input: HTMLTextAreaElement, container: HTM
     list.style.left = `${Math.max(input.offsetLeft, Math.min(x, max))}px`;
   };
 
-  input.addEventListener('input', async () => {
+  input.addEventListener('input', async ev => {
+    const typed = ev instanceof InputEvent ? ev.inputType : '';
+    if (typed === 'insertLineBreak' || (typed === 'insertText' && /^\s$/.test((ev as InputEvent).data ?? ''))) {
+      const end = input.selectionStart - 1;
+      const smiley = trailingSmiley(input.value.slice(0, end));
+      if (smiley) input.setRangeText(smiley.emoji, smiley.from, end, 'preserve');
+    }
     const query = completionQuery(input.value.slice(0, input.selectionStart));
     if (!query) return hide();
     start = input.selectionStart - query.length - 1;
