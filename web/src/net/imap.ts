@@ -157,7 +157,7 @@ export class ImapClient {
 
   /** Waits in IDLE until the mailbox changes, `signal` aborts, or the timeout elapses. */
   async idle(signal: AbortSignal, timeoutMs = 20 * 60 * 1000): Promise<void> {
-    if (this.newMail) return;
+    if (this.newMail || signal.aborted) return;
     const tag = `A${++this.tagCounter}`;
     this.sock.write(`${tag} IDLE\r\n`);
     const cont = await this.readResponse();
@@ -167,6 +167,7 @@ export class ImapClient {
     const timer = setTimeout(() => stop.abort(), timeoutMs);
     const onAbort = () => stop.abort();
     signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) stop.abort();
     try {
       for (;;) {
         const r = await this.readResponse(stop.signal);

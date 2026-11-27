@@ -100,6 +100,7 @@ export class TlsSocket {
 
   private async waitData(signal?: AbortSignal) {
     if (this.error) throw this.error;
+    signal?.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
       this.waiter = resolve;
       signal?.addEventListener('abort', () => reject(signal.reason), { once: true });

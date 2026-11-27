@@ -2266,20 +2266,21 @@ export class DcClient extends EventTarget {
         backoff = 2000;
         if (main() && !this.config.pinsRepaired) await this.repairPins(imap);
         while (!signal.aborted) {
-          const toDelete: number[] = [];
-          await this.flushQueue(imap, addr, 'seenQueue');
-          await this.flushQueue(imap, addr, 'deleteQueue');
-          await imap.fetchNewer(box.lastUid, async m => {
-            if (await this.receive(m.body, { uid: m.uid, validity: box.uidValidity, relay: box.addr })) toDelete.push(m.uid);
-            box.lastUid = Math.max(box.lastUid, m.uid);
-            await this.saveConfig();
-          });
-          await imap.deleteUids(toDelete);
+          // Registered before the flush: a poke while the queues are flushed skips the next IDLE instead of getting lost.
           const idleAbort = new AbortController();
           const onAbort = () => idleAbort.abort();
           signal.addEventListener('abort', onAbort, { once: true });
           this.wakers.add(onAbort);
           try {
+            const toDelete: number[] = [];
+            await this.flushQueue(imap, addr, 'seenQueue');
+            await this.flushQueue(imap, addr, 'deleteQueue');
+            await imap.fetchNewer(box.lastUid, async m => {
+              if (await this.receive(m.body, { uid: m.uid, validity: box.uidValidity, relay: box.addr })) toDelete.push(m.uid);
+              box.lastUid = Math.max(box.lastUid, m.uid);
+              await this.saveConfig();
+            });
+            await imap.deleteUids(toDelete);
             await imap.idle(idleAbort.signal);
           } finally {
             signal.removeEventListener('abort', onAbort);
