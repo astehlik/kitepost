@@ -271,6 +271,21 @@ def test_adding_a_relay(page, make_account, tmp_path):
     expect(page.locator(".msg.in", has_text="also to the added relay")).to_be_visible()
 
 
+def test_adding_a_relay_tells_a_contact_never_seen(web, dora, make_account):
+    page = web.page
+    fiona = make_account("Fiona")
+    [dora_fiona] = dora.acc.import_vcard(fiona.self_contact.make_vcard())
+    dora.chat.send_contact(dora_fiona)
+    open_chat(page, "Dora")
+    page.locator(".msg.in .vcard", has_text="Fiona").click()
+    page.locator("dialog", has_text="Chat with Fiona?").get_by_role("button", name="OK").click()
+    expect(page.locator(".chathead strong")).to_have_text("Fiona")
+    fiona.stop_io()
+    before = mailbox_size(addr_of(fiona))
+    expect(add_in_settings(page, relay=RELAY)).to_have_count(2)
+    wait_mailbox(addr_of(fiona), before)
+
+
 def test_adding_existing_addresses_up_to_the_limit(page, make_account, tmp_path):
     _, bob, _, _ = imported_with_two_relays(page, make_account, tmp_path)
     for relay, login, error in ((None, (addr_of(bob), "wrong password"), "The relay rejected the address or the password."),

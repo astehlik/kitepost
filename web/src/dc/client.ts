@@ -355,7 +355,7 @@ export class DcClient extends EventTarget {
     const existing = this.chats.get(SELF_CHAT);
     if (existing) return existing;
     const chat: Chat = {
-      id: SELF_CHAT, type: 'self', name: '', members: [], isRequest: false, left: false, lastActivity: Date.now(), unread: 0,
+      id: SELF_CHAT, type: 'self', name: '', members: [], isRequest: false, left: false, lastActivity: Date.now(), createdAt: Date.now(), unread: 0,
     };
     await this.saveChat(chat);
     return chat;
@@ -373,7 +373,7 @@ export class DcClient extends EventTarget {
     if (existing) return existing;
     const chat: Chat = {
       id, type: 'single', name: '', contact: fp, members: [fp], isRequest, left: false,
-      lastActivity: Date.now(), unread: 0,
+      lastActivity: Date.now(), createdAt: Date.now(), unread: 0,
     };
     await this.saveChat(chat);
     return chat;
@@ -791,7 +791,7 @@ export class DcClient extends EventTarget {
       if (existing && !existing.left) return existing.id;
       chat = existing ?? {
         id: `g-${createId()}`, type: 'group', name: cleanName(invite.group.name), grpid: invite.group.grpid,
-        members: [invite.fingerprint], isRequest: false, left: false, lastActivity: Date.now(), unread: 0,
+        members: [invite.fingerprint], isRequest: false, left: false, lastActivity: Date.now(), createdAt: Date.now(), unread: 0,
       };
       await this.saveChat(chat);
     } else {
@@ -1208,7 +1208,7 @@ export class DcClient extends EventTarget {
     const chat: Chat = {
       id: `g-${createId()}`, type: 'group', name: cleanName(name) || t('group.default'), grpid: createId(),
       members: memberFps.filter(fp => this.contacts.get(fp)?.publicKey), isRequest: false, left: false,
-      lastActivity: Date.now(), unread: 0, unpromoted: true, avatar, avatarAt: avatar ? Math.floor(Date.now() / 1000) * 1000 : undefined,
+      lastActivity: Date.now(), createdAt: Date.now(), unread: 0, unpromoted: true, avatar, avatarAt: avatar ? Math.floor(Date.now() / 1000) * 1000 : undefined,
     };
     await this.saveChat(chat);
     await this.addInfo(chat.id, t('info.groupCreated'));
@@ -1451,7 +1451,7 @@ export class DcClient extends EventTarget {
         if (!p.headers['chat-group-name']) return;
         chat = {
           id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name']) || t('group.default'), grpid,
-          members, isRequest: false, left: false, lastActivity: Date.now(), unread: 0,
+          members, isRequest: false, left: false, lastActivity: Date.now(), createdAt: Date.now(), unread: 0,
         };
       } else if (members.length) {
         chat.members = members;
@@ -1639,7 +1639,7 @@ export class DcClient extends EventTarget {
       } else if (chat.type === 'single' && chat.contact) {
         const c = this.contacts.get(chat.contact);
         const sent = (this.messages.get(chat.id) ?? []).filter(m => m.from === 'self' && !m.info).map(m => m.timestamp);
-        seen(chat.contact, Math.max(c?.lastSeen ?? 0, ...sent));
+        seen(chat.contact, Math.max(c?.lastSeen ?? 0, chat.createdAt ?? 0, ...sent));
       }
     }
     const recipients = [...freshness]
@@ -1892,7 +1892,7 @@ export class DcClient extends EventTarget {
       if (removed && this.isSelfAddr(removed)) return undefined;
       chat = {
         id: `g-${createId()}`, type: 'group', name: cleanName(p.headers['chat-group-name'] ?? '') || t('group.default'), grpid,
-        members: [], isRequest: !this.isAccepted(sender), left: false, lastActivity: Date.now(), unread: 0,
+        members: [], isRequest: !this.isAccepted(sender), left: false, lastActivity: Date.now(), createdAt: Date.now(), unread: 0,
       };
     }
     const isNew = !this.chats.has(chat.id);

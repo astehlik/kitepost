@@ -104,6 +104,8 @@ export interface Chat {
   isRequest: boolean;
   left: boolean;
   lastActivity: number;
+  /** Core's created_timestamp; missing for chats stored before it was kept. */
+  createdAt?: number;
   unread: number;
   /** Like core's ChatVisibility; normal when unset. */
   visibility?: 'archived' | 'pinned';

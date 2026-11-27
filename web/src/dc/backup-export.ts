@@ -187,7 +187,7 @@ export async function buildBackup(src: BackupSource): Promise<Blob> {
       if (chat.type === 'single' && !single) continue;
       const chatId = nextId++;
       const msgs = (messagesByChat.get(chat.id) ?? []).sort(byChatOrder);
-      const created = Math.floor((msgs[0]?.timestamp ?? Date.now()) / 1000);
+      const created = Math.floor((chat.createdAt ?? msgs[0]?.timestamp ?? Date.now()) / 1000);
       const name = chat.type === 'self' ? 'Saved messages'
         : single ? contactName(src.contacts.find(c => c.fingerprint === chat.contact))
         : chat.name;

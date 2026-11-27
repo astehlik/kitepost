@@ -266,13 +266,14 @@ export async function readBackup(
     for (const r of rows(db, 'SELECT chat_id, contact_id FROM chats_contacts WHERE add_timestamp >= remove_timestamp')) {
       members.set(num(r.chat_id), [...(members.get(num(r.chat_id)) ?? []), num(r.contact_id)]);
     }
-    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked, param, archived, ephemeral_timer FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
+    const chatRows = rows(db, 'SELECT id, type, name, grpid, blocked, param, archived, ephemeral_timer, created_timestamp FROM chats WHERE id > 9 AND type IN (?, ?) AND blocked != ?', [CHAT_SINGLE, CHAT_GROUP, BLOCKED_YES]);
     for (const r of chatRows) {
       const ids = members.get(num(r.id)) ?? [];
       const fps = ids.map(id => fpById.get(id)).filter((fp): fp is string => !!fp && fp !== 'self');
       const visibility = num(r.archived) === 1 ? 'archived' as const : num(r.archived) === 2 ? 'pinned' as const : undefined;
       const base = {
         name: str(r.name), isRequest: num(r.blocked) === BLOCKED_REQUEST, lastActivity: 0, unread: 0, visibility,
+        createdAt: num(r.created_timestamp) * 1000 || undefined,
         ephemeralTimer: num(r.ephemeral_timer) || undefined,
       };
       if (num(r.type) === CHAT_SINGLE && params(r.param).get('K') === '1') {
