@@ -497,12 +497,16 @@ def test_emoji_completion_and_picker(web, dora):
     expect(web.page.locator(".emoji-suggest li.active")).to_contain_text("👍")
     box.press("Enter")
     expect(box).to_have_value("Emoji test 👍")
+    box.press_sequentially(":tad")
+    expect(web.page.locator(".emoji-suggest li.active")).to_contain_text("🎉")
+    box.press("Enter")
+    expect(box).to_have_value("Emoji test 👍🎉")
     web.page.get_by_role("button", name="Insert emoji").click()
     web.page.get_by_placeholder("Search emojis").fill("rocket")
     web.page.locator(".emoji-picker .emoji-row button").first.click()
-    expect(box).to_have_value("Emoji test 👍🚀")
+    expect(box).to_have_value("Emoji test 👍🎉🚀")
     box.press("Enter")
-    wait_text(dora.acc, "Emoji test 👍🚀")
+    wait_text(dora.acc, "Emoji test 👍🎉🚀")
 
 
 def test_emoji_suggestions_open_above_the_colon(web):

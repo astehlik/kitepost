@@ -1,5 +1,6 @@
 import { getLanguage, t, type Lang } from '../i18n';
 import { h } from './dom';
+import { completionQuery } from './emoji-text';
 
 // Emoji names and keywords come from Unicode CLDR via emojibase, in the UI language, plus the
 // GitHub shortcodes (:thumbsup:) that people type in any language. Loaded on first use.
@@ -187,10 +188,6 @@ export function insertAtCursor(input: HTMLTextAreaElement, text: string, from = 
   input.focus();
 }
 
-/**
- * Suggests emojis while typing `:query` (at the start or after whitespace, so times and URLs
- * do not trigger it). Arrow keys choose, Enter or Tab insert, Escape closes.
- */
 const MIRRORED = ['box-sizing', 'width', 'padding-left', 'padding-right', 'border-left-width', 'border-right-width', 'border-style',
   'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant', 'font-feature-settings', 'letter-spacing', 'word-spacing',
   'line-height', 'text-transform', 'text-indent', 'tab-size'];
@@ -210,6 +207,9 @@ function charLeft(input: HTMLTextAreaElement, index: number): number {
   return left - input.scrollLeft;
 }
 
+/**
+ * Suggests emojis while typing `:query`: arrow keys choose, Enter or Tab insert, Escape closes.
+ */
 export function attachEmojiCompletion(input: HTMLTextAreaElement, container: HTMLElement) {
   const list = h('ul', { class: 'emoji-suggest', role: 'listbox', hidden: true });
   container.append(list);
@@ -239,12 +239,11 @@ export function attachEmojiCompletion(input: HTMLTextAreaElement, container: HTM
   };
 
   input.addEventListener('input', async () => {
-    const before = input.value.slice(0, input.selectionStart);
-    const m = /(?:^|\s):([\p{L}\p{N}_+-]{2,})$/u.exec(before);
-    if (!m) return hide();
-    start = input.selectionStart - m[1].length - 1;
+    const query = completionQuery(input.value.slice(0, input.selectionStart));
+    if (!query) return hide();
+    start = input.selectionStart - query.length - 1;
     const { emojis } = await loadEmojis();
-    matches = searchEmojis(emojis, m[1], 8);
+    matches = searchEmojis(emojis, query, 8);
     active = 0;
     render();
   });
