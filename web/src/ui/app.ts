@@ -502,6 +502,7 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
   const chatList = h('ul', { class: 'chatlist' });
   let showArchived = false;
   listenForChatMenu();
+  listenForChatOpen();
   const pane = h('section', { class: 'pane' });
   const droppable = (ev: DragEvent) => {
     const chat = current ? client.chats.get(current) : undefined;
@@ -861,6 +862,18 @@ function startMain(client: DcClient, initialChat?: string, initialSettings = fal
         chat.left || chat.isRequest ? null : [t('timer.title'), ICONS.timer, () => timerDialog(chat)],
         chat.visibility === 'pinned' ? [t('chat.unpinChat'), ICONS.pin, set(undefined)] : [t('chat.pinChat'), ICONS.pin, set('pinned')],
         chat.visibility === 'archived' ? [t('chat.unarchive'), ICONS.archive, set(undefined)] : [t('chat.archive'), ICONS.archive, set('archived')]);
+    });
+  }
+
+  /** Browsers fire no click when renderList() replaced the pressed row before the release, e.g. for a new message. */
+  function listenForChatOpen() {
+    const rowOf = (target: EventTarget | null) => (target as Element | null)?.closest<HTMLElement>('li[data-chat]');
+    let pressed: HTMLElement | undefined;
+    chatList.addEventListener('pointerdown', ev => { pressed = ev.button === 0 ? rowOf(ev.target) ?? undefined : undefined; });
+    chatList.addEventListener('pointerup', ev => {
+      const chat = rowOf(ev.target)?.dataset.chat;
+      if (chat && pressed && !pressed.isConnected && chat === pressed.dataset.chat) open(chat);
+      pressed = undefined;
     });
   }
 

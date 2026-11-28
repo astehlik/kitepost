@@ -1493,3 +1493,16 @@ def test_storage_unlock_and_stay_unlocked(web):
     page.reload()
     expect(page.get_by_role("heading", name="Unlock Kitepost")).to_be_visible()
     assert addr_of(web.phone)
+
+
+def test_opening_a_chat_while_it_receives_a_message(web, dora):
+    page = web.page
+    open_chat(page, "Phone")
+    row = page.locator(".chatlist li", has_text="Dora")
+    box = row.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    dora.chat.send_text("arrives during the click")
+    expect(row).to_contain_text("arrives during the click")
+    page.mouse.up()
+    expect(page.locator(".chathead strong")).to_have_text("Dora")
